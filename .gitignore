@@ -1,0 +1,42 @@
+# Installed dependencies and generated builds
+node_modules/
+dist/
+.vite/
+.wrangler/
+.cache/
+*.tsbuildinfo
+
+# Local credentials and machine settings
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.codex/
+.claude/
+.vscode/
+.idea/
+
+# Private designs, backups and verification evidence stay on this computer
+.private/
+artifacts/
+output/
+tmp/
+backups/
+screenshots/
+downloads/
+*.wardrobe.json
+*.wardrobe-backup.json
+*.zip
+*.pdf
+*.log
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini

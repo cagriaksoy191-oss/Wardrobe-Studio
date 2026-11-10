@@ -1,0 +1,22 @@
+export const validationConfig = {
+  hingedLeafWarningMm: 600,
+  hangingDepthMm: 530,
+  shelfSpanWarningMm: 850,
+  shelfSpanReferenceThicknessMm: 18,
+  drawerClearHeightWarningMm: 36,
+  blindFillerMinimumMm: 45,
+  diagonalLegBeyondFrontMm: 150,
+  minRunDepthMm: 300,
+  maxRunFrontMm: 1000,
+  adjustableShelfPitchMm: 32,
+  adjustableShelfMinimumGapMm: 60,
+  hangingBottomClearanceMm: 35,
+  storageMinimumMm: {
+    deepYukluk: [650, 400, 500],
+    blindLuggage: [650, 320, 450],
+    laundryBasket: [350, 600, 450],
+    trouserRack: [350, 800, 450],
+    jewelryDrawer: [350, 160, 350],
+    steppedLHanging: [350, 900, 530],
+  },
+} as const;
