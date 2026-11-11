@@ -64,9 +64,9 @@ Tarayıcı kayıtları protokol, alan adı ve porta göre ayrılır. `127.0.0.1:
 
 Gerçek kayıtların bulunduğu adres `http://127.0.0.1:5175`. Çalışma kopyası, manuel kayıt noktası, geçmiş ve sürüm arşivinin tam kopyası bu origin’in `wardrobe-backup.json` dosyasındadır. Tarayıcı yedeği mevcut tasarım içe aktarıcısının dosya biçiminden farklıdır.
 
-1. İlk olarak yerel uygulamadan **JSON** ile güncel tasarımı dışa aktarın. Adlandırılmış önemli sürümleri **Sürüm / AI** bölümünden ayrı JSON olarak saklayın. Hazırlanan `portable-designs` dosyaları da kullanılabilir.
+1. 10 Kasım kopyaları için `portable-designs` klasöründen bir dosya seçin. Daha yeni bir kayıt için `npm run dev -- --host 127.0.0.1 --port 5175` komutuyla eski adresi açın ve **JSON** ile dışa aktarın. Adlandırılmış sürümleri **Sürüm / AI** bölümünden ayrı JSON olarak saklayabilirsiniz.
 2. Yeni canlı HTTPS adresini açın. Üstteki dosya yükleme kontrolünden ilgili `.wardrobe.json` dosyasını seçin.
-3. Ölçüleri kontrol edin, **Kayıt noktası** oluşturun. İstenirse tasarımı adlandırılmış sürüm olarak kaydedin. Diğer sürümler için işlemi tekrarlayın.
+3. Ölçüleri kontrol edin ve **Kaydet** ile kayıt noktası oluşturun. Diğer tasarımları içe aktarırken her birini adlandırılmış sürüm olarak kaydedebilirsiniz.
 4. F5 ile yenileyin ve tasarımın geri geldiğini kontrol edin.
 
 Normal Design JSON içe aktarımı tasarım niyetini taşır. Tam geçmiş, eski kayıt noktası metaverileri ve sürüm arşivinin tüm yapısı ayrıca yerel tam yedekte saklanır. İçe aktarılan çalışma için canlı adreste yeni bir geçmiş oluşur. Yerel dosya ve tarayıcı kayıtlarını ancak kendi saklama kararınızla yönetebilirsiniz.

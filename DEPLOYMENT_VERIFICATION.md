@@ -36,6 +36,8 @@ Brave kişisel profilinde `127.0.0.1:5173`, `localhost:5173`, `127.0.0.1:5175` v
 
 Çalışma, kayıt noktası ve arşivdeki tasarımlar iki kayıt kanalından toplam 10 ayrı taşınabilir Design kopyasına çıkarıldı. Tam yedek geçmiş ve metaveriyi de içerir. JSON içe aktarıcıyla canlıya aktarmak için `portable-designs` altındaki dosyalar kullanılabilir. Diğer üç origin’de uygulama kaydı görülmedi. İnceleme mevcut tarayıcı profili ve belirtilen adreslerle sınırlıdır.
 
+Başlangıçta yedeklenen 116 yerel JSON dosyasının tamamı yayın sonrasında yeniden hash’lendi ve başlangıçla eşleşti.
+
 ## Git ve herkese açık dosya denetimi
 
 `.gitignore` bağımlılıkları, derleme çıktısını, Wrangler önbelleğini, özel yedekleri, tüm `artifacts`, `output` ve `tmp` dizinlerini, tasarım JSON’larını, ZIP/PDF dosyalarını ve yerel gizli ayarları dışarıda bırakır. Bu dosyalar diskte saklanır. Commit kimliğinde hesaba ait GitHub noreply adresi kullanılır.
@@ -57,6 +59,10 @@ Bu bulgular açık olarak raporlanıyor. Bağımlılık ana sürüm geçişi bu 
 
 İlk Cloudflare build’inde 75 işlemli kayıt noktası testi 5 saniye sınırına takıldı. Build komutuna `--testTimeout=30000` eklendi. Sonraki build 59 saniyede tamamlandı ve sürüm `6a846522-e381-403c-8df4-684d09cc2803` üretimde yüzde 100 trafik aldı. [İlk başarılı Cloudflare build’i](https://dash.cloudflare.com/b76b247b22f0678a722cad37767e2b19/workers/services/view/wardrobe-studio/production/builds/437d5b3d-b467-441f-a625-a21158f052c2)
 
+`main` dalına gönderilen `6bf9b159e799fbb64281e6d1a10af5e0e1e66d43` commit’i Cloudflare build’ini otomatik tetikledi. GitHub kontrolü `success` ile bitti. Sürüm `5b2eacbe-4e6d-41c7-849c-d8c24a497705` **Ready** ve yüzde 100 trafikle göründü. Cloudflare sürüm adreslerini **Previews disabled** olarak gösterdi. [GitHub commit’i](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/commit/6bf9b159e799fbb64281e6d1a10af5e0e1e66d43) · [Otomatik build](https://dash.cloudflare.com/b76b247b22f0678a722cad37767e2b19/workers/services/view/wardrobe-studio/production/builds/6597166a-bc14-48f2-b6cf-e9ac5e2bf3b8)
+
+Önceki çalışan sürümün menüsünde **Rollback** doğrulandı. Üretim trafiğinde deneme amaçlı geri dönüş uygulanmadı. [Dağıtımlar](https://dash.cloudflare.com/b76b247b22f0678a722cad37767e2b19/workers/services/view/wardrobe-studio/production/deployments)
+
 | Canlı kontrol | Gözlenen sonuç |
 | --- | --- |
 | HTTPS ve SPA | Ana sayfa, JS, CSS ve PDF fontu 200. İç içe URL açıldı ve yenilendi. |
@@ -70,6 +76,8 @@ Bu bulgular açık olarak raporlanıyor. Bağımlılık ana sürüm geçişi bu 
 | ZIP | CRC geçerli, 29 girdi, 25 SVG. CSV ve tasarım JSON’u ayrı indirilen dosyalarla eşleşti. |
 
 Canlı denemeler ayrı tarayıcı profilinde ve sentetik tasarımla yapıldı. Çıktılar ve kanıtlar `artifacts/deployment/` altında yerel saklanıyor. JSON ve ZIP dosyaları kullanıcının gerçek tasarım arşivini içermez.
+
+Yerel 5173, 5175 ve 8787 portlarındaki test süreçleri durdurulduktan sonra HTTPS ana sayfası ve statik dosyalar yeniden 200 döndü.
 
 ## Ücret ve kapsam sonucu
 
