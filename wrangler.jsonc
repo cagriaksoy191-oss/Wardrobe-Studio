@@ -3,6 +3,7 @@
   "name": "wardrobe-studio",
   "compatibility_date": "2026-11-10",
   "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"

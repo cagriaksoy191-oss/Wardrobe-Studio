@@ -1,8 +1,8 @@
 # Wardrobe Studio yayın rehberi
 
-10 Kasım 2026. Çalışma dizini `C:\dev\Wardrobe-Studio`.
+11 Kasım 2026. Çalışma dizini `C:\dev\Wardrobe-Studio`.
 
-Uygulama Vite ile statik dosyalara derlenir ve Cloudflare Workers Static Assets üzerinden sunulur. Üretim hedefi `wardrobe-studio` adlı proje ve Cloudflare hesabının ücretsiz `workers.dev` adresidir. Güncel yayın ve hesap bağlantısı sonucu [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md) içindedir.
+Uygulama Vite ile derlenir ve Cloudflare Workers Static Assets üzerinden sunulur. `wardrobe-studio` projesi üretim adresini taşır. [Canlı site](https://wardrobe-studio.cagriaksoy191.workers.dev/) · [Doğrulama raporu](DEPLOYMENT_VERIFICATION.md)
 
 ## Yerel komutlar
 
@@ -25,32 +25,27 @@ npm run preview:cloudflare
 
 Test adresi `http://127.0.0.1:8787/`. Normal geliştirme `npm run dev -- --host 127.0.0.1 --port 5173` ile yürür. Canlı site, geliştirme bilgisayarı kapalıyken Cloudflare’da hizmet verir. Yerel değişiklikler Git’e gönderilip başarılı yayın oluşunca canlıya geçer.
 
-## GitHub ve Cloudflare bağlantısını tamamlama
+## GitHub ve Cloudflare yayın ayarları
 
-Kaynak deposu [cagriaksoy191-oss/Wardrobe-Studio](https://github.com/cagriaksoy191-oss/Wardrobe-Studio) özel görünürlüktedir. Git ana dalı `main`. Cloudflare’a sunulan derlenmiş JavaScript ziyaretçiler tarafından indirilebilir. Depo görünürlüğü kaynak ve geçmişe erişimi sınırlar.
+Özel kaynak deposunun `main` dalı Cloudflare Builds’e bağlıdır. Cloudflare bağımlılıkları kilit dosyasından `npm clean-install` ile kurar. Derlenmiş JavaScript ziyaretçilere açık olarak sunulur. [GitHub deposu](https://github.com/cagriaksoy191-oss/Wardrobe-Studio)
 
-1. [Resmî Cloudflare giriş ekranında](https://dash.cloudflare.com/login) oturum açın. Hesap yoksa hesabı kendi ekranınızda oluşturun ve doğrulayın. Parola ve doğrulama kodları giriş ekranında kalmalıdır.
-2. Hesabın Workers planının **Free** olduğunu doğrulayın. Ücretli plan, özel alan adı veya ek hizmet seçimi gerekmez.
-3. **Workers & Pages → Create application → Import a repository / Connect GitHub** yolunu açın. Ekran adları Cloudflare sürümüne göre değişebilir.
-4. Cloudflare GitHub uygulaması istendiğinde **Only select repositories** ile yalnız `Wardrobe-Studio` deposuna izin verin.
-5. Proje adını Wrangler ile aynı olacak şekilde **wardrobe-studio** girin. Üretim dalını **main**, kök dizini depo kökü `/` seçin.
-6. Build command alanına aşağıdaki komutu girin. Paket kurulumu kilit dosyasından yapılmalıdır. Varsayılan kurulumun `npm ci` olduğunu doğrulayın. Kurulum adımını ayrı ayarlayamayan ekranda build komutunun başına `npm ci &&` ekleyin.
+**Workers & Pages → wardrobe-studio → Settings → Builds → Production** altında depo, üretim dalı `main` ve kök dizin `/` görünür. Build komutu iki test worker’ı ve 30 saniyelik test süresi sınırıyla çalışır. Derleme ancak testler başarılıysa başlar.
 
 ```sh
-npm test -- --run && npm run build && npm run deploy:verify
+npm test -- --run --maxWorkers=2 --testTimeout=30000 && npm run build && npm run deploy:verify
 ```
 
-7. Deploy command alanını aşağıdaki gibi ayarlayın. Statik dizin `dist` ve SPA geri dönüşü Wrangler dosyasından alınır.
+Deploy komutu yayın dizinini ve SPA yönlendirmesini `wrangler.jsonc` dosyasından alır.
 
 ```sh
 npx wrangler deploy
 ```
 
-8. Üretim dışı dalların otomatik build’lerini ilk kurulumda kapalı tutun. Bu ayar ana dal dışındaki denemeler için build dakikası kullanımını önler. Gerekirse sonra belirli bir test dalı açılabilir.
-9. İlk deploy tamamlanınca Cloudflare’ın gösterdiği gerçek HTTPS `workers.dev` adresini kaydedin. Hesaba ait alt alan adı yayın ekranı görülmeden belirlenemez.
-10. Canlı testleri aşağıdaki listeyle tamamlayın ve gerçek URL ile commit kimliğini doğrulama belgesine yazın.
+Üretim dışı dalların otomatik build’leri kapalıdır. Wrangler sürüm başına ayrı herkese açık adresleri kapatır. Cloudflare Builds, yayın yetkisini kendi yönetilen build tokenı ile kullanır. [Version URLs](https://developers.cloudflare.com/workers/versions-and-deployments/version-urls/)
 
-CLI ile yayın için resmi OAuth akışı da kullanılabilir. Cloudflare GitHub bağlantısı mevcutsa güncellemeler için CLI oturumuna gerek yoktur.
+Bağlantıyı onarmak gerekirse resmî Cloudflare ekranından oturum açın ve **Settings → Builds** altında GitHub deposunu yeniden seçin. GitHub uygulamasının erişimi sorulursa **Only select repositories** ile `Wardrobe-Studio` seçin. Parola ve doğrulama kodlarını kendi giriş ekranınızda kullanın. [Cloudflare girişi](https://dash.cloudflare.com/login) · [GitHub bağlantısı](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/github-integration/)
+
+Git bağlantısı üzerinden rutin güncellemeler için Wrangler oturumu gerekmez. Manuel yayın gerekirse CLI’nın resmî OAuth akışını kullanın.
 
 ```powershell
 npx wrangler login
@@ -59,13 +54,13 @@ npm test -- --run
 npm run deploy
 ```
 
-Wrangler girişte resmi Cloudflare izin ekranını açar. Tokenı sohbete, `.env` dosyasına veya Git deposuna eklemek gerekmez. Git tabanlı dağıtımda Cloudflare’ın yerleşik Builds bağlantısı kullanılmalıdır.
+Wrangler girişte resmî Cloudflare izin ekranını açar. Manuel yayından sonra aynı değişikliği `main` dalında da doğrulayın.
 
 ## Yerel tasarımları canlı adrese taşıma
 
 Tarayıcı kayıtları protokol, alan adı ve porta göre ayrılır. `127.0.0.1:5175`, `localhost:5175` ve yeni HTTPS adresi farklı kayıt alanlarıdır. Canlı adres yerel kayıtları otomatik okuyamaz. Aynı canlı adres sonraki sürümlerde IndexedDB ve localStorage kayıtlarını kullanmaya devam eder. Farklı telefon veya tarayıcıda tasarım açmak için JSON dosyası taşınır.
 
-10 Kasım yedekleri yalnız bu bilgisayardaki `.private/deployment-backups/2026-11-10/` klasöründedir. Burada kaynak ZIP’i, mevcut yerel tasarım dosyalarının ZIP’i, origin bazında tam tarayıcı kayıtları ve `portable-designs` altında içe alınabilir tasarımlar bulunur. `browser-manifest.json` dosya boyutu ve SHA-256 değerlerini içerir. `portable-designs-manifest.json` dosyaları kaynak kayıt kanalıyla eşleştirir.
+10 Kasım yedekleri bu bilgisayardaki `C:\dev\Wardrobe-Studio\.private\deployment-backups\2026-11-10\` klasöründedir. Burada kaynak ZIP’i, yerel tasarım dosyalarının ZIP’i, adres bazında tarayıcı kayıtları ve `portable-designs` altında içe alınabilir tasarımlar bulunur. `browser-manifest.json` dosya boyutu ve SHA-256 değerlerini içerir. `portable-designs-manifest.json` dosyaları kaynak kayıt kanalıyla eşleştirir.
 
 Gerçek kayıtların bulunduğu adres `http://127.0.0.1:5175`. Çalışma kopyası, manuel kayıt noktası, geçmiş ve sürüm arşivinin tam kopyası bu origin’in `wardrobe-backup.json` dosyasındadır. Tarayıcı yedeği mevcut tasarım içe aktarıcısının dosya biçiminden farklıdır.
 
@@ -104,11 +99,11 @@ npx wrangler deployments list
 npx wrangler rollback <onceki-basarili-version-id>
 ```
 
-Ardından hatalı Git commit’ini `git revert <commit-id>` ile geri alın, doğrulamaları çalıştırın ve `main` dalına gönderin. Bu işlem kaynak geçmişini korur ve bir sonraki push’un eski hatayı yeniden yayınlamasını önler. Hesap üzerinde önceki başarılı dağıtım oluşunca rollback ayrıca denenebilir. Tarayıcı verileri ayrı saklanır. Şema değişikliği içeren gelecekteki sürümlerde eski kodla veri uyumluluğu ayrıca kontrol edilmelidir.
+Ardından hatalı Git commit’ini `git revert <commit-id>` ile geri alın, doğrulamaları çalıştırın ve `main` dalına gönderin. Böylece sonraki otomatik yayın kaynak geçmişinden düzeltilmiş sürümü alır. Geri alınacak sürümün başarılı bir uygulama yayını olduğundan emin olun. Şema değişikliği içeren sürümlerde önceki kodun mevcut tarayıcı kayıtlarını okuyabildiğini kontrol edin. [Cloudflare rollback](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
 
 ## Ücretsiz kullanım sınırları
 
-10 Kasım 2026 kontrolünde statik istekler ve statik dosya depolama ücretsizdir. Free plan bir sürümde en fazla 20.000 dosya ve dosya başına 25 MiB kabul eder. Workers Builds ayda 3000 build dakikası, bir eşzamanlı build ve build başına 20 dakika sınırına sahiptir. Bu yapılandırmanın yayın paketi uygulama, stil ve yerel PDF fontundan oluşur. [Statik ücretlendirme](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) · [Dosya sınırları](https://developers.cloudflare.com/workers/platform/limits/) · [Build sınırları](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
+11 Kasım 2026 kontrolünde statik istekler ve statik dosya depolama ücretsizdir. Free plan bir sürümde en fazla 20.000 dosya ve dosya başına 25 MiB kabul eder. Workers Builds ayda 3000 build dakikası, bir eşzamanlı build ve build başına 20 dakika sınırına sahiptir. [Statik ücretlendirme](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) · [Dosya sınırları](https://developers.cloudflare.com/workers/platform/limits/) · [Build sınırları](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
 
 Ücretsiz `workers.dev` adresi kullanılır. Özel alan adı satın alma, veritabanı, harici depolama, sunucu API’si ve GitHub Actions çalışma dakikası bu kurulumun parçası değildir. Kullanıcının PDF/CSV/ZIP çıktıları kendi tarayıcısında oluşturulur. Cloudflare hesabı ve hizmet koşulları etkin kaldığı sürece son yayın bilgisayardan bağımsız çalışır.
 

@@ -1,8 +1,10 @@
 # Wardrobe Studio yayın doğrulaması
 
-10 Kasım 2026.
+11 Kasım 2026.
 
-**Yerel hazırlık tamamlanıyor. Cloudflare oturumu bağlantı bekliyor. Gerçek canlı URL henüz oluşmadı.**
+**Wardrobe Studio, Cloudflare Workers Static Assets üzerinde yayında.** Gerçek HTTPS adresi anonim HTTP istekleriyle ve tarayıcıyla doğrulandı. [Canlı site](https://wardrobe-studio.cagriaksoy191.workers.dev/)
+
+Cloudflare hesabında Workers **Free ($0)** güncel plan olarak görünüyor. Özel GitHub deposunun `main` dalı Cloudflare Builds’e bağlı. Üretim dışı dal build’leri kapalı. [Özel kaynak deposu](https://github.com/cagriaksoy191-oss/Wardrobe-Studio)
 
 ## Başlangıç doğrulaması
 
@@ -10,15 +12,16 @@
 - `npm run build` başarılı, TypeScript ve Vite 6.4.5 geçti. Mevcut ana JavaScript paket boyutu uyarısı sürüyor.
 - Klasörde Git deposu bulunmuyordu. `main` dalıyla yerel Git deposu oluşturuldu.
 - GitHub CLI ve bağlayıcıda hesap `cagriaksoy191-oss` olarak doğrulandı. Bağlayıcının depo oluşturma yetkisi sınırlıydı. Mevcut GitHub CLI oturumuyla özel depo oluşturuldu. [Özel kaynak deposu](https://github.com/cagriaksoy191-oss/Wardrobe-Studio)
-- `wrangler whoami` oturum olmadığını bildirdi. Resmî Cloudflare dashboard’u giriş ekranına yönlendirdi. Hesap planı ve GitHub–Cloudflare bağlantısı henüz doğrulanamadı.
+- İlk kaynak commit’i `c181faa6e3b41a9deaa8bc6ee4e056f1c009c0cf` özel deponun `main` dalına gönderildi. Temiz checkout üzerinde `npm ci`, 213 test, üretim derlemesi ve statik paket denetimi başarılı.
+- Cloudflare ve GitHub oturumları kullanıcı tarafından resmî ekranlarda açıldı. Projeye bağlı depo ve `main` dalı ayarlarda doğrulandı. GitHub uygulamasının hesap genelindeki erişim listesini açmak ek kimlik doğrulaması gerektirdi. O liste üzerinde işlem yapılmadı.
 
 ## Statik mimari
 
 Kaynakta bir yerel API, WebSocket, sunucu veritabanı, SSR veya harici AI çağrısı bulunmadı. Çözücü, görselleştirme ve üretim dosyaları istemcide çalışıyor. Çalışma zamanındaki tek `fetch`, `BASE_URL + fonts/NotoSans-Regular.ttf` dosyasını aynı siteden alıyor. PDF fontu ve lisansı `public/fonts` içinde.
 
-`wrangler.jsonc` yalnız `dist` statik dizinini, SPA geri dönüşünü ve `workers.dev` hedefini içeriyor. Kullanıcı API Worker’ı veya veri depolama binding’i eklenmedi. Wrangler 4.160.0 projeye sabitlendi, Node.js 24.16.0 `.node-version` ile belirtildi. GitHub otomatik yayını için Cloudflare’ın yerleşik Builds bağlantısı kullanılacak. Ayrıntılı ayarlar [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) içinde.
+`wrangler.jsonc` dosyası `dist` statik dizinini, SPA geri dönüşünü ve `workers.dev` üretim hedefini tanımlar. `preview_urls: false` sürüm başına açık adresleri kapatır. Wrangler 4.160.0 ve Node.js 24.16.0 sabitlendi. Cloudflare Node sürümünü `.node-version` dosyasından aldı ve kilit dosyasıyla `npm clean-install` çalıştırdı. [Yayın ayarları](DEPLOYMENT_GUIDE.md)
 
-Wrangler dry-run başarılı oldu ve **No bindings found** bildirdi. Statik dosya denetimi 12 dosya, toplam 3.266.109 bayt ve en büyük dosya için 1.846.487 bayt ölçtü. Free sınırları 20.000 dosya ve dosya başına 26.214.400 bayt. Son kontrol sonuçları aşağıda güncellenir.
+Wrangler dry-run başarılı oldu ve **No bindings found** bildirdi. Yerel statik paket 12 dosya ve toplam 3.266.109 bayt. En büyük dosya 1.846.487 baytlık ana JavaScript. Wrangler, `_headers` dosyasını yanıt kuralları olarak kullanıp 11 statik dosya yükledi. Free sınırları 20.000 dosya ve dosya başına 26.214.400 bayt. [Workers sınırları](https://developers.cloudflare.com/workers/platform/limits/)
 
 ## Kaynak ve kişisel kayıt yedekleri
 
@@ -39,7 +42,7 @@ Brave kişisel profilinde `127.0.0.1:5173`, `localhost:5173`, `127.0.0.1:5175` v
 
 Herkese açık kaynak dosyaları yerel font, lisans ve statik yanıt başlıklarıdır. Yayın denetleyicisi izin verilmeyen public veya build dosyasında ve Free dosya sınırı aşıldığında işlemi durdurur. Statik yanıtlarda MIME türü denetimi, referrer politikası ve çerçeve/nesne/base politikası uygulanır.
 
-Kaynak, staged dosyalar ve derlenmiş dosyalarda sır taraması, kişisel dosya hariç tutmaları ve temiz checkout kontrolü sonuçları aşağıda güncellenir.
+Gönderim öncesi 114 takip edilen dosya ve üretim çıktısı tarandı. Taranan kapsamda kimlik bilgisi veya Git’e alınmış özel ve geçici dosya tespit edilmedi. Uygulama kaynakları, testler ve sözleşmelerden 75 dosyanın hash’i başlangıçla eşleşti. Canlı adreste ana JS, CSS ve TTF baytları yerel üretimle eşleşti. `/.env`, `/.git/config`, `/package.json`, yedek aracı ve `/.private/` için gezinme yanıtı aynı SPA HTML belgesiydi. Herkese açık dosya listesi ve yanıt başlıkları ayrıca denetlendi.
 
 ## Bağımlılık güvenlik bulguları
 
@@ -50,27 +53,26 @@ Kaynak, staged dosyalar ve derlenmiş dosyalarda sır taraması, kişisel dosya 
 
 Bu bulgular açık olarak raporlanıyor. Bağımlılık ana sürüm geçişi bu altyapı değişikliğinde uygulanmadı. Mevcut kilitlenmiş uygulama ve test sürümleriyle doğrulama yapıldı.
 
-## Hesap bağlantısı ve canlı test durumu
+## Cloudflare derleme ve canlı kabul sonuçları
 
-| Kontrol | Durum |
+İlk Cloudflare build’inde 75 işlemli kayıt noktası testi 5 saniye sınırına takıldı. Build komutuna `--testTimeout=30000` eklendi. Sonraki build 59 saniyede tamamlandı ve sürüm `6a846522-e381-403c-8df4-684d09cc2803` üretimde yüzde 100 trafik aldı. [İlk başarılı Cloudflare build’i](https://dash.cloudflare.com/b76b247b22f0678a722cad37767e2b19/workers/services/view/wardrobe-studio/production/builds/437d5b3d-b467-441f-a625-a21158f052c2)
+
+| Canlı kontrol | Gözlenen sonuç |
 | --- | --- |
-| Yerel test, build ve Wrangler dry-run | PASS |
-| Free plan dosya sınırları | PASS |
-| Kişisel kaynak/tasarım ve tarayıcı kayıt yedeği | PASS, belirtilen profil/origin’ler |
-| GitHub depo görünürlüğü | PRIVATE |
-| GitHub ilk kaynak push’u | Bekliyor |
-| Cloudflare giriş ve Free plan kontrolü | Kullanıcı girişi bekleniyor |
-| GitHub–Cloudflare otomatik build bağlantısı | Bekliyor |
-| Gerçek kalıcı HTTPS adresi | Oluşmadı |
-| Canlı URL üzerinde 3D/2D/WebGL | UNVERIFIED |
-| Canlı URL üzerinde JSON/PDF/CSV/ZIP | UNVERIFIED |
-| Canlı kayıt, Undo/Redo ve F5 | UNVERIFIED |
-| Hesapta rollback uygulaması | UNVERIFIED |
+| HTTPS ve SPA | Ana sayfa, JS, CSS ve PDF fontu 200. İç içe URL açıldı ve yenilendi. |
+| 3D ve WebGL | Three.js sahnesi görüntülendi. Sürükleyince kamera döndü. Konsolda hata görülmedi. |
+| 2D | A ve B cepheleri ve üst plan açıldı. |
+| JSON | Sentetik 3000 mm tasarım yüklendi. İndirilen 3100 mm JSON tekrar açıldı. |
+| Geri Al ve Yinele | 3000 → 3100 → 3000 → 3100 mm. |
+| Kayıt ve yenileme | Manuel kayıt noktası sonrasında ana sayfa ve iç içe yol 3100 mm tasarımı geri yükledi. |
+| PDF | İndirilen 121.159 baytlık dosyanın 25 sayfası A3 yatay. Kapak sayfası Poppler ile görüntülendi. |
+| CSV | UTF-8 BOM ve Türkçe başlıklar, 69 parça satırı ve 25 sütun. |
+| ZIP | CRC geçerli, 29 girdi, 25 SVG. CSV ve tasarım JSON’u ayrı indirilen dosyalarla eşleşti. |
 
-Cloudflare giriş ekranında oturum tamamlanınca Free plan ve yalnız bu depoya verilen GitHub izni doğrulanmalı. Ardından ilk deploy oluşturulup gerçek HTTPS adreste kabul listesi yürütülmeli. Yerel testler canlı test statüsüne dönüştürülemez.
+Canlı denemeler ayrı tarayıcı profilinde ve sentetik tasarımla yapıldı. Çıktılar ve kanıtlar `artifacts/deployment/` altında yerel saklanıyor. JSON ve ZIP dosyaları kullanıcının gerçek tasarım arşivini içermez.
 
 ## Ücret ve kapsam sonucu
 
-Yapılandırma Cloudflare Free Static Assets ve ücretsiz `workers.dev` içindir. Statik trafik ücretsiz ve sınırsız, Free build kotası aylık 3000 dakikadır. Hesap girişine kadar kullanıcının planı doğrulanamaz. Ücretli hizmet etkinleştirilmedi. [Resmî statik ücretlendirme](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) · [Build kotası](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
+Workers **Free** ve ücretsiz `workers.dev` kullanılıyor. Statik istekler ücretsiz ve sınırsız, Free build kotası aylık 3000 dakikadır. Üretim Cloudflare’da hizmet verir ve yerel sunucunun çalışmasına ihtiyaç duymaz. Bu yayın için ücretli plan veya ek hizmet etkinleştirilmedi. [Statik ücretlendirme](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/) · [Build kotası](https://developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/)
 
-Kaynak ve gerçek kayıt yedekleri alınarak yayın hazırlığı yapıldı. Gardırop algoritması, 3D geometri, kapak/çekmece sistemi, üretim dosyası mantığı ve uygulama arayüzü bu görevin değişiklik kapsamına alınmadı.
+Yerel kayıtlar kendi adreslerinde saklanır. Canlı adrese taşıma adımları rehberde yer alır. [Tasarım taşıma ve sonraki yayınlar](DEPLOYMENT_GUIDE.md)

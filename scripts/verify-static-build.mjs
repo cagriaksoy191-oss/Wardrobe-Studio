@@ -8,7 +8,8 @@ const config = JSON.parse(await readFile(path.join(root, 'wrangler.jsonc'), 'utf
 assert.equal(config.assets.directory, './dist');
 assert.equal(config.assets.not_found_handling, 'single-page-application');
 assert.equal(config.workers_dev, true);
-assert.deepEqual(Object.keys(config).sort(), ['$schema', 'assets', 'compatibility_date', 'name', 'workers_dev']);
+assert.equal(config.preview_urls, false);
+assert.deepEqual(Object.keys(config).sort(), ['$schema', 'assets', 'compatibility_date', 'name', 'preview_urls', 'workers_dev']);
 assert.deepEqual(Object.keys(config.assets).sort(), ['directory', 'not_found_handling']);
 
 async function listFiles(directory, prefix = '') {
