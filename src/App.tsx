@@ -66,6 +66,7 @@ import { extractProduction } from './core/production/productionModel';
 import { downloadFile, safeFileName } from './export/download';
 import { accessWarnings } from './core/analysis/functionalAccess';
 import { AccessReview } from './ui/AccessReview';
+import { blankMeasureFields, readBlankMeasurements, shouldExplainExternalDrawers, type BlankMeasure, type BlankMeasureDrafts } from './ui/editorFeedback';
 
 const OWNER_LABELS: Record<OwnerType, { label: string; badgeClass: string }> = {
   anne: {
@@ -156,6 +157,7 @@ export function App() {
   } = useWardrobeStore();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement>(null);
   const sceneViewButtonRef = useRef<HTMLButtonElement>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [showHistoryMenu, setShowHistoryMenu] = useState<boolean>(false);
@@ -180,12 +182,10 @@ export function App() {
   const [blankName, setBlankName] = useState<string>('Yeni Gardırop Tasarımı');
   const [blankLayout, setBlankLayout] = useState<LayoutKind>('l-shape');
   const [blankCorner, setBlankCorner] = useState<JunctionType>('diagonal');
-  const [blankLengthAMm, setBlankLengthAMm] = useState<number>(2800);
-  const [blankDepthAMm, setBlankDepthAMm] = useState<number>(600);
-  const [blankLengthBMm, setBlankLengthBMm] = useState<number>(2200);
-  const [blankDepthBMm, setBlankDepthBMm] = useState<number>(600);
-  const [blankHeightMm, setBlankHeightMm] = useState<number>(2400);
-  const [blankRoomHeightMm, setBlankRoomHeightMm] = useState<number>(2550);
+  const [blankMeasureDrafts, setBlankMeasureDrafts] = useState<BlankMeasureDrafts>({
+    lengthAMm: '2800', depthAMm: '600', lengthBMm: '2200', depthBMm: '600', heightMm: '2400', roomHeightMm: '2550',
+  });
+  const blankMeasurements = useMemo(() => readBlankMeasurements(blankMeasureDrafts, blankLayout), [blankMeasureDrafts, blankLayout]);
 
   useEffect(() => {
     void hydrateFromIndexedDB();
@@ -243,6 +243,10 @@ export function App() {
     const file = e.currentTarget.files?.[0];
     if (!file) return;
     e.currentTarget.value = '';
+    if (showTools) {
+      setShowTools(false);
+      toolsButtonRef.current?.focus();
+    }
     setImportError(null);
     setExportNotice('');
     const current = useWardrobeStore.getState().design;
@@ -260,21 +264,29 @@ export function App() {
   };
 
   const handleCreateBlankDesign = () => {
+    if (!blankMeasurements.ok) return;
     const opts: BlankDesignOptions = {
       name: blankName.trim() || 'Yeni Gardırop Tasarımı',
       layoutKind: blankLayout,
       cornerType: blankCorner,
-      lengthAMm: blankLengthAMm,
-      depthAMm: blankDepthAMm,
-      lengthBMm: blankLengthBMm,
-      depthBMm: blankDepthBMm,
-      heightMm: blankHeightMm,
-      roomHeightMm: blankRoomHeightMm,
+      ...blankMeasurements.values,
     };
     startBlankDesign(opts);
     if (useWardrobeStore.getState().commandError) return;
     setShowBlankBuilder(false);
     setCompactPanel(null);
+  };
+
+  const blankMeasureInput = (key: BlankMeasure, fullWidth = false) => {
+    const { label, min, max, step } = blankMeasureFields[key];
+    const invalid = !blankMeasurements.ok && blankMeasurements.field === key;
+    return <label className={fullWidth ? 'block space-y-1' : 'space-y-1'}>
+      <span className="text-slate-400">{label}</span>
+      <input type="number" min={min} max={max} step={step} value={blankMeasureDrafts[key]}
+        aria-invalid={invalid || undefined} aria-describedby={invalid ? 'blank-measure-error' : undefined}
+        onChange={e => { const draft = e.target.value; setBlankMeasureDrafts(previous => ({ ...previous, [key]: draft })); }}
+        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white" />
+    </label>;
   };
 
   const selectedBay =
@@ -496,7 +508,7 @@ export function App() {
             <span>{checkpointText}</span>
           </button>
 
-          <button type="button" aria-expanded={showTools} aria-controls="studio-more-tools"
+          <button ref={toolsButtonRef} type="button" aria-expanded={showTools} aria-controls="studio-more-tools"
             className="studio-more-trigger rounded-md border border-slate-700 bg-slate-800 px-2 py-2 text-xs"
             onClick={() => setShowTools(!showTools)}>Araçlar</button>
           <div id="studio-more-tools" className="studio-more-tools" data-open={showTools}>
@@ -862,85 +874,25 @@ export function App() {
                     )}
 
                     <div className="grid grid-cols-2 gap-2">
-                      <label className="space-y-1">
-                        <span className="text-slate-400">A Kolu Uzunluk (mm)</span>
-                        <input
-                          type="number"
-                          step={50}
-                          min={1200}
-                          max={6000}
-                          value={blankLengthAMm}
-                          onChange={(e) => setBlankLengthAMm(Number(e.target.value) || 2800)}
-                          className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white"
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <span className="text-slate-400">A Kolu Derinlik (mm)</span>
-                        <input
-                          type="number"
-                          step={20}
-                          min={350}
-                          max={800}
-                          value={blankDepthAMm}
-                          onChange={(e) => setBlankDepthAMm(Number(e.target.value) || 600)}
-                          className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white"
-                        />
-                      </label>
+                      {blankMeasureInput('lengthAMm')}
+                      {blankMeasureInput('depthAMm')}
                     </div>
 
                     {blankLayout === 'l-shape' && (
                       <div className="grid grid-cols-2 gap-2">
-                        <label className="space-y-1">
-                          <span className="text-slate-400">B Kolu Uzunluk (mm)</span>
-                          <input
-                            type="number"
-                            step={50}
-                            min={1200}
-                            max={6000}
-                            value={blankLengthBMm}
-                            onChange={(e) => setBlankLengthBMm(Number(e.target.value) || 2200)}
-                            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white"
-                          />
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-slate-400">B Kolu Derinlik (mm)</span>
-                          <input
-                            type="number"
-                            step={20}
-                            min={350}
-                            max={800}
-                            value={blankDepthBMm}
-                            onChange={(e) => setBlankDepthBMm(Number(e.target.value) || 600)}
-                            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white"
-                          />
-                        </label>
+                        {blankMeasureInput('lengthBMm')}
+                        {blankMeasureInput('depthBMm')}
                       </div>
                     )}
 
-                    <label className="block space-y-1">
-                      <span className="text-slate-400">Oda tavan yüksekliği (mm)</span>
-                      <input type="number" min={1800} max={4000} value={blankRoomHeightMm}
-                        onChange={e => setBlankRoomHeightMm(Number(e.target.value) || 2550)}
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white" />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-slate-400">Gardırop yüksekliği (mm)</span>
-                      <input
-                        type="number"
-                        step={20}
-                        min={1800}
-                        max={3000}
-                        value={blankHeightMm}
-                        onChange={(e) => setBlankHeightMm(Number(e.target.value) || 2400)}
-                        className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-white"
-                      />
-                    </label>
+                    {blankMeasureInput('roomHeightMm', true)}
+                    {blankMeasureInput('heightMm', true)}
 
-                    {blankHeightMm > blankRoomHeightMm && <p role="alert" className="text-rose-200">Gardırop yüksekliği oda tavanını aşıyor.</p>}
+                    {!blankMeasurements.ok && <p id="blank-measure-error" role="alert" className="text-rose-200">{blankMeasurements.error}</p>}
                     <button
                       type="button"
                       onClick={handleCreateBlankDesign}
-                      disabled={blankHeightMm > blankRoomHeightMm}
+                      disabled={!blankMeasurements.ok}
                       className="flex min-h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-50 transition"
                     >
                       <FilePlus2 className="h-3.5 w-3.5" />
@@ -2440,6 +2392,12 @@ export function App() {
                     <option value={165}>165° Geniş Açılı</option>
                   </select>
                 </div>
+
+                {shouldExplainExternalDrawers(selectedBay, bayDoors, bayDrawers, hasExplicitFront) && (
+                  <p role="status" className="text-[11px] text-amber-200">
+                    Dış çekmeceler bu bölmenin ön yüzünü dolduruyor. Bu düzende menteşeli kanat oluşmadı.
+                  </p>
+                )}
 
                 {bayDoors.length > 0 && (
                   <div className="grid grid-cols-1 gap-1 pt-0.5">

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState, type FocusEvent } from 'react';
 import type { InventoryItemKind, InventoryTarget, OwnerType, RoomObstacleKind, StorageTemplateId, ValidationIssue } from '../core/schema/types';
 import { DEFAULT_PROFILES, OWNER_NAMES, profileLimits } from '../core/analysis/studioAnalysis';
 import { INVENTORY_CATALOG, itemDimensions } from '../core/analysis/inventory';
 import { STORAGE_TEMPLATE_CATALOG } from '../core/inserts/storageTemplates';
 import { useWardrobeStore } from '../store/useWardrobeStore';
+import { readNumberDraft } from './editorFeedback';
 
 const control='w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100';
 const button='rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-[11px] font-medium text-slate-100 hover:border-sky-400 disabled:opacity-40';
@@ -13,11 +14,48 @@ const owners:OwnerType[]=['anne','baba','ortak'];
 const OBSTACLES:Record<RoomObstacleKind,string>={bed:'Yatak',roomDoor:'Oda kapısı',window:'Pencere',radiator:'Radyatör',socket:'Priz / anahtar',pillar:'Kolon',beam:'Kiriş',skirting:'Süpürgelik',other:'Diğer sabit engel'};
 
 export function NumberField({label,value,onCommit,min=0,max=20000,step=1}:{label:string;value:number;onCommit:(n:number)=>void;min?:number;max?:number;step?:number}) {
-  const [draft,setDraft]=useState(String(value));
-  const [commitTick,setCommitTick]=useState(0);
-  useEffect(()=>setDraft(String(value)),[value,commitTick]);
-  const commit=()=>{if(draft===String(value))return;const n=Number(draft);if(draft.trim()&&Number.isFinite(n)){const clean=Math.max(min,Math.min(max,Math.round(n)));if(clean!==value)onCommit(clean);}setCommitTick(tick=>tick+1);};
-  return <label className="block space-y-1"><span className="text-[10px] text-slate-400">{label}</span><input aria-label={label} type="number" min={min} max={max} step={step} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}} className={`${control} font-mono`} /></label>;
+  const [draft, setDraft] = useState(String(value));
+  const [problem, setProblem] = useState<string | null>(null);
+  const discardOnBlur = useRef(false);
+  const problemId = useId();
+  useEffect(() => { setDraft(String(value)); setProblem(null); }, [value]);
+
+  const commit = ({ currentTarget }: FocusEvent<HTMLInputElement>) => {
+    if (discardOnBlur.current) {
+      discardOnBlur.current = false;
+      return;
+    }
+    if (currentTarget.value === String(value) && !currentTarget.validity.badInput) return;
+    const result = readNumberDraft(currentTarget.value, currentTarget.validity.badInput, min, max);
+    setDraft(String(value));
+    if (result.kind === 'invalid' || result.kind === 'outOfRange') {
+      setProblem(`${min} ile ${max} arasında bir sayı girin. Önceki değer korundu.`);
+      return;
+    }
+    setProblem(null);
+    if (result.kind === 'value' && result.value !== value) onCommit(result.value);
+  };
+
+  return <label className="block space-y-1">
+    <span className="text-[10px] text-slate-400">{label}</span>
+    <input aria-label={label} aria-invalid={problem ? true : undefined} aria-describedby={problem ? problemId : undefined}
+      type="number" min={min} max={max} step={step} value={draft} className={`${control} font-mono`}
+      onChange={e => { setDraft(e.target.value); setProblem(null); }} onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.currentTarget.blur();
+        } else if (e.key === 'Escape' && (draft !== String(value) || e.currentTarget.validity.badInput || problem)) {
+          e.preventDefault();
+          e.stopPropagation();
+          discardOnBlur.current = true;
+          setDraft(String(value));
+          setProblem(null);
+          e.currentTarget.blur();
+        }
+      }} />
+    {problem && <span id={problemId} role="alert" className="block text-[10px] text-rose-200">{problem}</span>}
+  </label>;
 }
 export function CommandFeedback() {
   const error=useWardrobeStore(s=>s.commandError), clear=useWardrobeStore(s=>s.clearCommandError);

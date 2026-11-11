@@ -42,6 +42,7 @@ import type {
 import { analyzeSelectedCellsGroup } from '../../core/solver/treeMutator';
 import { useWardrobeStore } from '../../store/useWardrobeStore';
 import { FrontSystemEditor, HingedOpeningCard } from '../../ui/FrontSystemEditor';
+import { defaultShelfIntervalDraft, readShelfIntervalDraft, shelfIntervalLimit } from '../../ui/editorFeedback';
 import { frontVerticalRange } from '../../core/fronts/frontGeometry';
 
 export interface SelectionScreenBounds {
@@ -135,11 +136,12 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         : [];
 
   const group = analyzeSelectedCellsGroup(activeCellIds, resolved);
+  const groupIntervalMax = shelfIntervalLimit(group);
+  const groupIntervalDefault = defaultShelfIntervalDraft(group, groupIntervalMax);
 
   const [splitCountInput, setSplitCountInput] = useState<number>(3);
-  const [groupIntervalTarget, setGroupIntervalTarget] = useState<number>(
-    Math.max(2, group.cells.length + 1)
-  );
+  const [groupIntervalDraft, setGroupIntervalDraft] = useState(groupIntervalDefault);
+  const groupIntervalTarget = readShelfIntervalDraft(groupIntervalDraft, groupIntervalMax);
   const [mergeTargetIntervals, setMergeTargetIntervals] = useState<number>(
     Math.max(2, group.cells.length)
   );
@@ -153,9 +155,10 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
 
   const selectionSignature = `${activeCellIds.join(',')}|${activeDrawerIds.join(',')}|${activeDoorIds.join(',')}|${doorEditorMode}`;
 
+  useEffect(() => setGroupIntervalDraft(groupIntervalDefault), [selectionSignature, groupIntervalDefault]);
+
   useEffect(() => {
     if (group.cells.length > 0) {
-      setGroupIntervalTarget(group.cells.length > 1 ? group.cells.length + 1 : 3);
       setMergeTargetIntervals(Math.max(2, group.cells.length));
       const defaultMm =
         activeAxis === 'Y'
@@ -1059,6 +1062,27 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const isContiguousGroup = group.isContiguousVertical || group.isContiguousHorizontal;
   const activeJunction = design.junctions[0] ?? null;
 
+  const changeIntervalTarget = (offset: number) => {
+    setGroupIntervalDraft(draft => {
+      const count = readShelfIntervalDraft(draft, groupIntervalMax);
+      return String(count === null ? 1 : Math.max(1, Math.min(groupIntervalMax, count + offset)));
+    });
+  };
+  const applyIntervalTarget = () => {
+    if (groupIntervalTarget !== null) setContiguousGroupIntervalCount(groupIntervalTarget);
+  };
+  const intervalInput = <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+    <button type="button" aria-label="Aralık hedefini azalt" onClick={() => changeIntervalTarget(-1)}
+      className="p-0.5 text-slate-400 hover:text-white"><Minus className="h-3 w-3" /></button>
+    <input type="number" inputMode="numeric" min={1} max={groupIntervalMax} step={1}
+      aria-label={group.isMultiShelfGroupSelection ? 'Grup başına aralık' : 'Hedef aralık'}
+      aria-invalid={groupIntervalDraft !== '' && groupIntervalTarget === null ? true : undefined}
+      placeholder="—" value={groupIntervalDraft} onChange={e => setGroupIntervalDraft(e.target.value)}
+      className="w-11 bg-transparent text-center font-mono text-xs font-bold text-amber-300 focus:outline-none" />
+    <button type="button" aria-label="Aralık hedefini artır" onClick={() => changeIntervalTarget(1)}
+      className="p-0.5 text-slate-400 hover:text-white"><Plus className="h-3 w-3" /></button>
+  </div>;
+
   const siblingIntervalsOfFirst = firstCell.sourceLeafId
     ? resolved.cells.filter((c) => c.sourceLeafId === firstCell.sourceLeafId)
     : [];
@@ -1330,33 +1354,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               </button>
 
               {/* 2. Her Grubu N Eşit Aralığa Dönüştür */}
-              <div className="flex items-center justify-between gap-1.5 text-[11px]">
-                <span className="text-slate-400">Grup Başına Aralık:</span>
-                <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setGroupIntervalTarget((v) => Math.max(1, v - 1))}
-                    className="p-0.5 text-slate-400 hover:text-white"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <span className="w-6 text-center font-mono font-bold text-amber-300">
-                    {groupIntervalTarget}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setGroupIntervalTarget((v) => Math.min(12, v + 1))}
-                    className="p-0.5 text-slate-400 hover:text-white"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-slate-400">Grup başına aralık (1–{groupIntervalMax}):</span>
+                {intervalInput}
                 <button
                   type="button"
-                  onClick={() => setContiguousGroupIntervalCount(groupIntervalTarget)}
-                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30"
+                  disabled={groupIntervalTarget === null}
+                  onClick={applyIntervalTarget}
+                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
                 >
-                  Her Grubu {groupIntervalTarget} Aralık Yap
+                  {groupIntervalTarget === null ? 'Her Gruba Uygula' : `Her Grubu ${groupIntervalTarget} Aralık Yap`}
                 </button>
               </div>
 
@@ -1417,48 +1424,25 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 </button>
                 <button
                   type="button"
+                  disabled={group.cells.length >= groupIntervalMax}
                   onClick={() => setContiguousGroupIntervalCount(group.cells.length + 1)}
-                  className="flex items-center justify-center gap-1 rounded border border-emerald-500/50 bg-emerald-500/20 px-2 py-1.5 font-bold text-emerald-200 hover:bg-emerald-500/30"
+                  className="flex items-center justify-center gap-1 rounded border border-emerald-500/50 bg-emerald-500/20 px-2 py-1.5 font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-40"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  {group.cells.length} → {group.cells.length + 1} Eşit Aralık
+                  {group.cells.length >= groupIntervalMax ? `Üst sınır: ${groupIntervalMax} aralık` : `${group.cells.length} → ${group.cells.length + 1} Eşit Aralık`}
                 </button>
               </div>
 
               <div className="flex items-center justify-between gap-1.5 text-[11px]">
-                <span className="text-slate-400">Hedef Aralık:</span>
-                <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setGroupIntervalTarget((v) => Math.max(1, v - 1))}
-                    className="p-0.5 text-slate-400 hover:text-white"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={groupIntervalTarget}
-                    onChange={(e) =>
-                      setGroupIntervalTarget(Math.max(1, Math.min(12, Number(e.target.value) || 2)))
-                    }
-                    className="w-8 bg-transparent text-center font-mono text-xs font-bold text-amber-300 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setGroupIntervalTarget((v) => Math.min(12, v + 1))}
-                    className="p-0.5 text-slate-400 hover:text-white"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
+                <span className="text-slate-400">Hedef Aralık (1–{groupIntervalMax}):</span>
+                {intervalInput}
                 <button
                   type="button"
-                  onClick={() => setContiguousGroupIntervalCount(groupIntervalTarget)}
-                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30"
+                  disabled={groupIntervalTarget === null}
+                  onClick={applyIntervalTarget}
+                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
                 >
-                  {groupIntervalTarget} Eşit Aralığa Dönüştür
+                  {groupIntervalTarget === null ? 'Eşit Aralığa Dönüştür' : `${groupIntervalTarget} Eşit Aralığa Dönüştür`}
                 </button>
               </div>
 
