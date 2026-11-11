@@ -45,7 +45,7 @@ npx wrangler deploy
 
 Bağlantıyı onarmak gerekirse resmî Cloudflare ekranından oturum açın ve **Settings → Builds** altında GitHub deposunu yeniden seçin. GitHub uygulamasının erişimi sorulursa **Only select repositories** ile `Wardrobe-Studio` seçin. Parola ve doğrulama kodlarını kendi giriş ekranınızda kullanın. [Cloudflare girişi](https://dash.cloudflare.com/login) · [GitHub bağlantısı](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/github-integration/)
 
-Git bağlantısı üzerinden rutin güncellemeler için Wrangler oturumu gerekmez. Manuel yayın gerekirse CLI’nın resmî OAuth akışını kullanın.
+Git bağlantısı üzerinden rutin güncellemeler için Wrangler oturumu gerekmez. Manuel üretim yayını gerekiyorsa kullanıcı onayından sonra CLI’nın resmî OAuth akışını kullanın.
 
 ```powershell
 npx wrangler login
@@ -73,9 +73,18 @@ Normal Design JSON içe aktarımı tasarım niyetini taşır. Tam geçmiş, eski
 
 ## Codex ile sonraki güncellemeler
 
-Codex’e bu klasörde gereken değişikliği ve **test et, build doğrula, main dalına gönder, Cloudflare yayını ve canlı URL’yi doğrula** talimatını verin. Codex değişiklik kapsamını, Git diff’ini, kişisel dosya hariç tutmalarını ve test sonucunu kontrol ettikten sonra commit oluşturur ve gönderir. `main` push’u Cloudflare Builds’i tetikler. Başarısız build önceki başarılı dağıtımın yerini alamaz. Yayın kaydında commit kimliği ve gerçek URL izlenir.
+Her yeni görev için güncel `main` üzerinden ayrı bir dal açın. Codex değişikliği bu dalda yapar, test ve derleme sonuçlarını, Git diff’ini ve varsa tarayıcı doğrulamasını kullanıcıya sunar. Üretim dalına birleştirme ve gönderim için bu sonuçlar üzerinden açık yayın onayı alınır.
 
-Manuel akış aşağıdaki sırayı izler.
+Çalışma ağacı temizken yeni dalı hazırlayın.
+
+```powershell
+git status --short --branch
+git switch main
+git pull --ff-only origin main
+git switch -c fix/kisa-aciklama
+```
+
+Değişiklikten sonra dalı yerelde doğrulayın ve incelenen dosyaları commit edin.
 
 ```powershell
 npm test -- --run
@@ -85,10 +94,11 @@ git diff
 git add <incelenen-dosyalar>
 git diff --cached
 git commit -m "Describe the verified change"
-git push origin main
 ```
 
-Yeni bir özellik veya bağımlılık eklerken `npm audit` sonucu da değerlendirilir. Mevcut güvenlik bulguları doğrulama belgesinde kayıtlıdır.
+Tarayıcı kontrollerini sentetik tasarım ve ayrı test profiliyle yapın. Yerel önizlemeyi loopback adresine bağlayın. Bağımlılık değişikliklerinde `npm audit` ve `npm audit --omit=dev` sonuçlarını ayrı değerlendirin. [Yayın sonrası bakım raporu](POST_DEPLOYMENT_SECURITY_AND_STABILITY.md)
+
+Yayın onayından sonra `main` üzerindeki yeni değişiklikleri kontrol edin, incelenen dalı birleştirin ve `git push origin main` ile gönderin. Cloudflare Builds sonucu ve commit kimliği eşleşince aşağıdaki canlı kabul listesini uygulayın. Derleme başarısızsa önceki başarılı yayın hizmet vermeye devam eder. Canlı davranışta gerileme varsa önceki çalışan sürümü seçin ve Git geçmişine düzeltmeyi kaydedin.
 
 ## Geri alma
 
