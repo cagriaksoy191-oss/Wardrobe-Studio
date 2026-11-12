@@ -9,11 +9,11 @@ import { useThree } from '@react-three/fiber';
 const MM_TO_M = 0.001;
 
 const STARTER_OPTIONS: { id: NewBayStarterPreset; label: string; desc: string }[] = [
-  { id: 'shelves', label: 'Raflı Bölme', desc: '4 ayarlanabilir raf' },
+  { id: 'shelves', label: 'Raflı Bölme', desc: '4 raf · 5 kullanılabilir aralık' },
   { id: 'longHanging', label: 'Uzun Askılı Bölme', desc: 'Elbise ve palto için tek askı' },
   { id: 'doubleHanging', label: 'Çift Kat Askılı Bölme', desc: 'Alt ve üst askı' },
   { id: 'drawers', label: 'Çekmeceli Bölme', desc: '4 çekmece' },
-  { id: 'shoes', label: 'Ayakkabılıklı Bölme', desc: '5 kat ayakkabılık' },
+  { id: 'shoes', label: 'Ayakkabılıklı Bölme', desc: '5 raf · 6 kullanılabilir aralık' },
   { id: 'serviceNiche', label: 'Servis Nişi', desc: 'Ütü masası / merdiven / süpürge nişi' },
   { id: 'empty', label: 'Boş Bölme', desc: 'Bölünmemiş tek parça boş gövde' },
 ];
@@ -160,6 +160,7 @@ export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | 
                           Esnek (kalan alan)
                         </button>
                       </div>
+                      <p className="text-[10px] text-slate-400">Sabit genişlik dıştan ölçülür; esnek bölmeler koldaki kalan alanı paylaşır.</p>
 
                       {widthMode === 'fixed' && (
                         <NumberField label="Yeni bölmenin dış genişliği (mm)"

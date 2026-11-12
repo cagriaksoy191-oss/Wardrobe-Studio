@@ -32,6 +32,36 @@ function oldSession() {
 }
 
 describe('AUD-001 and AUD-007 — session durability', () => {
+  it('offers first-use choices only after both working-session reads return empty', async () => {
+    useWardrobeStore.setState({ persistenceStatus: 'idle', isFirstUse: false });
+    const untouchedDesign = state().design;
+    let finish!: (value: unknown) => void;
+    db.get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const hydration = state().hydrateFromIndexedDB();
+    expect(state().isFirstUse).toBe(false);
+    finish(undefined);
+    await hydration;
+    expect(state().isFirstUse).toBe(true);
+    expect(state().design).toBe(untouchedDesign);
+    expect(stored.has(localKey)).toBe(false);
+    state().saveCheckpoint();
+    expect(state().isFirstUse).toBe(false);
+    expect(JSON.parse(stored.get(localKey)!)).not.toHaveProperty('isFirstUse');
+  });
+
+  it('does not show first-use choices while restoring an IndexedDB-only working session', async () => {
+    useWardrobeStore.setState({ persistenceStatus: 'idle', isFirstUse: false });
+    const record = oldSession();
+    let finish!: (value: unknown) => void;
+    db.get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const hydration = state().hydrateFromIndexedDB();
+    expect(state().isFirstUse).toBe(false);
+    finish(record);
+    await hydration;
+    expect(state().isFirstUse).toBe(false);
+    expect(state().design).toEqual(record.workingDesign);
+  });
+
   it.each(['new', 'import', 'version', 'checkpoint', 'undo-redo'])(
     'keeps the user action %s when IndexedDB returns a late snapshot',
     async action => {

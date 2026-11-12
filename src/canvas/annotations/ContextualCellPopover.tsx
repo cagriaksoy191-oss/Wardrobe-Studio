@@ -1086,6 +1086,9 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const siblingIntervalsOfFirst = firstCell.sourceLeafId
     ? resolved.cells.filter((c) => c.sourceLeafId === firstCell.sourceLeafId)
     : [];
+  const wholeShelfGroup = firstCell.subIntervalKind === 'shelfInterval' &&
+    siblingIntervalsOfFirst.length > 1 &&
+    group.cells.every(cell => cell.sourceLeafId === firstCell.sourceLeafId);
 
   const handleTriggerResizePreview = (customValMm?: number, customDir?: ResizeDirection) => {
     const val = customValMm !== undefined ? customValMm : Number(targetMmInput.trim());
@@ -1152,7 +1155,10 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         </button>
       </div>
 
-      {/* Tek bir raf aralığı seçiliyse tüm raf grubunu tek tıkla seçme kısayolu */}
+      {wholeShelfGroup && <p className="text-[11px] text-slate-300">
+        Raf grubu: {siblingIntervalsOfFirst.length - 1} fiziksel raf · {siblingIntervalsOfFirst.length} kullanılabilir aralık
+      </p>}
+      {/* Tek bir aralık seçiliyse tüm grubu seçme kısayolu */}
       {group.isSingle && siblingIntervalsOfFirst.length > 1 && (
         <button
           type="button"
@@ -1175,12 +1181,12 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
           <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-amber-300">
             <span>Beşgen Köşe Modülü & Raf Ayarları</span>
             <span className="font-mono text-[9px] text-slate-400">
-              {activeJunction.shelvesCount + 1} Aralık
+              {activeJunction.shelvesCount} raf · {activeJunction.shelvesCount + 1} aralık
             </span>
           </div>
           <div className="grid grid-cols-3 gap-1.5 text-[10px]">
             <label className="space-y-0.5">
-              <span className="text-slate-400">Raf Adedi</span>
+              <span className="text-slate-400">Köşe rafı sayısı</span>
               <input
                 type="number"
                 min={1}

@@ -191,6 +191,8 @@ interface WardrobeState {
   historyFuture: HistoryEntry[];
   hasUnsavedChanges: boolean;
   persistenceStatus: 'idle' | 'saving' | 'saved' | 'partial' | 'restored' | 'error';
+  /** Only true after a successful read has established that there is no working session. */
+  isFirstUse: boolean;
   recoveryJson: string | null;
   lastSavedAt: string | null;
   lastCheckpointAt: string | null;
@@ -461,6 +463,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     const canWriteIndexed = typeof indexedDB !== 'undefined';
     set({
       persistenceStatus: canWriteIndexed ? 'saving' : syncSaved ? 'partial' : 'error',
+      isFirstUse: false,
       ...(syncSaved ? { lastSavedAt: now } : {}),
     });
     if (!canWriteIndexed) return;
@@ -661,6 +664,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     historyFuture: bootFuture,
     hasUnsavedChanges: !sameDesign(bootWorkingDesign, bootCheckpointDesign),
     persistenceStatus: syncRestored ? 'restored' : boot.recoveryJson ? 'error' : 'idle',
+    isFirstUse: false,
     recoveryJson: boot.recoveryJson ?? null,
     lastSavedAt: syncRestored?.lastAutoSavedAt ?? null,
     lastCheckpointAt: syncRestored?.lastCheckpointAt ?? null,
@@ -2424,7 +2428,8 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         return;
       }
       if (!session) {
-        if (readFailed || recovery) set({ persistenceStatus: 'error', recoveryJson: recovery });
+        if (readFailed || recovery) set({ persistenceStatus: 'error', recoveryJson: recovery, isFirstUse: false });
+        else if (get().persistenceStatus === 'idle') set({ isFirstUse: true });
         return;
       }
       const resolved = solveDesign(session.workingDesign);
@@ -2438,6 +2443,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         historyFuture: session.historyFuture,
         hasUnsavedChanges: !sameDesign(session.workingDesign, session.checkpointDesign),
         persistenceStatus: readFailed ? 'partial' : 'restored',
+        isFirstUse: false,
         recoveryJson: recovery ?? session.recoveryJson ?? null,
         lastSavedAt: session.lastAutoSavedAt ?? formatNowTime(),
         lastCheckpointAt: session.lastCheckpointAt,

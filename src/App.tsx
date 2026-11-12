@@ -105,6 +105,7 @@ export function App() {
     hasUnsavedChanges,
     lastCheckpointAt,
     persistenceStatus,
+    isFirstUse,
     recoveryJson,
     lastSavedAt,
     setViewMode,
@@ -159,6 +160,12 @@ export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toolsButtonRef = useRef<HTMLButtonElement>(null);
   const sceneViewButtonRef = useRef<HTMLButtonElement>(null);
+  const blankBuilderRef = useRef<HTMLElement>(null);
+  const examplesSummaryRef = useRef<HTMLElement>(null);
+  const [firstUseDismissed, setFirstUseDismissed] = useState(false);
+  const [introDestination, setIntroDestination] = useState<'create' | 'examples' | null>(null);
+  const [examplesOpen, setExamplesOpen] = useState(false);
+  const firstUse = isFirstUse && persistenceStatus === 'idle' && !firstUseDismissed;
   const [importError, setImportError] = useState<string | null>(null);
   const [showHistoryMenu, setShowHistoryMenu] = useState<boolean>(false);
   const [showAdvancedRightInspector, setShowAdvancedRightInspector] = useState<boolean>(false);
@@ -190,6 +197,21 @@ export function App() {
   useEffect(() => {
     void hydrateFromIndexedDB();
   }, [hydrateFromIndexedDB]);
+
+  useEffect(() => {
+    if (!introDestination || activeStep !== 'room-carcass') return;
+    (introDestination === 'create' ? blankBuilderRef.current : examplesSummaryRef.current)?.focus();
+    setIntroDestination(null);
+  }, [activeStep, introDestination]);
+
+  const openIntroDestination = (destination: 'create' | 'examples') => {
+    setFirstUseDismissed(true);
+    setActiveStep('room-carcass');
+    setCompactPanel('setup');
+    setShowBlankBuilder(destination === 'create');
+    if (destination === 'examples') setExamplesOpen(true);
+    setIntroDestination(destination);
+  };
 
   // Klavye kısayolları (Ctrl+Z / Ctrl+Y / Ctrl+S)
   useEffect(() => {
@@ -257,6 +279,7 @@ export function App() {
       const result = importJsonString(text);
       if (!result.ok) throw new Error(result.error ?? 'JSON dosyası yüklenemedi.');
       setSelectedCells([]);
+      if (firstUse && !showTools) sceneViewButtonRef.current?.focus();
       setExportNotice('Tasarım açıldı. Geri Al önceki çalışma kopyasını getirir.');
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'JSON dosyası okunamadı.');
@@ -709,6 +732,15 @@ export function App() {
         <span>JSON açılamadı. Çalışma kopyası korundu. {importError}</span>
         <button className="shrink-0 underline" onClick={() => setImportError(null)}>Kapat</button>
       </div>}
+      {firstUse && <section aria-label="İlk tasarım" className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-sky-800 bg-sky-950/60 px-3 py-2 text-xs text-sky-100">
+        <p><strong>İlk tasarım</strong> · Ekranda hazır bir örnek var. Aşağıdaki erişim uyarısı bu örneğe ait.</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button type="button" className="rounded border border-emerald-500 px-2 py-1.5 text-emerald-100" onClick={() => openIntroDestination('create')}>Kendi gardırobunu oluştur</button>
+          <button type="button" className="rounded border border-sky-700 px-2 py-1.5" onClick={() => openIntroDestination('examples')}>Hazır örnekleri incele</button>
+          <button type="button" className="rounded border border-sky-700 px-2 py-1.5" onClick={() => fileInputRef.current?.click()}>JSON dosyası aç</button>
+          <button type="button" className="rounded px-2 py-1.5 underline" onClick={() => { setFirstUseDismissed(true); sceneViewButtonRef.current?.focus(); }}>Başlangıcı gizle</button>
+        </div>
+      </section>}
       {accessBlocks.length > 0 && <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-rose-900 bg-rose-950/50 px-3 py-1 text-xs text-rose-100">
         <span role="status">{resolved.corners.some(corner => corner.type === 'diagonal' && accessBlocks[0].bayId === corner.id)
           ? 'Köşe kapağı erişimi engelliyor' : 'İşlevsel erişim engeli'} · {accessBlocks.length} bölüm</span>
@@ -793,7 +825,7 @@ export function App() {
                 </div>
 
                 {showBlankBuilder && (
-                  <section aria-label="Yeni tasarım ölçüleri" className="rounded-lg border border-emerald-500/40 bg-slate-950 p-3 space-y-2.5 text-[11px]">
+                  <section ref={blankBuilderRef} tabIndex={-1} aria-label="Yeni tasarım ölçüleri" className="rounded-lg border border-emerald-500/40 bg-slate-950 p-3 space-y-2.5 text-[11px]">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-emerald-300">Yerleşim ve ölçüler</span>
                       <button
@@ -804,7 +836,7 @@ export function App() {
                       </button>
                     </div>
 
-                    <p className="text-slate-300">Oda ve duvar ölçülerini mm olarak girin. L yerleşimde iki kolu iç köşeden ölçün.</p>
+                    <p className="text-slate-300">Ölçüleri mm olarak girin. L yerleşimde A ana duvar, B dönen duvardır; ikisini de iç köşeden ölçün. Genişlikler dış ölçüdür; net iç alan, paneller düşüldükten sonra hesaplanır.</p>
                     <label className="block space-y-1">
                       <span className="text-slate-400">Tasarım Adı</span>
                       <input
@@ -887,6 +919,7 @@ export function App() {
 
                     {blankMeasureInput('roomHeightMm', true)}
                     {blankMeasureInput('heightMm', true)}
+                    <p className="text-slate-300">Oda yüksekliği zemin ile tavan arasıdır. Gardırop yüksekliği, dolabın baza ve üst klapa dahil dış yüksekliğidir.</p>
 
                     {!blankMeasurements.ok && <p id="blank-measure-error" role="alert" className="text-rose-200">{blankMeasurements.error}</p>}
                     <button
@@ -901,8 +934,8 @@ export function App() {
                   </section>
                 )}
 
-                <details className="space-y-1.5">
-                  <summary className="cursor-pointer py-1 text-xs text-slate-300">Hazır örnekler</summary>
+                <details className="space-y-1.5" open={examplesOpen} onToggle={event => setExamplesOpen(event.currentTarget.open)}>
+                  <summary ref={examplesSummaryRef} className="cursor-pointer py-1 text-xs text-slate-300">Hazır örnekler</summary>
                   {Object.values(SAMPLE_DESIGNS).map((preset) => {
                     const active = design.id === preset.id;
                     return (
@@ -1021,8 +1054,9 @@ export function App() {
                     />
                   </label>
                   <label className="space-y-1">
-                    <span className="text-slate-400">Üst Taç</span>
+                    <span className="text-slate-400">Üst klapa (mm)</span>
                     <input
+                      aria-describedby="top-filler-help"
                       type="number"
                       step={10}
                       min={0}
@@ -1039,6 +1073,7 @@ export function App() {
                     />
                   </label>
                 </div>
+                <p id="top-filler-help" className="text-[10px] text-slate-400">Gövdenin üstündeki dikey dolgu yüksekliği. Dekoratif taç biçimi Gömme sekmesinde ayrı seçilir.</p>
               </div>
 
               {/* AŞAMA 2.4 BÖLÜM 11: İKİ PARAMETRELİ MALZEME KALINLIĞI SİSTEMİ */}
@@ -1191,7 +1226,7 @@ export function App() {
                           />
                         </label>
                         <label className="space-y-1">
-                          <span className="text-slate-400">Raf Adedi</span>
+                          <span className="text-slate-400">Köşe rafı sayısı</span>
                           <input
                             type="number"
                             min={0}
@@ -1205,6 +1240,7 @@ export function App() {
                         </label>
                       </div>
 
+                      <p className="text-[10px] text-slate-400">{activeJunction.shelvesCount} fiziksel raf · {activeJunction.shelvesCount + 1} kullanılabilir aralık</p>
                       <div className="space-y-1.5 pt-1">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-slate-400">Köşe Açılı Kapak Yönü:</span>
