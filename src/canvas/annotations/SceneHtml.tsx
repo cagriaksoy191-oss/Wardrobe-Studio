@@ -1,6 +1,7 @@
 import { useFrame, useThree, type ThreeElements } from '@react-three/fiber';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { Group, Vector3, type OrthographicCamera, type PerspectiveCamera } from 'three';
 
 type SceneHtmlProps = Pick<ThreeElements['group'], 'position'> & {
@@ -8,12 +9,13 @@ type SceneHtmlProps = Pick<ThreeElements['group'], 'position'> & {
   center?: boolean;
   distanceFactor?: number;
   zIndexRange?: [number, number];
+  dock?: HTMLElement | null;
 };
 
 /** Screen labels with a DOM root whose cleanup never runs inside an R3F commit.
  * A fresh host per effect also keeps StrictMode's mount/cleanup replay isolated.
  */
-export function SceneHtml({ children, position, center = false, distanceFactor, zIndexRange = [20, 0] }: SceneHtmlProps) {
+export function SceneHtml({ children, position, center = false, distanceFactor, zIndexRange = [20, 0], dock }: SceneHtmlProps) {
   const { gl } = useThree();
   const group = useRef<Group>(null);
   const dom = useRef<{ host: HTMLDivElement; root: Root } | null>(null);
@@ -41,15 +43,16 @@ export function SceneHtml({ children, position, center = false, distanceFactor, 
 
   useLayoutEffect(() => {
     dom.current?.root.render(
-      <div style={{ transform: center ? 'translate(-50%, -50%)' : undefined, pointerEvents: 'none' }}>
-        {children}
-      </div>
+      dock ? createPortal(children, dock) :
+        <div style={{ transform: center ? 'translate(-50%, -50%)' : undefined, pointerEvents: 'none' }}>
+          {children}
+        </div>
     );
   });
 
   useFrame(({ camera, size }) => {
     const host = dom.current?.host;
-    if (!host || !group.current) return;
+    if (!host || !group.current || dock) return;
     group.current.getWorldPosition(point.current);
     camera.getWorldPosition(cameraPoint.current);
     const distance = point.current.distanceTo(cameraPoint.current);

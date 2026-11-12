@@ -48,11 +48,14 @@
 .studio-scene-toolbar > * { pointer-events: auto; }
 .studio-scene-actions { display: flex; flex-wrap: wrap; gap: .3rem; }
 .studio-scene-actions button { min-height: 30px; }
+.studio-run-add-dock { display: flex; flex-shrink: 0; gap: .3rem; }
+.studio-run-add-dock:empty { display: none; }
 .context-panel {
+  --panel-top: max(var(--context-top), var(--scene-toolbar-bottom, 6.4rem));
   left: var(--context-left);
-  top: var(--context-top);
+  top: var(--panel-top);
   width: var(--context-width);
-  max-height: calc(100% - var(--context-top) - 4.6rem);
+  max-height: calc(100% - var(--panel-top) - 4.6rem);
   overflow-y: auto;
   scroll-padding-top: 4rem;
 }
@@ -68,7 +71,7 @@
 .context-heading button { min-width: 2rem; min-height: 2rem; display: grid; place-items: center; }
 
 @container (max-width: 720px) {
-  .context-panel { left: auto; right: .65rem; top: 6.4rem; max-height: calc(100% - 11rem); }
+  .context-panel { --panel-top: max(6.4rem, var(--scene-toolbar-bottom, 6.4rem)); left: auto; right: .65rem; }
 }
 @container (max-width: 500px) {
   .studio-scene-toolbar { inset: .4rem .4rem auto; }
@@ -78,7 +81,7 @@
   .context-panel {
     inset: auto .4rem 6.1rem;
     width: auto;
-    max-height: min(48%, calc(100% - 14rem));
+    max-height: min(48%, calc(100% - var(--scene-toolbar-bottom, 8rem) - 6.1rem));
   }
 }
 

@@ -517,6 +517,18 @@ export function WardrobeCanvas() {
   const triggerCameraReset = useWardrobeStore((s) => s.triggerCameraReset);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [runAddDock, setRunAddDock] = useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const scene = containerRef.current;
+    const toolbar = toolbarRef.current;
+    if (!scene || !toolbar) return;
+    const update = () => scene.style.setProperty('--scene-toolbar-bottom', `${toolbar.offsetTop + toolbar.offsetHeight + 8}px`);
+    const observer = new ResizeObserver(update);
+    observer.observe(toolbar);
+    update();
+    return () => observer.disconnect();
+  }, []);
   const cameraRef = useRef<THREE.Camera | null>(null);
   const orbitControls3DRef = useRef<OrbitControlsImpl | null>(null);
   const saved3DCameraStateRef = useRef<Saved3DCameraState | null>(null);
@@ -994,7 +1006,7 @@ export function WardrobeCanvas() {
         {!cleanPresentation && <SelectedCellDimensionOverlay />}
 
         {/* AŞAMA 2.4: 3D SAHNE UÇLARINDAN YENİ BÖLME EKLEME (+ BUTONU) */}
-        {!cleanPresentation && <RunEndAddBayOverlay />}
+        {!cleanPresentation && <RunEndAddBayOverlay dock={runAddDock} editorOpen={doorEditorMode || totalSelectedCount > 0} />}
       </Canvas>
 
       {/* DİKDÖRTGEN ÇOKLU SEÇİM ÇERÇEVESİ */}
@@ -1025,7 +1037,7 @@ export function WardrobeCanvas() {
       {!cleanPresentation && <AnalysisToolbar />}
 
       {/* SAHNE ÜSTÜ SOL: AKTİF GÖRÜNÜM ROZETİ + GÖRÜNÜMÜ SIFIRLA */}
-      <div className="studio-scene-toolbar flex flex-wrap items-start gap-1.5">
+      <div ref={toolbarRef} className="studio-scene-toolbar flex flex-wrap items-start gap-1.5">
       <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-800 bg-slate-900/95 px-2.5 py-1 text-xs text-slate-300">
         <span className="h-2 w-2 rounded-full bg-emerald-400" />
         <span className="font-semibold text-white">
@@ -1147,6 +1159,7 @@ export function WardrobeCanvas() {
         )}
         </>}
       </div>
+      <div ref={setRunAddDock} className="studio-run-add-dock" role="group" aria-label="Kollara bölme ekle" />
       </div>
     </div>
   );

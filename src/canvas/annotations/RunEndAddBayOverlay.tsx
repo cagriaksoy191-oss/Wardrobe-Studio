@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { type NewBayStarterPreset, useWardrobeStore } from '../../store/useWardrobeStore';
 import { StudioDialog } from '../../ui/StudioDialog';
 import { NumberField } from '../../ui/Phase4Panels';
+import { useThree } from '@react-three/fiber';
 
 const MM_TO_M = 0.001;
 
@@ -17,7 +18,9 @@ const STARTER_OPTIONS: { id: NewBayStarterPreset; label: string; desc: string }[
   { id: 'empty', label: 'Boş Bölme', desc: 'Bölünmemiş tek parça boş gövde' },
 ];
 
-export function RunEndAddBayOverlay() {
+export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | null; editorOpen: boolean }) {
+  const width = useThree(state => state.size.width);
+  const dockTarget = editorOpen || width <= 500 ? dock : null;
   const design = useWardrobeStore((s) => s.design);
   const resolved = useWardrobeStore((s) => s.resolved);
   const addBayAtRunEnd = useWardrobeStore((s) => s.addBayAtRunEnd);
@@ -57,6 +60,7 @@ export function RunEndAddBayOverlay() {
             position={posM}
             center
             zIndexRange={[25, 10]}
+            dock={dockTarget}
           >
             <>
               <div className="relative group flex items-center justify-center">
@@ -71,11 +75,12 @@ export function RunEndAddBayOverlay() {
                     setAddError('');
                   }}
                   title={`${run.label} sonuna yeni gardırop bölmesi ekle`}
-                  className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border-2 border-emerald-400/90 bg-slate-950/90 text-emerald-300 shadow-xl backdrop-blur-md transition-all duration-150 hover:scale-110 hover:border-emerald-300 hover:bg-emerald-500 hover:text-slate-950"
+                  className={`pointer-events-auto flex items-center justify-center rounded-full border-2 border-emerald-400/90 bg-slate-950/90 text-emerald-300 shadow-xl backdrop-blur-md transition-all duration-150 hover:scale-105 hover:border-emerald-300 hover:bg-emerald-500 hover:text-slate-950 ${dockTarget ? 'h-11 w-11 gap-0.5' : 'h-9 w-9'}`}
                 >
                   <Plus className="h-5 w-5 stroke-[2.75]" />
+                  {dockTarget && <span aria-hidden="true" className="text-[10px] font-bold">{run.wallAxis}</span>}
                 </button>
-                <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-emerald-500/40 bg-slate-950/95 px-2 py-0.5 text-[10px] font-medium text-emerald-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                <div className={`pointer-events-none absolute ${dockTarget ? 'top-full right-0' : '-top-8 left-1/2 -translate-x-1/2'} whitespace-nowrap rounded-md border border-emerald-500/40 bg-slate-950/95 px-2 py-0.5 text-[10px] font-medium text-emerald-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100`}>
                   {run.label} sonuna bölme ekle
                 </div>
               </div>
