@@ -4,8 +4,9 @@ import { SAMPLE_DESIGNS } from '../src/core/presets/sampleDesigns';
 import { normalizeAndValidateDesign } from '../src/core/schema/designSchema';
 import { solveDesign } from '../src/core/solver/carcassSolver';
 import { defaultSlidingConfig,frontSpanFromResolved } from '../src/core/solver/slidingSolver';
-import { buildMotionScene,constrainMotion,sweptTranslationTime } from '../src/core/analysis/motionConstraints';
+import { buildMotionScene,constrainMotion,createMotionConstraint,sweptTranslationTime } from '../src/core/analysis/motionConstraints';
 import { exactRectangle,hingedVolumes,polygonAreaMm2,polygonBounds,slidingVolumes } from '../src/core/analysis/kinematics';
+import { MotionSimulator } from '../src/core/analysis/motionSimulator';
 
 function sliding(tracks:2|3=2,count=tracks as number):Design {
   const d=structuredClone(SAMPLE_DESIGNS['straight-wardrobe']);
@@ -77,6 +78,58 @@ describe('Phase 5 — sliding fronts and continuous physical motion',()=>{
     expect(result.blocked).toBe(true);expect(result.blockerId).toBe(drawer.id);expect(result.position).toBeGreaterThan(0);
     poses[drawer.id]=0;
     expect(constrainMotion(scene,poses,leaf.id,0).position).toBe(0);
+  });
+  it('rechecks both directions at the exact achieved blocker pose, including a returning obstacle', () => {
+    const design = sliding();
+    design.runs[0].bays[0].root = { kind: 'leaf', id: 'drawer-cell', insert: { type: 'drawerBank', drawerCount: 2 } };
+    const model = solveDesign(design);
+    const [leaf] = model.slidingDoors!;
+    const [drawer] = model.drawers;
+    const scene = buildMotionScene(design, model);
+    const check = createMotionConstraint(scene);
+    const positions = { [leaf.id]: leaf.maxOffsetMm, [drawer.id]: 1 };
+    const home = check(positions, leaf.id, 0);
+    expect(home).toMatchObject({ blocked: true, blockerId: drawer.id });
+    expect(home).toEqual(constrainMotion(scene, positions, leaf.id, 0));
+    positions[leaf.id] = home.position;
+    expect(check(positions, leaf.id, leaf.maxOffsetMm).position).toBe(leaf.maxOffsetMm);
+    positions[drawer.id] = 0;
+    expect(check(positions, leaf.id, 0)).toMatchObject({ blocked: false, position: 0 });
+    positions[leaf.id] = 0;
+    expect(check(positions, drawer.id, 1)).toMatchObject({ blocked: true, blockerId: leaf.id });
+    positions[leaf.id] = leaf.maxOffsetMm;
+    positions[drawer.id] = 1;
+    expect(check(positions, leaf.id, 0)).toEqual(home);
+  });
+  it('preserves rapid reversals and reloads collision bounds when the model changes', () => {
+    const design = singleHinged();
+    const clear = solveDesign(design);
+    const [door] = clear.doors;
+    const sim = new MotionSimulator();
+    sim.load(design, clear);
+    sim.step(1/60, { [door.id]: true }, {});
+    const opening = sim.positions[door.id];
+    expect(opening).toBeGreaterThan(0);
+    sim.draggingId = door.id;
+    sim.step(1/60, {}, {});
+    expect(sim.positions[door.id]).toBe(opening);
+    sim.draggingId = null;
+    for (let i = 0; i < 180; i++) sim.step(1/60, {}, {});
+    expect(sim.positions[door.id]).toBe(0);
+    expect(sim.dragTo(door.id, 1)).toMatchObject({ blocked: false, position: 1 });
+
+    const changed = structuredClone(design);
+    const bounds = polygonBounds(hingedVolumes(door, .5)[0].polygon);
+    changed.obstacles = [{ id: 'new-post', label: 'Yeni engel', kind: 'other',
+      positionMm: [Math.round((bounds.minX + bounds.maxX) / 2), 1000, Math.round((bounds.minZ + bounds.maxZ) / 2)],
+      sizeMm: [2, 100, 2], rotationDeg: 0 }];
+    const obstructed = solveDesign(changed);
+    sim.load(changed, obstructed);
+    const stop = sim.dragTo(door.id, 1);
+    expect(stop).toMatchObject({ blocked: true, blockerId: 'new-post' });
+    expect(stop.position).toBeLessThan(.6);
+    sim.load(design, clear);
+    expect(sim.dragTo(door.id, 1)).toMatchObject({ blocked: false, position: 1 });
   });
   it('uses an exact swept interval for thin obstacles rather than checking only endpoints',()=>{
     const a=exactRectangle(0,0,10,10),b=exactRectangle(500,0,1,10);

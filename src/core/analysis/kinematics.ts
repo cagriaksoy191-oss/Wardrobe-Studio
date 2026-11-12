@@ -13,7 +13,14 @@ export function polygonAreaMm2(p: Point2DMm[]): number {
   return Math.abs(p.reduce((s,a,i) => { const b=p[(i+1)%p.length]; return s+a.xMm*b.zMm-b.xMm*a.zMm; },0))/2;
 }
 export function polygonBounds(p: Point2DMm[]) {
-  return { minX:Math.min(...p.map(v=>v.xMm)), maxX:Math.max(...p.map(v=>v.xMm)), minZ:Math.min(...p.map(v=>v.zMm)), maxZ:Math.max(...p.map(v=>v.zMm)) };
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const { xMm, zMm } of p) {
+    minX = Math.min(minX, xMm);
+    maxX = Math.max(maxX, xMm);
+    minZ = Math.min(minZ, zMm);
+    maxZ = Math.max(maxZ, zMm);
+  }
+  return { minX, maxX, minZ, maxZ };
 }
 export function convexHull(points: Point2DMm[]): Point2DMm[] {
   const sorted = [...new Map(points.map(p=>[`${p.xMm},${p.zMm}`,p])).values()].sort((a,b)=>a.xMm-b.xMm || a.zMm-b.zMm);

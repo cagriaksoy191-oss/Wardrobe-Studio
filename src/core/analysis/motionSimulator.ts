@@ -1,5 +1,5 @@
 import type { Design, ResolvedModel } from '../schema/types';
-import { buildMotionScene,constrainMotion,type MotionPositions,type MotionScene,type MotionStop } from './motionConstraints';
+import { buildMotionScene,createMotionConstraint,type MotionPositions,type MotionScene,type MotionStop } from './motionConstraints';
 
 interface ManualStop {
   requested: number;
@@ -8,7 +8,13 @@ interface ManualStop {
 
 /** Geçici hareket durumu Design/Undo'dan ayrıdır. React yeniden çizimi gerektirmez. */
 export class MotionSimulator {
-  scene:MotionScene={parts:[],staticVolumes:[]};
+  private motionScene: MotionScene = { parts: [], staticVolumes: [] };
+  private constrain = createMotionConstraint(this.motionScene);
+  get scene(): MotionScene { return this.motionScene; }
+  set scene(scene: MotionScene) {
+    this.motionScene = scene;
+    this.constrain = createMotionConstraint(scene);
+  }
   positions:MotionPositions={};
   targets:MotionPositions={};
   velocities:MotionPositions={};
@@ -27,7 +33,7 @@ export class MotionSimulator {
     for(const p of this.scene.parts){this.positions[p.id]=p.home;this.targets[p.id]=p.home;this.flags[p.id]=false;}
   }
   dragTo(id:string,requested:number):MotionStop {
-    const result=constrainMotion(this.scene,this.positions,id,requested);
+    const result=this.constrain(this.positions,id,requested);
     this.positions[id]=result.position;this.targets[id]=result.position;this.velocities[id]=0;
     if(result.blocked)this.stops[id]=result;else delete this.stops[id];
     this.rememberManualStop(id, requested, result);
@@ -49,7 +55,7 @@ export class MotionSimulator {
       const blocker = this.stops[id]?.blockerId;
       if (!blocker || this.draggingId === id || this.draggingId === blocker) continue;
       if (this.positions[blocker] === saved.blockerPosition || this.velocities[blocker] !== 0) continue;
-      const current = constrainMotion(this.scene, this.positions, id, saved.requested);
+      const current = this.constrain(this.positions, id, saved.requested);
       // Recheck the warning at the new obstacle pose. A previous drag never resumes by itself.
       if (current.blocked) this.stops[id] = current;
       else delete this.stops[id];
@@ -101,12 +107,12 @@ export class MotionSimulator {
       const old=this.positions[part.id]??part.home,target=this.targets[part.id]??part.home;
       const span=Math.max(1,part.max-part.min),omega=part.kind==='drawer'?8.5:8.2;
       if(Math.abs(old-target)<span*.00005&&Math.abs(this.velocities[part.id]??0)<span*.0001){
-        if(Math.abs(old-target)>1e-9){const last=constrainMotion(this.scene,this.positions,part.id,target);this.positions[part.id]=last.position;if(last.blocked)this.stops[part.id]=last;else delete this.stops[part.id];}
+        if(Math.abs(old-target)>1e-9){const last=this.constrain(this.positions,part.id,target);this.positions[part.id]=last.position;if(last.blocked)this.stops[part.id]=last;else delete this.stops[part.id];}
         this.velocities[part.id]=0;continue;
       }
       const velocity=(this.velocities[part.id]??0)+((target-old)*omega*omega-2*omega*(this.velocities[part.id]??0))*dt;
       const requested=Math.max(part.min,Math.min(part.max,old+velocity*dt));
-      const result=constrainMotion(this.scene,this.positions,part.id,requested);
+      const result=this.constrain(this.positions,part.id,requested);
       this.positions[part.id]=result.position;this.velocities[part.id]=result.blocked?0:velocity;
       if(result.blocked)this.stops[part.id]=result;else delete this.stops[part.id];
     }
