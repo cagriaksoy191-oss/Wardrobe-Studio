@@ -8,8 +8,7 @@ const NOOP_RAYCAST:Object3D['raycast']=()=>null;
 
 export const motionRuntime=new MotionSimulator();
 export function publishMotionNotice() {
-  const stopped=Object.entries(motionRuntime.stops).find(([,v])=>v.blocked&&v.reason);
-  useWardrobeStore.getState().notifyMotion(stopped?{id:stopped[0],reason:stopped[1].reason!,blockerId:stopped[1].blockerId}:null);
+  useWardrobeStore.getState().notifyMotion(motionRuntime.motionNotice());
 }
 export function MotionController({ showContact = true }: { showContact?: boolean }) {
   useFrame((_,delta)=>{
@@ -19,7 +18,7 @@ export function MotionController({ showContact = true }: { showContact?: boolean
     publishMotionNotice();
   },-100);
   const notice=useWardrobeStore(s=>s.motionNotice);
-  if(!notice || !showContact)return null;
+  if(!notice || !showContact || !motionRuntime.stops[notice.id])return null;
   const part=motionRuntime.scene.parts.find(p=>p.id===notice.id);
   return <group userData={{studioHelper:true}}>{part?.volumes(motionRuntime.positions[part.id]??part.home).map((v,i)=>{
     const b=polygonBounds(v.polygon);
