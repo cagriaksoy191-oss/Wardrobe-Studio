@@ -1,6 +1,6 @@
 import { Edges } from '@react-three/drei';
 import { type ThreeEvent, useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type {
   InteriorItemsConfig,
@@ -123,7 +123,7 @@ export function WardrobeMeshGroup({
     <group>
       {/* 1. SABİT GÖVDE, BÖLÜCÜ, RAF VE ASKI PANELLERİ */}
       {staticPanels.map((panel) => (
-        <PanelMeshItem
+        <StaticPanel
           key={panel.id}
           panel={panel}
           materials={materials}
@@ -136,7 +136,7 @@ export function WardrobeMeshGroup({
 
       {/* 1.5 DOLAP İÇİ GERÇEKÇİ ŞERİT LED AYDINLATMA KATMANI */}
       {ledStrips.length > 0 && (
-        <LedLightingLayer
+        <StudioLeds
           ledStrips={ledStrips}
           doors={doors}
           materials={materials}
@@ -147,7 +147,7 @@ export function WardrobeMeshGroup({
       )}
 
       {/* 2. GERÇEK ÖLÇEKLİ 3D KIYAFET, EŞYA VE SERVİS NİŞİ KÜTÜPHANESİ */}
-      <WardrobeItemsPreview
+      <StudioItems
         cells={cells}
         panels={panels}
         interiorItemsConfig={interiorItemsConfig}
@@ -155,7 +155,7 @@ export function WardrobeMeshGroup({
 
       {/* 3. KİNEMATİK ÇEKMECE BİRİMLERİ (Üstü Açık 5 Panelli Boş Kasa + Özelleştirilebilir Kulp + Bağımsız Seçim) */}
       {drawers.map((drawer) => (
-        <AnimatedDrawerUnit
+        <DrawerMesh
           key={drawer.id}
           drawer={drawer}
           materials={materials}
@@ -176,7 +176,7 @@ export function WardrobeMeshGroup({
       {/* 4. KİNEMATİK MENTEŞELİ KAPAKLAR (Normal, X-Ray ve Kapak Düzenle Modunda) */}
       {(doorVisibilityMode !== 'hidden' || doorEditorMode) &&
         doors.map((door) => (
-          <AnimatedHingedDoorLeaf
+          <DoorMesh
             key={door.id}
             door={door}
             drawers={drawers}
@@ -259,7 +259,7 @@ export function WardrobeMeshGroup({
             resizeDraft.neighborCellIds.includes(cell.id);
 
           return (
-            <SelectableCellVolume
+            <CellVolume
               key={cell.id}
               cell={cell}
               isSelected={isSelected}
@@ -1160,6 +1160,15 @@ interface PanelMeshItemProps {
   isHighlightedBay: boolean;
   dimmedForDoorEditor?: boolean;
 }
+
+// A marquee update changes the highlight of specific cells. Keep the rest of the
+// scene mounted and skip its React work when its existing inputs are unchanged.
+const StaticPanel = memo(PanelMeshItem);
+const StudioLeds = memo(LedLightingLayer);
+const StudioItems = memo(WardrobeItemsPreview);
+const DrawerMesh = memo(AnimatedDrawerUnit);
+const DoorMesh = memo(AnimatedHingedDoorLeaf);
+const CellVolume = memo(SelectableCellVolume);
 
 function PanelMeshItem({
   panel,

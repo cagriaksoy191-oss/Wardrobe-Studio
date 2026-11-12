@@ -795,6 +795,15 @@ export function WardrobeCanvas() {
   const frameSampleOutput = useRef<HTMLOutputElement>(null);
   const showFrameSample = import.meta.env.DEV && new URLSearchParams(window.location.search).has('qa-performance');
   const controlsEnabled = !orbitPausedForMarquee && (cleanPresentation || !multiSelectToolActive) && !isPartDragging;
+  const handleSelectCell = useCallback((cellId: string, bayId: string, additive?: boolean) => {
+    if (!suppressNextClickRef.current && !cleanPresentation) selectCell(cellId, bayId, additive);
+  }, [cleanPresentation, selectCell]);
+  const handleSelectDrawer = useCallback((drawerId: string, additive?: boolean) => {
+    if (!suppressNextClickRef.current && !cleanPresentation) selectDrawer(drawerId, additive);
+  }, [cleanPresentation, selectDrawer]);
+  const handleSelectDoor = useCallback((doorId: string | null, bayId: string, additive?: boolean) => {
+    if (!suppressNextClickRef.current && !cleanPresentation) selectDoor(doorId, bayId, additive);
+  }, [cleanPresentation, selectDoor]);
   const totalSelectedCount =
     selectedCellIds.length ||
     selectedDrawerIds.length ||
@@ -995,18 +1004,9 @@ export function WardrobeCanvas() {
           hoveredMarqueeCellIds={cleanPresentation ? [] : hoveredMarqueeCellIds}
           resizeDraft={cleanPresentation ? null : resizeDraft}
           onSelectBay={(bayId) => { if (!cleanPresentation) selectBay(bayId); }}
-          onSelectCell={(cellId, bayId, additive) => {
-            if (suppressNextClickRef.current || cleanPresentation) return;
-            selectCell(cellId, bayId, additive);
-          }}
-          onSelectDrawer={(drawerId, additive) => {
-            if (suppressNextClickRef.current || cleanPresentation) return;
-            selectDrawer(drawerId, additive);
-          }}
-          onSelectDoor={(doorId, bayId, additive) => {
-            if (suppressNextClickRef.current || cleanPresentation) return;
-            selectDoor(doorId, bayId, additive);
-          }}
+          onSelectCell={handleSelectCell}
+          onSelectDrawer={handleSelectDrawer}
+          onSelectDoor={handleSelectDoor}
           onCellPointerDown={cleanPresentation ? undefined : handleCellPointerDown}
           onToggleDoor={toggleDoor}
           onToggleDrawer={toggleDrawer}
