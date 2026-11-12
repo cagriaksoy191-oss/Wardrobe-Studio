@@ -1,4 +1,4 @@
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useId,useMemo,useState} from 'react';
 import {useWardrobeStore} from '../store/useWardrobeStore';
 import {useVersionArchive} from '../store/versionArchive';
 import {buildExternalAiPrompt,designDimensions,designMetrics,designSignature,previewDesignJson,type DesignMetrics,type ImportPreview} from '../core/versions/designExchange';
@@ -55,6 +55,7 @@ export function VersionPanel() {
   const {versions,save,rename,setArchived,hydrate,error,status,recoveryDocuments}=useVersionArchive();
   const [name,setName]=useState(''),[chosen,setChosen]=useState(''),[archived,setShowArchived]=useState(false),[compare,setCompare]=useState(''),[message,setMessage]=useState('');
   const [showCompare,setShowCompare]=useState(false);
+  const comparisonSourceId = useId();
   const [request,setRequest]=useState(''),[prompt,setPrompt]=useState(''),[raw,setRaw]=useState(''),[preview,setPreview]=useState<ImportPreview|null>(null),[importName,setImportName]=useState('AI önerisi'),[savedImport,setSavedImport]=useState<string|null>(null);
   useEffect(()=>{void hydrate();},[hydrate]);
   const activeVersion=versions.find(v=>designSignature(v.design)===designSignature(design)),selected=versions.find(v=>v.id===chosen),other=versions.find(v=>v.id===compare);
@@ -73,14 +74,24 @@ export function VersionPanel() {
     <label className="flex gap-2 text-[10px] text-slate-400"><input type="checkbox" checked={archived} onChange={e=>setShowArchived(e.target.checked)}/>Arşivlenenleri de göster</label>
     <select aria-label="Kayıtlı sürümler" className={input} value={chosen} onChange={e=>{setChosen(e.target.value);const v=versions.find(v=>v.id===e.target.value);if(v)setName(v.name);}}><option value="">Sürüm seçin ({visible.length})</option>{visible.map(v=><option key={v.id} value={v.id}>{v.archived?'[Arşiv] ':''}{v.name} · {new Date(v.createdAt).toLocaleDateString('tr-TR')}</option>)}</select>
     {selected&&<div className="space-y-2 rounded border border-slate-700 p-2"><p className="text-[10px] text-slate-400">{selected.name} · {new Date(selected.createdAt).toLocaleString('tr-TR')} · {selected.source==='json'?'JSON önerisi':'Elle kayıt'}</p><div className="grid grid-cols-2 gap-2"><button className={button} onClick={()=>{setMessage(open(selected.design,selected.name) ? 'Sürüm açıldı. Önceki çalışma kopyası Geri Al ile geri gelir.' : useWardrobeStore.getState().commandError ?? 'Sürüm açılamadı.');}}>Bu sürümü aç (Geri Al var)</button><button className={button} onClick={()=>{rename(selected.id,name);setMessage('Sürüm adı güncellendi.');}}>Ad alanıyla yeniden adlandır</button><button className={button} onClick={()=>setArchived(selected.id,!selected.archived)}>{selected.archived?'Arşivden çıkar':'Arşivle'}</button><button className={button} onClick={()=>downloadFile(`${safeFileName(selected.name)}.json`,JSON.stringify(selected.design,null,2),'application/json;charset=utf-8')}>Sürüm JSON indir</button></div></div>}
-    <button type="button" className={`${button} w-full border-sky-700`} onClick={()=>setShowCompare(true)}>A/B karşılaştırmasını aç</button>
+    <button type="button" className={`${button} w-full border-sky-700`} onClick={() => {
+      setCompare(visible.some(version => version.id === chosen) ? chosen : '');
+      setShowCompare(true);
+    }}>A/B karşılaştırmasını aç</button>
     {showCompare&&<StudioDialog label="A/B tasarım karşılaştırması" onClose={()=>setShowCompare(false)}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 p-3">
         <div><h2 className="text-lg font-semibold text-sky-100">A/B tasarım karşılaştırması</h2><p className="text-xs text-slate-300">A · çalışma kopyası. B · kayıtlı sürüm. Fark = B − A.</p></div>
         <button autoFocus className={button} onClick={()=>setShowCompare(false)}>Kapat (Esc)</button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-5">
-        <label className="block max-w-md space-y-1 text-sm"><span>B sürümü</span><select aria-label="Karşılaştırma B sürümü" className={input} value={compare} onChange={e=>setCompare(e.target.value)}><option value="">B sürümünü seçin</option>{versions.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>
+        <p className="mb-2 text-sm text-sky-200">A · Çalışma kopyası: {design.name}</p>
+        <div className="max-w-md space-y-1 text-sm">
+          <label htmlFor={comparisonSourceId}>B · Kayıtlı sürüm</label>
+          <select id={comparisonSourceId} className={input} value={compare} onChange={e=>setCompare(e.target.value)}>
+            <option value="">B sürümünü seçin</option>
+            {versions.map(v=><option key={v.id} value={v.id}>{v.archived ? '[Arşiv] ' : ''}{v.name}</option>)}
+          </select>
+        </div>
         {other&&otherResolved&&otherMetrics&&otherDimensions&&<>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <figure><figcaption className="mb-1 font-semibold text-sky-200">A · {design.name}</figcaption><MiniDesign design={design} resolved={resolved}/></figure>

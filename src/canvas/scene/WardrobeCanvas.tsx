@@ -7,7 +7,7 @@ import {
 } from '@react-three/drei';
 import { Canvas, type ThreeEvent, useFrame, useThree } from '@react-three/fiber';
 import { BoxSelect, DoorOpen, Lightbulb, RotateCcw, Shirt, Sparkles, X } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { ResolvedCell } from '../../core/schema/types';
@@ -29,6 +29,7 @@ import { MotionController, SlidingRails, motionRuntime } from './MotionControlle
 import { slidingCellHasOpening } from '../../core/analysis/motionConstraints';
 import { CanvasCapture } from './CanvasCapture';
 import { PresentationOcclusion } from './PresentationOcclusion';
+import { fitFrontView, furnitureBounds, type SceneBounds } from './frontViewFit';
 
 const MM_TO_M = 0.001;
 
@@ -150,37 +151,55 @@ interface Saved3DCameraState {
 }
 
 type OrthographicMode = Exclude<StudioViewMode, '3d-perspective'>;
-type OrthographicPose = Saved3DCameraState & { zoom: number };
+type OrthographicPose = Saved3DCameraState & { zoom: number; fitted?: boolean };
 
-function OrthographicStudioView({ mode, defaults, poses, enabled }: {
+function OrthographicStudioView({ mode, defaults, bounds, poses, enabled }: {
   mode: OrthographicMode;
   defaults: OrthographicPose;
+  bounds: SceneBounds | null;
   poses: React.RefObject<Partial<Record<OrthographicMode, OrthographicPose>>>;
   enabled: boolean;
 }) {
   const camera = useRef<THREE.OrthographicCamera>(null);
   const controls = useRef<OrbitControlsImpl>(null);
-  const initial = useRef(poses.current[mode] ?? defaults);
+  const { width, height } = useThree(state => state.size);
+  const axis = mode === '2d-front-A' ? 'A' : mode === '2d-front-B' ? 'B' : null;
+  const fitted = useMemo(() => axis && bounds && width > 0 && height > 0 ? fitFrontView(bounds, axis, width, height) : null,
+    [axis, bounds, width, height]);
+  const saved = poses.current[mode];
+  const initial = useRef(saved?.fitted ? fitted ?? saved : saved ?? fitted ?? defaults);
+  const appliedFit = useRef<typeof fitted>(!saved || saved.fitted ? fitted : null);
+  const fitEnabled = useRef(!saved || saved.fitted === true);
   const reset = useWardrobeStore(state => state.cameraResetTick);
   const previousReset = useRef(reset);
   useLayoutEffect(() => {
-    if (reset === previousReset.current) return;
+    const resetRequested = reset !== previousReset.current;
+    if (!resetRequested && (!fitted || !fitEnabled.current || fitted === appliedFit.current)) return;
     previousReset.current = reset;
     if (!camera.current || !controls.current) return;
-    camera.current.position.set(...defaults.position);
-    camera.current.zoom = defaults.zoom;
+    const pose = fitted ?? defaults;
+    camera.current.position.set(...pose.position);
+    camera.current.zoom = pose.zoom;
     camera.current.updateProjectionMatrix();
-    controls.current.target.set(...defaults.target);
+    controls.current.target.set(...pose.target);
     controls.current.update();
-    poses.current[mode] = defaults;
-  }, [reset, defaults, mode, poses]);
+    appliedFit.current = fitted;
+    fitEnabled.current = !!fitted;
+    poses.current[mode] = { ...pose, fitted: !!fitted };
+  }, [reset, defaults, fitted, mode, poses]);
   useFrame(() => {
     if (!camera.current || controls.current?.object !== camera.current) return;
-    poses.current[mode] = {
-      position: camera.current.position.toArray(),
-      target: controls.current.target.toArray(),
-      zoom: camera.current.zoom,
-    };
+    const position = camera.current.position.toArray();
+    const target = controls.current.target.toArray();
+    const zoom = camera.current.zoom;
+    const previousFit = appliedFit.current;
+    if (previousFit && (Math.abs(zoom - previousFit.zoom) > 1e-5 ||
+      position.some((value, i) => Math.abs(value - previousFit.position[i]) > 1e-5) ||
+      target.some((value, i) => Math.abs(value - previousFit.target[i]) > 1e-5))) {
+      appliedFit.current = null;
+      fitEnabled.current = false;
+    }
+    poses.current[mode] = { position, target, zoom, fitted: !!appliedFit.current };
   });
   return <>
     <OrthographicCamera ref={camera} makeDefault position={initial.current.position} zoom={initial.current.zoom}
@@ -551,6 +570,7 @@ export function WardrobeCanvas() {
 
   const runA = design.runs.find((r) => r.wallAxis === 'A') ?? design.runs[0];
   const runB = design.runs.find((r) => r.wallAxis === 'B');
+  const closedFurnitureBounds = useMemo(() => furnitureBounds(resolved), [resolved]);
 
   const lenAM = (runA?.lengthMm ?? 2800) * MM_TO_M;
   const lenBM = design.layoutKind === 'l-shape' && runB ? runB.lengthMm * MM_TO_M : 0.8;
@@ -849,7 +869,7 @@ export function WardrobeCanvas() {
         )}
 
         {viewMode !== '3d-perspective' && (
-          <OrthographicStudioView key={viewMode} mode={viewMode} defaults={orthographicDefaults[viewMode]}
+          <OrthographicStudioView key={viewMode} mode={viewMode} defaults={orthographicDefaults[viewMode]} bounds={closedFurnitureBounds}
             poses={orthographicPoses} enabled={controlsEnabled} />
         )}
 

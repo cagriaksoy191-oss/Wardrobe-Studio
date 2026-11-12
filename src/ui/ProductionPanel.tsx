@@ -87,7 +87,13 @@ export function ProductionPanel({ onReviewAccess }: { onReviewAccess: () => void
           <button className={button} disabled={pageIndex===sheets.length-1} onClick={()=>goTo(pageIndex+1)}>Sonraki</button>
         </div>
         <label className="min-w-32 flex-1 space-y-1">Pafta / parça kodu ara
-          <input type="search" className="block w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Üst plan veya P-…" />
+          <input type="search" className="block w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5" value={search}
+            onChange={e=>setSearch(e.target.value)} placeholder="Üst plan veya P-…" onKeyDown={event => {
+              if (event.key !== 'Escape' || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setShow(false);
+            }} />
         </label>
         <label className="min-w-36 flex-1 space-y-1">Teknik paftalar
           <select className="block w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5" value={matches.includes(sheet)?sheet.id:''} onChange={e=>setChosen(e.target.value)}>
