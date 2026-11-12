@@ -1,8 +1,11 @@
+import type { OrthographicCamera } from 'three';
+import type { OrbitControls } from 'three-stdlib';
 import { boxVolume, drawerVolumes, hingedVolumes, panelVolume, slidingVolumes, type PhysicalVolume } from '../../core/analysis/kinematics';
 import type { ResolvedModel } from '../../core/schema/types';
 
 type Point3 = [number, number, number];
 export type SceneBounds = { min: Point3; max: Point3 };
+type FrontViewPose = { position: Point3; target: Point3; zoom: number };
 
 /** Closed furniture bounds, in scene metres. The orthogonal projection also includes the return and the corner. */
 export function furnitureBounds(model: ResolvedModel): SceneBounds | null {
@@ -29,7 +32,7 @@ export function furnitureBounds(model: ResolvedModel): SceneBounds | null {
   return { min: min.map(value => value / 1000) as Point3, max: max.map(value => value / 1000) as Point3 };
 }
 
-export function fitFrontView(bounds: SceneBounds, axis: 'A' | 'B', width: number, height: number) {
+export function fitFrontView(bounds: SceneBounds, axis: 'A' | 'B', width: number, height: number): FrontViewPose {
   const side = axis === 'A' ? 0 : 2;
   const depth = axis === 'A' ? 2 : 0;
   const xMargin = Math.min(88, width * 0.16);
@@ -44,4 +47,18 @@ export function fitFrontView(bounds: SceneBounds, axis: 'A' | 'B', width: number
   const position = [...target] as Point3;
   position[depth] = bounds.max[depth] + 5;
   return { position, target, zoom };
+}
+
+export function applyFrontViewPose(camera: OrthographicCamera, controls: OrbitControls, pose: FrontViewPose) {
+  const damping = controls.enableDamping;
+  // Flush the old pan offset before placing the camera. Otherwise its inertia
+  // immediately moves the freshly fitted pose and switches off automatic fit.
+  controls.enableDamping = false;
+  controls.update();
+  camera.position.set(...pose.position);
+  camera.zoom = pose.zoom;
+  camera.updateProjectionMatrix();
+  controls.target.set(...pose.target);
+  controls.update();
+  controls.enableDamping = damping;
 }

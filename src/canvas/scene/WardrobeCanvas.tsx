@@ -29,7 +29,7 @@ import { MotionController, SlidingRails, motionRuntime } from './MotionControlle
 import { slidingCellHasOpening } from '../../core/analysis/motionConstraints';
 import { CanvasCapture } from './CanvasCapture';
 import { PresentationOcclusion } from './PresentationOcclusion';
-import { fitFrontView, furnitureBounds, type SceneBounds } from './frontViewFit';
+import { applyFrontViewPose, fitFrontView, furnitureBounds, type SceneBounds } from './frontViewFit';
 
 const MM_TO_M = 0.001;
 
@@ -178,11 +178,15 @@ function OrthographicStudioView({ mode, defaults, bounds, poses, enabled }: {
     previousReset.current = reset;
     if (!camera.current || !controls.current) return;
     const pose = fitted ?? defaults;
-    camera.current.position.set(...pose.position);
-    camera.current.zoom = pose.zoom;
-    camera.current.updateProjectionMatrix();
-    controls.current.target.set(...pose.target);
-    controls.current.update();
+    if (fitted) {
+      applyFrontViewPose(camera.current, controls.current, fitted);
+    } else {
+      camera.current.position.set(...pose.position);
+      camera.current.zoom = pose.zoom;
+      camera.current.updateProjectionMatrix();
+      controls.current.target.set(...pose.target);
+      controls.current.update();
+    }
     appliedFit.current = fitted;
     fitEnabled.current = !!fitted;
     poses.current[mode] = { ...pose, fitted: !!fitted };
