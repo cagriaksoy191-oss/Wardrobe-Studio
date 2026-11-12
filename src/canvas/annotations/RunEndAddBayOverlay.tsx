@@ -1,10 +1,12 @@
 import { SceneHtml as Html } from './SceneHtml';
 import { Check, Plus, X } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { type NewBayStarterPreset, useWardrobeStore } from '../../store/useWardrobeStore';
 import { StudioDialog } from '../../ui/StudioDialog';
 import { NumberField } from '../../ui/Phase4Panels';
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
+import { Vector3 } from 'three';
+import { runEndControlsFit } from './runEndControlFit';
 
 const MM_TO_M = 0.001;
 
@@ -18,46 +20,74 @@ const STARTER_OPTIONS: { id: NewBayStarterPreset; label: string; desc: string }[
   { id: 'empty', label: 'Boş Bölme', desc: 'Bölünmemiş tek parça boş gövde' },
 ];
 
-export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | null; editorOpen: boolean }) {
+export const RunEndAddBayOverlay = memo(function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | null; editorOpen: boolean }) {
   const width = useThree(state => state.size.width);
-  const dockTarget = editorOpen || width <= 500 ? dock : null;
   const design = useWardrobeStore((s) => s.design);
   const resolved = useWardrobeStore((s) => s.resolved);
   const addBayAtRunEnd = useWardrobeStore((s) => s.addBayAtRunEnd);
 
-  const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const [openRun, setOpenRun] = useState<{ id: string; docked: boolean } | null>(null);
   const [starterPreset, setStarterPreset] = useState<NewBayStarterPreset>('shelves');
   const [widthMode, setWidthMode] = useState<'fixed' | 'flex'>('fixed');
   const [widthMmInput, setWidthMmInput] = useState<number>(600);
   const [autoExtendRun, setAutoExtendRun] = useState(false);
   const [addError, setAddError] = useState('');
+  const [outsideCanvas, setOutsideCanvas] = useState(false);
+  const toolbarBottom = useRef(0);
+  const placements = useMemo(() => design.runs
+    .filter(run => design.layoutKind === 'l-shape' || run.wallAxis === 'A')
+    .map(run => {
+      const lastBay = resolved.bays.filter(bay => bay.runId === run.id).at(-1);
+      const end = ((lastBay ? lastBay.startOffsetMm + lastBay.outerWidthMm : run.lengthMm) + 72) * MM_TO_M;
+      const y = Math.round(run.heightMm * 0.52) * MM_TO_M;
+      const depth = ((run.rearOffsetMm ?? 0) + Math.round(run.depthMm * 0.55)) * MM_TO_M;
+      const position: [number, number, number] = run.wallAxis === 'A' ? [end, y, depth] : [depth, y, end];
+      return { run, position, projected: new Vector3() };
+    }), [design.layoutKind, design.runs, resolved.bays]);
+  const projected = useMemo(() => placements.map(p => p.projected), [placements]);
+  const useDock = openRun?.docked ?? (editorOpen || width <= 500 || outsideCanvas);
+  const dockTarget = useDock ? dock : null;
 
-  const activeRuns = design.runs.filter(
-    (r) => design.layoutKind === 'l-shape' || r.wallAxis === 'A'
-  );
+  useLayoutEffect(() => {
+    const toolbar = dock?.closest('.studio-scene-toolbar');
+    if (!toolbar) return;
+    const controls = [...toolbar.children].filter(element => element !== dock);
+    const measure = () => {
+      const scene = toolbar.closest('.studio-scene');
+      // The dock is last in the toolbar. Excluding it keeps the fit test stable when it wraps.
+      toolbarBottom.current = Math.max(...controls.map(element => element.getBoundingClientRect().bottom))
+        - (scene?.getBoundingClientRect().top ?? 0);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(toolbar);
+    for (const element of controls) observer.observe(element);
+    return () => observer.disconnect();
+  }, [dock]);
+
+  useFrame(({ camera, size }) => {
+    // Keep the dialog and the button that opened it in the same DOM tree until close.
+    if (!dock || editorOpen || width <= 500 || openRun) return;
+    for (const { position, projected: anchor } of placements) {
+      anchor.set(...position).project(camera);
+      anchor.x = (anchor.x + 1) * size.width / 2;
+      anchor.y = (1 - anchor.y) * size.height / 2;
+    }
+    const outside = !runEndControlsFit(projected, size.width, size.height, toolbarBottom.current);
+    if (outside !== outsideCanvas) setOutsideCanvas(outside);
+  });
 
   return (
     <group>
-      {activeRuns.map((run) => {
-        const baysOfRun = resolved.bays.filter((b) => b.runId === run.id);
-        const lastBay = baysOfRun[baysOfRun.length - 1];
-        const endPosMm = lastBay ? lastBay.startOffsetMm + lastBay.outerWidthMm : run.lengthMm;
-        const midYMm = Math.round(run.heightMm * 0.52);
-        const depthMidMm = (run.rearOffsetMm ?? 0) + Math.round(run.depthMm * 0.55);
-
-        const posM: [number, number, number] =
-          run.wallAxis === 'A'
-            ? [(endPosMm + 72) * MM_TO_M, midYMm * MM_TO_M, depthMidMm * MM_TO_M]
-            : [depthMidMm * MM_TO_M, midYMm * MM_TO_M, (endPosMm + 72) * MM_TO_M];
-
-        const isOpen = openRunId === run.id;
+      {placements.map(({ run, position }) => {
+        const isOpen = openRun?.id === run.id;
 
         const extendedLengthMm = Math.min(6000, run.lengthMm + widthMmInput);
 
         return (
           <Html
             key={`run-end-add-${run.id}`}
-            position={posM}
+            position={position}
             center
             zIndexRange={[25, 10]}
             dock={dockTarget}
@@ -70,7 +100,7 @@ export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | 
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setOpenRunId(run.id);
+                    setOpenRun({ id: run.id, docked: useDock });
                     setAutoExtendRun(false);
                     setAddError('');
                   }}
@@ -85,7 +115,7 @@ export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | 
                 </div>
               </div>
               {isOpen && (
-                <StudioDialog compact label={`${run.wallAxis} koluna yeni bölme`} onClose={() => setOpenRunId(null)}>
+                <StudioDialog compact label={`${run.wallAxis} koluna yeni bölme`} onClose={() => setOpenRun(null)}>
                   <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-3 py-2 text-xs">
                     <span className="font-bold text-emerald-300">
                       + {run.wallAxis} Koluna Yeni Bölme Ekle
@@ -94,7 +124,7 @@ export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | 
                       type="button"
                       aria-label="Bölme eklemeyi kapat"
                       autoFocus
-                      onClick={() => setOpenRunId(null)}
+                      onClick={() => setOpenRun(null)}
                       className="grid h-9 w-9 place-items-center rounded text-slate-400 hover:bg-slate-800 hover:text-white"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -192,7 +222,7 @@ export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | 
                           widthMm: widthMmInput,
                           autoExtendRunLength: autoExtendRun,
                         });
-                        if (added) setOpenRunId(null);
+                        if (added) setOpenRun(null);
                         else setAddError(useWardrobeStore.getState().commandError ?? 'Bölme eklenemedi.');
                       }}
                       className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-emerald-400 transition"
@@ -209,4 +239,4 @@ export function RunEndAddBayOverlay({ dock, editorOpen }: { dock: HTMLElement | 
       })}
     </group>
   );
-}
+});
