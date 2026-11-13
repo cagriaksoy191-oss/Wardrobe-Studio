@@ -13,4 +13,4 @@ Tarayıcıda çalışan parametrik 3D/2D düz ve L-köşe gardırop tasarım st�
 
 Node sürümü [.node-version](.node-version) içinde. Depo kökünde `npm ci` ve `npm run dev -- --host 127.0.0.1 --port 5173` ile başlatın. Kayıtlar tarayıcı profiline ve adrese bağlıdır. [Canlı stüdyo](https://wardrobe-studio.cagriaksoy191.workers.dev/)
 
-Yetkili yeni klonda devir belgelerini açmak için `git switch --track origin/docs/final-ai-platform-handoff` kullanın. Yalnız `main` indirilmişse önce `git fetch origin refs/heads/docs/final-ai-platform-handoff:refs/remotes/origin/docs/final-ai-platform-handoff` ile devir dalını alın.
+Yeni klonda varsayılan `main` dalındaki bu dizinden başlayın. `docs/final-ai-platform-handoff`, paketin hazırlandığı dal olarak korunur. Uygulama kaynak tabanı, güncel Git HEAD’i ve Cloudflare dağıtımı için AI devir rehberindeki doğrulama adımlarını izleyin.

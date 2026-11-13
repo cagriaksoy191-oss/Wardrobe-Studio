@@ -46,4 +46,8 @@
 - Sonraki kabul, aynı tarayıcı/güç/viewport/DPR, ters koşu sıraları, tekrarlar ve açık/kapalı/LED sahneleriyle NVIDIA RTX ve AMD’de kaynak ve süre eşdeğerliğini birlikte gerektirir. Araştırma SHA’ları doğrudan birleştirme girdisi olarak kullanılmamalıdır.
 - Minimal aday Drei’den türetilen kod için MIT metni ve telif bildirimini `public/THIRD_PARTY_NOTICES.txt` içinde ve statik doğrulayıcının izin listesinde korudu. Bu aday dosyası üretim tabanında bulunmaz. Yeniden kullanımda lisans ve dağıtılan bildirim birlikte doğrulanır. [Drei v10.7.9 MIT](https://github.com/pmndrs/drei/blob/v10.7.9/LICENSE)
 
+## Sonraki ajanın öncelikleri
+
+Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. Ardından WS-UX-011 ve WebGL için yeni kanıta dayanan yazılım iyileştirmeleri, WS-UX-009a için iptal/yeni engel durumları doğrulanmış sıralama, WS-UX-001/002/003 için fiziksel mühendislik ve son olarak kullanıcının gerçek iş akışı kabulü gelir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
+
 Yerel ham izler, profiller ve araştırma raporları Git klonunun parçası değildir. Bu belge kararları, ölçüm sınırlarını ve tekrar adımlarını saklar. Fiziksel üretim kapıları ancak doğrulanmış donanım ve atölye kabulüyle yeniden değerlendirilir.

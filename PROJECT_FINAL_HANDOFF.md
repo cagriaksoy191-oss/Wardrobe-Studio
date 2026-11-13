@@ -1,6 +1,6 @@
 # Wardrobe Studio · proje teslim durumu
 
-13 Kasım 2026. Üretim tabanı `9e0e3da0409b731596d0c1edaf178b1876950c92`. Etkin Cloudflare Worker `89ba2d19-64e6-475d-8992-4682c9a5359d`, Ready / %100. Devir dalı bu tabandan ayrılır. [Canlı uygulama](https://wardrobe-studio.cagriaksoy191.workers.dev/) · [Yayın ve karar geçmişi](ENGINEERING_DECISION_LOG.md)
+Uygulama kaynak tabanı `9e0e3da0409b731596d0c1edaf178b1876950c92`. 13 Kasım 2026 doğrulamasında Worker `89ba2d19-64e6-475d-8992-4682c9a5359d`, Ready / %100 olarak kaydedildi. `docs/final-ai-platform-handoff` bu tabandan ayrıldı. 14 Kasım 2026 dokümantasyon kabulünde varsayılan `main` devir için esas alınır. Yalnız Markdown entegrasyonu Git HEAD’ini ve Cloudflare yeniden yayınıyla Worker kimliğini değiştirebilir. Güncel SHA, build, Worker ve trafik her devralmada gerçek servislerden doğrulanır. [Canlı uygulama](https://wardrobe-studio.cagriaksoy191.workers.dev/) · [Yayın ve karar geçmişi](ENGINEERING_DECISION_LOG.md)
 
 ## Başlangıçtan üretime
 
@@ -26,6 +26,14 @@ Aşamalar ve ayrıntılı eski kabul kanıtları tarihsel tabanlarına bağlıd�
 Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vitest, TypeScript/Vite build, `deploy:check` ve Wrangler dry-run, tam/üretim npm audit (0 bilinen bulgu), dört tarihsel kabul fixture’ında eşit Design/ResolvedModel/ProductionPackage parmak izleri ve 338 fiziksel parça. Canlı HTTPS’de 11 dosya karşılaştırıldı. GitHub Cloudflare kontrolü ve etkin Worker gözlendi. Build’de Zod yorum açıklaması ve ana paket boyutu uyarıları görüldü. [Doğrulama yöntemi ve sayımlar](ENGINEERING_INVARIANTS.md) · [Yayın denetimi](DEVELOPMENT_AND_RELEASE_GUIDE.md)
 
 Önceki kabulde tarayıcı arayüzü, sentetik kayıt, 3D/2D ve üretim çıktı akışları denenmişti. Devirde uzun GPU/etkileşim ölçümleri ve tam canlı tarayıcı kabul matrisi yeniden çalıştırılmadı. Atölye donanım onayı, yük altında hareket, tolerans ve erişim açık. Üç P0 fiziksel bulgu, manuel kurtarma ve büyük seçim gecikmesi sürüyor. GPU cleanup ve iki kutu seçimi deneyi yerel araştırma olarak kalır. [Güncel açık işler](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
+
+## Gelecekteki çalışma sırası
+
+1. Güvenli başlangıç için temiz klonda test/build ve dört kanonik tasarımın imzalarını doğrulayın.
+2. WS-UX-011 ve Sunum Modu WebGL kaynak yönetimini yeni ölçüm kanıtıyla araştırın. Başarısız adayları doğrudan birleştirmeyin.
+3. WS-UX-009a güvenli hareket sıralamasını iptal, ters komut ve yeni engellerle deterministik doğrulamadan sonra değerlendirin.
+4. WS-UX-001/002/003 için donanım, tolerans, yük ve gerçek erişim onayını tamamlayın. Fiziksel kabul beklerken üretim kapıları korunur.
+5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Beş açık/kısmi bulgu ve ayrı WebGL borcu bu sırada izlenir.
 
 ## Sonraki kabul
 
