@@ -1,0 +1,22 @@
+# Mühendislik kararları ve yayın geçmişi
+
+Her satır kendi döneminin kanıtını kaydeder. Güncel dağıtım durumu için [proje teslimi](PROJECT_FINAL_HANDOFF.md), güncel sorunlar için [açık iş listesi](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) kullanılır.
+
+| Yayına ulaşan Git tabanı | Cloudflare Build / Worker | Karar ve kanıt |
+| --- | --- | --- |
+| `c181faa` → `6bf9b15` → `597407b` | Worker sırasıyla `6a846522-e381-403c-8df4-684d09cc2803`, `5b2eacbe-4e6d-41c7-849c-d8c24a497705`, `a9ddf5f6-67ea-4ee2-9534-fcda552443f9` | 213 testli başlangıç, Vite `dist` için Workers Static Assets. Özel GitHub kaynağı, `workers.dev`, tarayıcı yerel kayıtları, Free. Sürüm önizleme adresleri kapatıldı, otomatik yayın ve rollback seçeneği gözlendi. [İlk dağıtım kaydı](DEPLOYMENT_VERIFICATION.md) |
+| `4418549` · 222 test | `ac1a42b5-7144-4f30-8f2f-92e8d95b40cd` / `40f67c62-a76c-48a4-aa3a-ff9e9c6cf908` | 213 testli güvenlik başlangıcı. Zod 3.25.76→4.6.7, Vitest 3.2.7→4.1.12, tinypool zincirden çıktı. Eski JSON/opsiyonel alanlar için uyumluluk testleri, tam ve üretim audit’inde sıfır bulgu. Bakım raporundaki «onay bekliyor» yazısı ilk incelemeye aittir. [Güvenlik incelemesi](POST_DEPLOYMENT_SECURITY_AND_STABILITY.md) |
+| `5de4fad` · 232 test | `7ed428fd-fec8-4b5f-aaba-a4eeecb5c3b8` / `b64f824d-4031-43c7-b52b-761f6a21a186` | WS-UX-004–008 yayımlandı. Geçersiz ölçü reddi, Escape taslak iptali, dış çekmece açıklaması, JSON sonrası menü/odak ve geçerli çoklu raf hedefi. Cloudflare Linux ve 100% trafik doğrulandı. [Düzeltme kaydı](UX_FUNCTIONAL_REMEDIATION_REPORT.md) |
+| `6d88b0f` · 242 test | `4ea9f46a-81b8-425f-a087-981c1186f1ba` / `87c1e8b8-90a6-4c85-ae97-7e5bb1305139` | Otonom UX A–E yayını. `1f9fa55` gerçek çekmece seyahatli sürgü uyarısı, `72a2826` A/B ekleme erişimi, `27faada` 2D/A-B/Escape, `a134ac3` ilk kullanım/raf/klapa, `f4284e3` seçime bağlı gereksiz sahne işi, `0ae96ab` pan atalet artığı. `993bc0b` üç P0 fizibilitesini belgeledi. [A–E raporu](AUTONOMOUS_UX_HARDENING_REPORT.md) |
+| `9e0e3da` · 253 test | `d5cafa54-3238-44ac-8b5d-94dd551b7eba` / `89ba2d19-64e6-475d-8992-4682c9a5359d` | Faz 2 A+D. `10925a6` pozisyona bağlı kesin çarpışma hacimlerini aynı canlı hareket sahnesinde yeniden kullanır. `9e0e3da` WS-UX-018, korunan kamera nedeniyle kadraj dışına düşen A/B eklemeyi görünür araç çubuğundan sunar. [Üretim commit’i](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/commit/9e0e3da0409b731596d0c1edaf178b1876950c92) |
+
+Faz 2’de önceki büyük L kontrollü Brave ölçümünde hareket CPU p95 aralığı **12,1–18,2→3,6–5,6 ms**. Node tekrarlarında p95 **28,52→2,19**, **11,74→1,81**, **8,68→1,89 ms**. İlk taban kurulumu/derleme yükünden etkilenmiş olabilir. Bunlar kontrollü aday ölçümleri. Canlı kabul işlevsel kontrolleri doğruladı. Cloudflare Linux kaydında 253/253 test, Vite build ve statik doğrulama geçti.
+
+## Yerel araştırma kayıtları
+
+- `4301dfc` yerel performans dalı. Üretim kapsamı yalnızca tabloda görülen A+D commit’leridir. `3f627d0` A+D yayın doğrulama raporu, `4fc6110` otonom UX yayın raporu yerel rapor dallarında bulunabilir.
+- B1 `da7ea00`, `c42c5a7`, `a1e8731` ve B2 `a8c1ba3`. Kaynak ömrü, performans ve renderer geri yükleme ayrı kabul eksenleridir. Aday sonuçları ve lisans kaydı [teknik borç listesinde](OPEN_ISSUES_AND_TECHNICAL_DEBT.md).
+- İki kutu seçimi deneyi bırakma gecikmesi nedeniyle geri alındı. İkinci deney `7b91a12`. Seçim doğruluğu performans kabulünün yalnız bir parçasıdır. [Ölçümler](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
+- Üç kapalı köşe varyantı, aynı tasarım zarfında uygulanabilir hareket adaylarını izole etmek için araştırıldı. Parça geometrisi farkları, tolerans, donanım/yük ve askı erişimi fiziksel kabul gerektirir. Açık cephe kontrolleri engelin yerini teşhis eder. [Kapalı köşe çalışması](CLOSED_CORNER_FEASIBILITY.md)
+
+Eski `artifacts/` raporları ve yerel dallar ek adli ayrıntı taşıyabilir. Buradaki sürüm eşlemeleri ve açık iş listesi devir için Git’teki özetlerdir. Tarihsel dosyaları kendi tarih ve aday SHA’larıyla okuyun.

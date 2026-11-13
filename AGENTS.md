@@ -15,13 +15,15 @@ Bu dosya, **Wardrobe Studio** kod tabanında çalışan yazılım geliştirme aj
 
 ## 2. Okunması Gereken Belge Hiyerarşisi
 
+Yeni platform veya temiz klonda önce [AI_PLATFORM_HANDOFF.md](AI_PLATFORM_HANDOFF.md) dosyasını okuyun. Yetkilendirilmiş yeni klon kökü, özgün makinedeki çalışma dizini sınırının karşılığıdır. Güncel üretim tabanı, açık P0 güvenlik kapıları ve test sayımı devir belgelerinde bulunur. Aşağıdaki eski sayımlar tarihsel referanstır.
+
 Yeni bir göreve başlamadan önce kök dizindeki şu belgeleri sırasıyla inceleyin:
 
-1. [`PROJECT_HANDOFF.md`](file:///C:/dev/Wardrobe-Studio/PROJECT_HANDOFF.md) — Projenin vizyonu, tamamlanan aşamaların (Aşama 1 → Aşama 3) tam özeti, mevcut özellik haritası ve Aşama 4 / Aşama 5 görev kapsamı.
-2. [`CODEBASE_MAP.md`](file:///C:/dev/Wardrobe-Studio/CODEBASE_MAP.md) — Tüm kaynak dosyaların sorumlulukları, `Design` / `ResolvedModel` şemaları, parametrik çözücü matematiği, 3D R3F sahne yapısı, veri akışları ve Aşama 4–5 entegrasyon noktaları.
-3. [`HANDOFF_VERIFICATION.md`](file:///C:/dev/Wardrobe-Studio/HANDOFF_VERIFICATION.md) — Ortam sürümleri, 37 birim testinin dökümü, üretim derlemesi durumu ve özellik doğrulama matrisi.
-4. [`wardrobe_studio_master_plan.md`](file:///C:/dev/Wardrobe-Studio/wardrobe_studio_master_plan.md) — Onaylanmış 5 aşamalı ana geliştirme planı (**Salt-Okunur Ana Sözleşme**).
-5. [`wardrobe_studio_additional_requirements.md`](file:///C:/dev/Wardrobe-Studio/wardrobe_studio_additional_requirements.md) — Kullanıcı tarafından eklenen kalıcı gereksinimler `Gereksinim A–Z` (**Salt-Okunur Ek Sözleşme**).
+1. [`PROJECT_HANDOFF.md`](PROJECT_HANDOFF.md) — Projenin vizyonu, tamamlanan aşamaların (Aşama 1 → Aşama 3) tam özeti, mevcut özellik haritası ve Aşama 4 / Aşama 5 görev kapsamı.
+2. [`CODEBASE_MAP.md`](CODEBASE_MAP.md) — Tüm kaynak dosyaların sorumlulukları, `Design` / `ResolvedModel` şemaları, parametrik çözücü matematiği, 3D R3F sahne yapısı, veri akışları ve Aşama 4–5 entegrasyon noktaları.
+3. [`HANDOFF_VERIFICATION.md`](HANDOFF_VERIFICATION.md) — Ortam sürümleri, 37 birim testinin dökümü, üretim derlemesi durumu ve özellik doğrulama matrisi.
+4. [`wardrobe_studio_master_plan.md`](wardrobe_studio_master_plan.md) — Onaylanmış 5 aşamalı ana geliştirme planı (**Salt-Okunur Ana Sözleşme**).
+5. [`wardrobe_studio_additional_requirements.md`](wardrobe_studio_additional_requirements.md) — Kullanıcı tarafından eklenen kalıcı gereksinimler `Gereksinim A–Z` (**Salt-Okunur Ek Sözleşme**).
 
 ---
 
