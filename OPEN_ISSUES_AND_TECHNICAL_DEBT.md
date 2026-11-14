@@ -1,5 +1,9 @@
 # Açık kullanıcı bulguları ve teknik borç
 
+**14 Kasım 2026 güncel durum:** WS-UX-009a, `9624f90` kaynağı / `55a1639` ilk yayını ile **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, yalnız tek sürgü ve ilişkili çekmeceler kapsamında. İlk kabul Worker'ı `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100. **Dört açık/kısmi kullanıcı bulgusu** kaldı: WS-UX-001/002/003 P0 ve WS-UX-011 P2. WebGL kaynak yönetimi ayrı teknik borçtur. [Üretim raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
+
+Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe aittir):
+
 13 Kasım 2026 · Canlı taban `9e0e3da`. **Beş açık veya kısmi kullanıcı bulgusu** bulunuyor. WS-UX-001/002/003 P0, WS-UX-009a ve WS-UX-011 P2. İlk 17 denetim bulgusunun 13’ü üretimde kapalıdır. Sonradan eklenen WS-UX-018 de kapalıdır. WebGL kaynak ömrü ve reddedilmiş B2 ayrı teknik borç kalemleri. Eski [denetim](COMPREHENSIVE_UX_FUNCTIONAL_AUDIT.md) ve [durum tablosu](CURRENT_ISSUE_STATUS.md) önceki yayınları kaydeder.
 
 ## WS-UX-001 · P0 · beşgen 18/8 · fiziksel doğrulama bekliyor
@@ -23,7 +27,10 @@
 - Araştırma: A1 1500 mm, üç ayrı ray ve üç kanat. İki hareketli kanat −745 ve −1490 mm parkta, çekmeceler **451/451 mm**, koridor **1462/1456 mm**. **6 mm nominal pay** ve A2 askı **0/480 mm**. 81→82 fiziksel parça, 44 kesim değişikliği. Üç kanat/iki ray ve tek başına ray ekleme tam strok vermedi.
 - Kabul: gerçekten uyumlu üç bağımsız ray, üretici kesiti, stoper, bağlantı ve toleranslar, yüklü kanat sehimleri, 1:1 montaj ve çekmece/askı erişimi. [Fizibilite](CLOSED_CORNER_FEASIBILITY.md)
 
-## WS-UX-009a · P2 · manuel hareket kurtarma · açık
+## WS-UX-009a · P2 · sınırlı kapsamda üretimde doğrulandı
+
+- **Üretim kabulü:** Normal JSON yükleme, gerçek sürgü/çekmece kontrolleri, klavye başlatma/iptal, gerçek 3D sürükleme ve mobil viewport ile doğrulandı. Hedef kanat ve üç çekmece 0'a döner; başka kanat 982 mm'de kalabilir. Sistem bütün gardırobu kapattığını iddia etmez. Desteklenmeyen park/engel zincirleri manuel kalır. [Canlı kabul](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
+- Aşağıdaki yerel aday ve ilk kabul koşulu kayıtları yayın öncesine aittir; üretimde açık durumu yukarıdaki yayınla sınırlı kapsamda kapatılmıştır.
 
 - Tekrar: iç çekmeceyle örtüşen sürgüyü açın, çekmeceyi kısmen açık bırakıp sürgüyü kapatın. Tarihsel sentetik canlı senaryoda kanat **1458 mm** konumunda durdu ve uyarı çekmecenin **86 mm** açık olduğunu gösterdi. WS-UX-009’un anlaşılır duruş bildirimi yayında.
 - Geçici yol: kanadı geri park edin, çekmeceyi kapatın, tamamen kapanmasını bekleyin ve kanadı tekrar kapatın. Önceki canlı akışta son konumlar sıfıra döndü ve uyarı kalktı.
@@ -50,6 +57,6 @@
 
 ## Sonraki ajanın öncelikleri
 
-Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. WS-UX-009a yerel adayının raporunu ayrı yayın kararı için inceleyin; onay olmadan `main`'e göndermeyin. WS-UX-011 ve WebGL için yeni ölçüm kanıtı, WS-UX-001/002/003 için fiziksel mühendislik ve kullanıcının gerçek iş akışı kabulü hâlâ gerekir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
+Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. WS-UX-009a'nın doğrulanmış sınırlarını ve manuel kurtarmayı koruyun; genel mekanik planlama desteği varsaymayın. WS-UX-011 ve WebGL için yeni ölçüm kanıtı, WS-UX-001/002/003 için fiziksel mühendislik ve kullanıcının gerçek iş akışı kabulü hâlâ gerekir. Yeni yayınlar ayrı kullanıcı yetkisi gerektirir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
 
 Yerel ham izler, profiller ve araştırma raporları Git klonunun parçası değildir. Bu belge kararları, ölçüm sınırlarını ve tekrar adımlarını saklar. Fiziksel üretim kapıları ancak doğrulanmış donanım ve atölye kabulüyle yeniden değerlendirilir.

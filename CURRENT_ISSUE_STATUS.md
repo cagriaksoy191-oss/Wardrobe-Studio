@@ -1,6 +1,20 @@
 # Wardrobe Studio — yaşayan bulgu envanteri
 
-## 14 Kasım 2026 · güncel üretim ve yerel aday
+## 14 Kasım 2026 · gerçek üretim kabulü
+
+Uygulama kaynağı **`9624f90f3957165feb0d4f45c252deaade7e8546`**, ilk uygulama yayınının GitHub `main` commit'i **`55a1639494c9132dbb6a2a6e82a5814babc66d8f`**. Cloudflare build **`787f76dd-a7b0-4894-8dd4-3d50a43404f8`**, Worker **`da47d81f-f73e-4c6d-b1d6-7afacec73cad`**, Ready / %100 trafik, Free. Bunlar tarihli ilk kaynak kabulünün kimlikleridir; yalnız doküman gönderimi sonrası güncel HEAD/Worker ayrıca doğrulanır. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
+
+| Bulgu | Güncel üretim durumu |
+| --- | --- |
+| WS-UX-001 · P0 | Açık; fiziksel doğrulama ve tam CSV/ZIP kilidi sürer. |
+| WS-UX-002 · P0 | Açık; fiziksel doğrulama ve tam CSV/ZIP kilidi sürer. |
+| WS-UX-003 · P0 | Açık; fiziksel doğrulama ve tam CSV/ZIP kilidi sürer. |
+| WS-UX-009a · P2 | **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**; yalnız doğrulanmış tek sürgü/ilişkili çekmeceler. Desteklenmeyen zincirler manuel kalır. |
+| WS-UX-011 · P2 | Kısmi; büyük kutu seçimi bırakma gecikmesi sürer. |
+
+**4 açık/kısmi kullanıcı bulgusu** ve ayrı WebGL kaynak yönetimi borcu sürer. 284/284 Linux testi, 12 kanonik imza/338 parça, canlı dosya eşleşmesi, 4 viewport, kurtarma/iptal/manuel müdahale, JSON/kayıt/F5/Undo, üretim çıktıları ve üç P0 kilidi doğrulandı. Önceki 14 Kasım aday ve 12 Kasım envanterleri aşağıda korunur.
+
+## Tarihsel kayıt · 14 Kasım 2026 yerel aday kabulü (yayın öncesi)
 
 Uzak `main` **`17ed1fe76e0c17c7a8b601e778e81acce3689429`**, uygulama kaynak tabanı **`9e0e3da0409b731596d0c1edaf178b1876950c92`**. Görev başlangıcında son doğrulanmış Worker **`660674f5-e629-4736-a08b-ae63d9ff99e3`** olarak bildirildi; bu görevde Cloudflare paneli yeniden denetlenmedi veya yayın yapılmadı. Aşağıdaki yerel aday, eski 12 Kasım envanterinden ayrıdır.
 

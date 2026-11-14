@@ -1,8 +1,14 @@
 # Wardrobe Studio · proje teslim durumu
 
+**14 Kasım 2026 güncel üretim kabulü:** Uygulama kaynağı `9624f90f3957165feb0d4f45c252deaade7e8546`; ilk yayın `main` commit'i `55a1639494c9132dbb6a2a6e82a5814babc66d8f`. Build `787f76dd-a7b0-4894-8dd4-3d50a43404f8`, Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100, Free. WS-UX-009a yalnız tek kanat/ilişkili çekmeceler için üretimde doğrulandı. 284/284 Linux testi, gerçek HTTPS, dört viewport, veri/üretim ve P0 çıktı kilitleri kontrol edildi. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
+
+Aşağıdaki başlangıç paragrafı 13–14 Kasım devir tabanının tarihsel kaydıdır. Yalnız doküman yeniden yayını, uygulama kodu aynı kalırken Git HEAD ve Worker kimliğini değiştirebilir.
+
 Uygulama kaynak tabanı `9e0e3da0409b731596d0c1edaf178b1876950c92`. 13 Kasım 2026 doğrulamasında Worker `89ba2d19-64e6-475d-8992-4682c9a5359d`, Ready / %100 olarak kaydedildi. `docs/final-ai-platform-handoff` bu tabandan ayrıldı. 14 Kasım 2026 dokümantasyon kabulünde varsayılan `main` devir için esas alınır. Yalnız Markdown entegrasyonu Git HEAD’ini ve Cloudflare yeniden yayınıyla Worker kimliğini değiştirebilir. Güncel SHA, build, Worker ve trafik her devralmada gerçek servislerden doğrulanır. [Canlı uygulama](https://wardrobe-studio.cagriaksoy191.workers.dev/) · [Yayın ve karar geçmişi](ENGINEERING_DECISION_LOG.md)
 
 ## Başlangıçtan üretime
+
+Aşağıdaki yayınlanmamış aday paragrafı da ilk yerel kabulün tarihsel kaydıdır; güncel yayın kabulü yukarıdadır.
 
 **14 Kasım 2026 · yayınlanmamış ek aday:** `feat/safe-motion-recovery`, uzak `main` `17ed1fe76e0c17c7a8b601e778e81acce3689429` tabanında WS-UX-009a için sınırlı güvenli hareket sıralaması içerir. 284/284 test, üretim build/dry-run, sıfır audit bulgusu, 338 parça ve dört kanonik imza korundu. Bilinen engel gerçek tarayıcıda geri park → üç çekmece → sürgü sırasıyla çözüldü. İptal ve manuel yöntem korunur. Bu paragraf üretim yayını anlamına gelmez. [Yeni uygulama raporu](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md) · [Güncel durum ayrımı](CURRENT_ISSUE_STATUS.md)
 
@@ -19,11 +25,15 @@ Aşamalar ve ayrıntılı eski kabul kanıtları tarihsel tabanlarına bağlıd�
 
 ## Canlı bakım kapsamı
 
+- `9624f90` / ilk yayın `55a1639`: açık kullanıcı başlatması, tek işlem sahipliği, gerçek pozla adım tamamlama, iptal/yeni komut/sahne değişimi ve güvenli manuel geri dönüş. Çarpışma hesabı, kesin hacim cache'i, geometri, kayıt şeması ve üretim kilitleri değişmedi.
+
 - `4418549` Zod/Vitest güvenlik bakımı ve eski JSON uyumluluğu. `5de4fad` WS-UX-004–008 ölçü doğrulama/iptal, dış çekmece açıklaması, JSON sonrası menü/odak ve çoklu raf girişi.
 - `6d88b0f` yayın zincirinde A–E otonom iyileştirmeler: sürgü-çekmece duruş açıklaması, A/B ekleme, ilk kullanım, A/B arşiv bağlamı, 2D kadraj, raf/aralık ve üst klapa dil düzeltmesi, Escape/odak, seçimde gereksiz sahne işini azaltma ve ön cephede pan atalet düzeltmesi.
 - `10925a6` kesin çarpışma hacimlerinin aynı hareket sahnesi içinde tekrar kullanımı. `9e0e3da` WS-UX-018 kamera korunurken A/B ekleme kontrolü. Önceki canlı sentetik kabulde beş ekran boyutunda 20/20 hedef tıklaması ve odak dönüşü doğrulandı. [Kaynak ve test haritası](CODEBASE_MAP.md) · [Karar geçmişi](ENGINEERING_DECISION_LOG.md)
 
 ## Devir doğrulaması ve sınırlar
+
+Aşağıdaki iki paragraf WS-UX-009a yayını öncesindeki devir kabulünün tarihsel kaydıdır. Güncel 284 test ve gerçek canlı kabulün sonuçları bu belgenin başında ve üretim raporundadır.
 
 Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vitest, TypeScript/Vite build, `deploy:check` ve Wrangler dry-run, tam/üretim npm audit (0 bilinen bulgu), dört tarihsel kabul fixture’ında eşit Design/ResolvedModel/ProductionPackage parmak izleri ve 338 fiziksel parça. Canlı HTTPS’de 11 dosya karşılaştırıldı. GitHub Cloudflare kontrolü ve etkin Worker gözlendi. Build’de Zod yorum açıklaması ve ana paket boyutu uyarıları görüldü. [Doğrulama yöntemi ve sayımlar](ENGINEERING_INVARIANTS.md) · [Yayın denetimi](DEVELOPMENT_AND_RELEASE_GUIDE.md)
 
@@ -33,9 +43,9 @@ Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vite
 
 1. Güvenli başlangıç için temiz klonda test/build ve dört kanonik tasarımın imzalarını doğrulayın.
 2. WS-UX-011 ve Sunum Modu WebGL kaynak yönetimini yeni ölçüm kanıtıyla araştırın. Başarısız adayları doğrudan birleştirmeyin.
-3. WS-UX-009a'nın doğrulanmış yerel sıralama adayını ayrı yayın onayına sunun; desteklenmeyen park yollarında manuel kurtarmayı koruyun.
+3. WS-UX-009a'nın üretimde doğrulanmış sınırlı sırasını koruyun; desteklenmeyen park yollarında manuel kurtarmayı sürdürün.
 4. WS-UX-001/002/003 için donanım, tolerans, yük ve gerçek erişim onayını tamamlayın. Fiziksel kabul beklerken üretim kapıları korunur.
-5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Beş açık/kısmi bulgu ve ayrı WebGL borcu bu sırada izlenir.
+5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Dört açık/kısmi bulgu ve ayrı WebGL borcu bu sırada izlenir.
 
 ## Sonraki kabul
 

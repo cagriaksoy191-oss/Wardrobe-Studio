@@ -1,5 +1,9 @@
 # Wardrobe Studio · yapay zekâ devir rehberi
 
+**14 Kasım 2026 · WS-UX-009a üretim kabulü:** Uygulama kaynağı `9624f90f3957165feb0d4f45c252deaade7e8546`, uygulamayı yayınlayan `main` commit'i `55a1639494c9132dbb6a2a6e82a5814babc66d8f`. İlk kabul build'i `787f76dd-a7b0-4894-8dd4-3d50a43404f8`, Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`: Ready, %100 trafik, Workers Free. Linux 284/284 test; gerçek HTTPS'de masaüstü/mobil kurtarma, iptal ve veri/üretim kontrolleri geçti. **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, yalnız tek sürgü ve ilişkili çekmeceler için. Dört açık/kısmi bulgu ve ayrı WebGL borcu sürer. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
+
+Bu kimlikler ilk doğrulanmış uygulama yayınının tarihli kanıtıdır. Sonraki yalnız doküman gönderimi Git HEAD'ini ve Worker kimliğini değiştirebilir; güncel sürümü Git/Cloudflare üzerinden ayrıca okuyun.
+
 ## Amaç ve üretim durumu
 
 Wardrobe Studio, ev içi gömme ve L-köşe gardıropları tamsayı milimetrelerle tasarlayan bir 3D/2D stüdyo. Kullanıcının hedefi ölçü ve kesim güvenilirliği, gerçekçi kapak/çekmece erişimi, hızlı düzenleme, yerel kayıtların taşınabilirliği ve ücretsiz statik yayındır. Teknik paftalar atölye incelemesine girdi sağlar. Gerçek donanım, montaj ve yük doğrulaması fiziksel kabul için ayrıca gerekir.
@@ -11,6 +15,8 @@ Wardrobe Studio, ev içi gömme ve L-köşe gardıropları tamsayı milimetreler
 14 Kasım 2026 kabulünde uygulama kaynak commit’i, GitHub `main` HEAD’i ve etkin Cloudflare Worker kimliği ayrı izlenir. Yalnız dokümantasyon entegrasyonu Git HEAD’ini ve otomatik build sonucunda Worker kimliğini değiştirebilir. Güncel HEAD’i uzak Git’ten, dağıtılan SHA’yı Cloudflare build’inden, etkin Worker ve trafik payını Deployments ekranından doğrulayın. Yukarıdaki tarihli Worker kaydını sonraki bir oturumun güncel sürümü saymayın. Kaynak ağacı ve canlı varlıklar ayrıca karşılaştırılır.
 
 ## Okuma sırası
+
+Aşağıdaki yerel aday paragrafı yayın öncesi kabulün tarihsel kaydıdır; güncel üretim durumu yukarıdadır.
 
 **14 Kasım 2026 · yerel WS-UX-009a adayı:** `feat/safe-motion-recovery`, uzak `main` **`17ed1fe76e0c17c7a8b601e778e81acce3689429`** üzerinden geliştirildi. Kullanıcının başlattığı, iptal edilebilir tek sürgü/engelleyen çekmece sırası eklendi. 253 mevcut + 31 yeni test, dört kanonik model ve üç tarayıcı viewport'u doğrulandı. Kod ve belgeler yalnız bu aday dalındadır; `main`/GitHub/Cloudflare yayını yapılmadı. WS-UX-009a **üretimde açık**, adayda sınırlı senaryo için doğrulandı. Desteklenmeyen park yollarında manuel yöntem sürer. [Uygulama ve kabul raporu](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md) · [Üretim/aday ayrımı](CURRENT_ISSUE_STATUS.md)
 
@@ -44,9 +50,9 @@ Node 24.16.0 referansı [.node-version](.node-version) içinde. Temiz bir çalı
 - Profil/adres bazlı IndexedDB ve localStorage verisini, otomatik çalışma kopyasını, manuel kontrol noktalarını, arşivi ve yedekleri koruyun. Sentetik veriyi ayrı profilde kullanın. Çalışma tasarımını ve adlandırılmış sürümleri ayrı Design JSON dosyaları olarak taşıyabilirsiniz. Adres, port, cihaz veya tarayıcı değişiminde kayıtlar kendiliğinden taşınmaz. Tasarımları, arşivleri, tarayıcı profillerini, izleri ve sırları Git’e eklemeyin.
 - Geometri veya üretimle ilişkili değişikliklerde dört kanonik örneği ve tüm testleri çalıştırın. Hedeflenen arayüzü, kayıt/F5, Undo/Redo, JSON, 3D/2D ve üretim kapılarıyla birlikte sentetik tarayıcı profiliyle sınayın. Ayrıntılar [mühendislik değişmezlerinde](ENGINEERING_INVARIANTS.md).
 
-## Beş açık bulgu ve yerel deneyler
+## Dört açık bulgu ve yerel deneyler
 
-WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a üretimde manuel hareket kurtarma sırasıdır; yukarıdaki yerel aday ayrıca yayın onayı bekler. WS-UX-011 büyük modelde kısmi kapanmıştır. Hareket CPU iyileştirmesi yayında, 130 hücre seçimi bırakma gecikmesi sürüyor.
+WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a sınırlı tek kanat/çekmece kapsamında üretimde doğrulandı; desteklenmeyen hareket zincirleri manuel kalır. WS-UX-011 büyük modelde kısmi kapanmıştır. Hareket CPU iyileştirmesi yayında, 130 hücre seçimi bırakma gecikmesi sürüyor.
 
 Sunum modu kaynak birikimi ayrı teknik borçtur. Minimal `a1e8731` araştırması kaynak birikimini giderdi, GPU eşdeğerliği açık. Eski B1 `c42c5a7`, B2 `a8c1ba3` ve kutu seçimi `7b91a12` adaylarını yayın zincirine birleştirmeyin. Bazı yerel SHA’lar yeni klonda bulunmayabilir. Sonuçlar ve yeniden doğrulama ölçütleri [açık iş listesinde](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) kayıtlı.
 
