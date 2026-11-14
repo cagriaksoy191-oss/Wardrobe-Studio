@@ -1,5 +1,21 @@
 # Wardrobe Studio — yaşayan bulgu envanteri
 
+## 14 Kasım 2026 · güncel üretim ve yerel aday
+
+Uzak `main` **`17ed1fe76e0c17c7a8b601e778e81acce3689429`**, uygulama kaynak tabanı **`9e0e3da0409b731596d0c1edaf178b1876950c92`**. Görev başlangıcında son doğrulanmış Worker **`660674f5-e629-4736-a08b-ae63d9ff99e3`** olarak bildirildi; bu görevde Cloudflare paneli yeniden denetlenmedi veya yayın yapılmadı. Aşağıdaki yerel aday, eski 12 Kasım envanterinden ayrıdır.
+
+| Bulgu | Üretim | `feat/safe-motion-recovery` yerel adayı |
+| --- | --- | --- |
+| WS-UX-001 · P0 | Fiziksel doğrulama bekliyor | Değişmedi; tam CSV/ZIP kilidi korunuyor. |
+| WS-UX-002 · P0 | Fiziksel doğrulama bekliyor | Değişmedi; tam CSV/ZIP kilidi korunuyor. |
+| WS-UX-003 · P0 | Fiziksel doğrulama bekliyor | Değişmedi; tam CSV/ZIP kilidi korunuyor. |
+| WS-UX-009a · P2 | Açık; manuel kurtarma | **IMPLEMENTED_AND_BROWSER_VERIFIED_PENDING_RELEASE**. Bilinen tek kanat/çekmece senaryosu, iptal, müdahale ve yeni sahne doğrulandı. Desteklenmeyen planlar manuel kalır. |
+| WS-UX-011 · P2 | Kısmi; büyük kutu seçimi bırakma gecikmesi | Bu görevde değiştirilmedi. |
+
+Üretimde **5 açık/kısmi kullanıcı bulgusu** sürüyor. Yerel adayda WS-UX-009a sınırlı kabulü sağladı, yayın onayı bekliyor; diğer **4 açık/kısmi** bulgu değişmedi. WS-UX-004–008, 009'un duruş bildirimi, 010, 012–017 ve 018 önceki yayınlarda düzeltilmiştir. Sunum Modu WebGL kaynak ömrü ayrıca açık teknik borçtur. 284/284 test, build, dry-run, audit (0/0), dört kanonik model ve 338 parça doğrulandı. [Aday raporu](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md) · [Açık işlerin güncel ayrıntıları](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
+
+## Tarihsel kayıt · 12 Kasım 2026
+
 **12 Kasım 2026.** Bu kayıt, [önceki denetimin](COMPREHENSIVE_UX_FUNCTIONAL_AUDIT.md) tarihsel kanıtlarını değiştirmez. Üretim ve yerel aday aşağıda ayrı gösterilir.
 
 - **Üretim:** [gerçek HTTPS](https://wardrobe-studio.cagriaksoy191.workers.dev/), uzak `main` ve yayın kaynağı `5de4fad8358cf1221673a94bdaee1a67b591bb22`. Cloudflare `b64f824d-4031-43c7-b52b-761f6a21a186` gözlemde trafiğin %100'ünü alıyordu. Son kontrolde 11 HTTPS yanıtı önceki dağıtımla aynı SHA-256 değerlerini verdi.

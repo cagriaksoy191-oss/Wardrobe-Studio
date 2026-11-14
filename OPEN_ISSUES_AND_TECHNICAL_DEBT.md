@@ -28,6 +28,8 @@
 - Tekrar: iç çekmeceyle örtüşen sürgüyü açın, çekmeceyi kısmen açık bırakıp sürgüyü kapatın. Tarihsel sentetik canlı senaryoda kanat **1458 mm** konumunda durdu ve uyarı çekmecenin **86 mm** açık olduğunu gösterdi. WS-UX-009’un anlaşılır duruş bildirimi yayında.
 - Geçici yol: kanadı geri park edin, çekmeceyi kapatın, tamamen kapanmasını bekleyin ve kanadı tekrar kapatın. Önceki canlı akışta son konumlar sıfıra döndü ve uyarı kalktı.
 - Kabul: tek komutlu güvenli sıralama ayrı bir geliştirmedir. Karşılıklı engeller, yarıda iptal/ters komut, gerçek ulaşılan konum ve mevcut temas limitleri korunmalıdır. [Hareket regresyonu](tests/drawer-slide-recovery.test.ts) · [Duruş bildirimi](src/canvas/scene/MotionController.tsx)
+- **14 Kasım yerel aday:** `feat/safe-motion-recovery`, taban `17ed1fe`. “Güvenli sırayla kapat” yalnız doğrulanmış planla ve kullanıcı başlatmasıyla çalışır. Bilinen 1458,05 / 86,05 mm engeli; 1964 mm park → üç çekmeceyi sırayla 0 → kanadı 0 akışıyla çözüldü. 284 test, değişmeyen dört kanonik imza, masaüstü/mobil viewport, iptal/manuel müdahale/yeni sahne kabulü doğrulandı. **IMPLEMENTED_AND_BROWSER_VERIFIED_PENDING_RELEASE**; üretimde açık durum devam eder. [Tam rapor](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md)
+- Sınır: tek sürgü ve kendi kapanışını engelleyen çekmeceler. Diğer kanatları taşıyan genel planlayıcı yok. Güvenli park yolu bulunamayan zincirler manuel kalır. Üç P0, WS-UX-011 ve WebGL borcu bu adayda çözülmüş sayılmaz.
 
 ## WS-UX-011 · P2 · büyük kutu seçimi · kısmi
 
@@ -48,6 +50,6 @@
 
 ## Sonraki ajanın öncelikleri
 
-Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. Ardından WS-UX-011 ve WebGL için yeni kanıta dayanan yazılım iyileştirmeleri, WS-UX-009a için iptal/yeni engel durumları doğrulanmış sıralama, WS-UX-001/002/003 için fiziksel mühendislik ve son olarak kullanıcının gerçek iş akışı kabulü gelir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
+Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. WS-UX-009a yerel adayının raporunu ayrı yayın kararı için inceleyin; onay olmadan `main`'e göndermeyin. WS-UX-011 ve WebGL için yeni ölçüm kanıtı, WS-UX-001/002/003 için fiziksel mühendislik ve kullanıcının gerçek iş akışı kabulü hâlâ gerekir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
 
 Yerel ham izler, profiller ve araştırma raporları Git klonunun parçası değildir. Bu belge kararları, ölçüm sınırlarını ve tekrar adımlarını saklar. Fiziksel üretim kapıları ancak doğrulanmış donanım ve atölye kabulüyle yeniden değerlendirilir.

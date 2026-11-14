@@ -4,6 +4,8 @@ Uygulama kaynak tabanı `9e0e3da0409b731596d0c1edaf178b1876950c92`. 13 Kasım 20
 
 ## Başlangıçtan üretime
 
+**14 Kasım 2026 · yayınlanmamış ek aday:** `feat/safe-motion-recovery`, uzak `main` `17ed1fe76e0c17c7a8b601e778e81acce3689429` tabanında WS-UX-009a için sınırlı güvenli hareket sıralaması içerir. 284/284 test, üretim build/dry-run, sıfır audit bulgusu, 338 parça ve dört kanonik imza korundu. Bilinen engel gerçek tarayıcıda geri park → üç çekmece → sürgü sırasıyla çözüldü. İptal ve manuel yöntem korunur. Bu paragraf üretim yayını anlamına gelmez. [Yeni uygulama raporu](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md) · [Güncel durum ayrımı](CURRENT_ISSUE_STATUS.md)
+
 | Aşama | Kaynakta ve uygulamada bulunan teslim |
 | --- | --- |
 | 1 · Parametrik temel | Düz ve L oda/gövde, A/B kolları, paylaşılmış dikme, deterministik çözüm, seçim ve temel 3D/2D çalışma alanı. |
@@ -31,7 +33,7 @@ Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vite
 
 1. Güvenli başlangıç için temiz klonda test/build ve dört kanonik tasarımın imzalarını doğrulayın.
 2. WS-UX-011 ve Sunum Modu WebGL kaynak yönetimini yeni ölçüm kanıtıyla araştırın. Başarısız adayları doğrudan birleştirmeyin.
-3. WS-UX-009a güvenli hareket sıralamasını iptal, ters komut ve yeni engellerle deterministik doğrulamadan sonra değerlendirin.
+3. WS-UX-009a'nın doğrulanmış yerel sıralama adayını ayrı yayın onayına sunun; desteklenmeyen park yollarında manuel kurtarmayı koruyun.
 4. WS-UX-001/002/003 için donanım, tolerans, yük ve gerçek erişim onayını tamamlayın. Fiziksel kabul beklerken üretim kapıları korunur.
 5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Beş açık/kısmi bulgu ve ayrı WebGL borcu bu sırada izlenir.
 

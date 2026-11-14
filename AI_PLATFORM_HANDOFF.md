@@ -12,6 +12,8 @@ Wardrobe Studio, ev içi gömme ve L-köşe gardıropları tamsayı milimetreler
 
 ## Okuma sırası
 
+**14 Kasım 2026 · yerel WS-UX-009a adayı:** `feat/safe-motion-recovery`, uzak `main` **`17ed1fe76e0c17c7a8b601e778e81acce3689429`** üzerinden geliştirildi. Kullanıcının başlattığı, iptal edilebilir tek sürgü/engelleyen çekmece sırası eklendi. 253 mevcut + 31 yeni test, dört kanonik model ve üç tarayıcı viewport'u doğrulandı. Kod ve belgeler yalnız bu aday dalındadır; `main`/GitHub/Cloudflare yayını yapılmadı. WS-UX-009a **üretimde açık**, adayda sınırlı senaryo için doğrulandı. Desteklenmeyen park yollarında manuel yöntem sürer. [Uygulama ve kabul raporu](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md) · [Üretim/aday ayrımı](CURRENT_ISSUE_STATUS.md)
+
 1. [AGENTS.md](AGENTS.md) ve burada bağlı yerel çalışma kuralları.
 2. [PROJECT_FINAL_HANDOFF.md](PROJECT_FINAL_HANDOFF.md) ve [OPEN_ISSUES_AND_TECHNICAL_DEBT.md](OPEN_ISSUES_AND_TECHNICAL_DEBT.md).
 3. Dokunacağınız akışın [kaynak haritası](CODEBASE_MAP.md), [mühendislik değişmezleri](ENGINEERING_INVARIANTS.md) ve [geliştirme/yayın rehberi](DEVELOPMENT_AND_RELEASE_GUIDE.md).
@@ -44,7 +46,7 @@ Node 24.16.0 referansı [.node-version](.node-version) içinde. Temiz bir çalı
 
 ## Beş açık bulgu ve yerel deneyler
 
-WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a manuel hareket kurtarma sırasıdır. WS-UX-011 büyük modelde kısmi kapanmıştır. Hareket CPU iyileştirmesi yayında, 130 hücre seçimi bırakma gecikmesi sürüyor.
+WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a üretimde manuel hareket kurtarma sırasıdır; yukarıdaki yerel aday ayrıca yayın onayı bekler. WS-UX-011 büyük modelde kısmi kapanmıştır. Hareket CPU iyileştirmesi yayında, 130 hücre seçimi bırakma gecikmesi sürüyor.
 
 Sunum modu kaynak birikimi ayrı teknik borçtur. Minimal `a1e8731` araştırması kaynak birikimini giderdi, GPU eşdeğerliği açık. Eski B1 `c42c5a7`, B2 `a8c1ba3` ve kutu seçimi `7b91a12` adaylarını yayın zincirine birleştirmeyin. Bazı yerel SHA’lar yeni klonda bulunmayabilir. Sonuçlar ve yeniden doğrulama ölçütleri [açık iş listesinde](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) kayıtlı.
 

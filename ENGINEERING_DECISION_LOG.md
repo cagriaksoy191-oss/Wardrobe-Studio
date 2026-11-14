@@ -14,6 +14,8 @@ Faz 2’de önceki büyük L kontrollü Brave ölçümünde hareket CPU p95 aral
 
 ## Yerel araştırma kayıtları
 
+- **14 Kasım 2026 · WS-UX-009a, `feat/safe-motion-recovery`, yayınlanmadı.** Genel hareket motorunu değiştirmek yerine tek kanat ve engelleyen çekmeceler için sınırlı deterministik planlayıcı seçildi. Kopya pozlarda ve her gerçek adımda mevcut kesin çarpışma denetimi kullanılır. Kullanıcı başlatır, iptal/yeni komut/sahne/unmount bütün eski adımları sonlandırır. Başka kanatların taşınması ve P0 fiziksel yeniden tasarımı kapsam dışıdır. 253 mevcut + 31 yeni test, dört kanonik model ve gerçek tarayıcı doğrulandı. [Uygulama, kanıt ve ayrı yayın kararı](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md)
+
 - `4301dfc` yerel performans dalı. Üretim kapsamı yalnızca tabloda görülen A+D commit’leridir. `3f627d0` A+D yayın doğrulama raporu, `4fc6110` otonom UX yayın raporu yerel rapor dallarında bulunabilir.
 - B1 `da7ea00`, `c42c5a7`, `a1e8731` ve B2 `a8c1ba3`. Kaynak ömrü, performans ve renderer geri yükleme ayrı kabul eksenleridir. Aday sonuçları ve lisans kaydı [teknik borç listesinde](OPEN_ISSUES_AND_TECHNICAL_DEBT.md).
 - İki kutu seçimi deneyi bırakma gecikmesi nedeniyle geri alındı. İkinci deney `7b91a12`. Seçim doğruluğu performans kabulünün yalnız bir parçasıdır. [Ölçümler](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
