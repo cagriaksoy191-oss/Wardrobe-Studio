@@ -1,5 +1,7 @@
 # Wardrobe Studio · güncel kaynak kod haritası
 
+**14 Kasım 2026 · yalnız araştırma aracı:** [`scripts/research-corner-hardware.mjs`](scripts/research-corner-hardware.mjs), üretim tabanı `bd51910`. Uygulamaya import edilmeden `phase5Example → solveDesign → extractProduction/buildMotionScene` çağırır; 12 referans SHA/338 parça, üç eski adayın kopyasında açma/ters kapama, bağımsız panel kütlesi/moment,6 mm pay duyarlılığı ve dikdörtgen topoloji ön elemesi yapar. Çıktılar Git dışı `artifacts/corner-hardware-research/` altında. Şema, çözücü, kanonik örnek, hareket güvenliği ve üretim kapıları değişmez. Donanım gerçekliği, eksikler ve fiziksel kabul [araştırma raporunda](CLOSED_CORNER_ENGINEERING_RESEARCH.md) ve bağlı üç raporda; bu araç gerçek üretici kinematiği veya fiziksel test yerine geçmez.
+
 Üretim uygulama kaynağı `9624f90`; WS-UX-009a'nın ilk yayın/kabul commit'i `55a1639`. Yalnız doküman gönderimleri uygulama kaynağını değiştirmez. Başlangıç: [AI devir rehberi](AI_PLATFORM_HANDOFF.md). Teknik sözleşme: [mühendislik değişmezleri](ENGINEERING_INVARIANTS.md). Aşağıdaki harita işlev, sembol ve ilgili testlerle aranabilir.
 
 ## Çalışma zamanları ve veri akışı

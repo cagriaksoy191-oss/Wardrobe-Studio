@@ -1,5 +1,14 @@
 # Açık kullanıcı bulguları ve teknik borç
 
+**14 Kasım 2026 · donanım mühendisliği araştırması (yayınlanmadı):** `research/closed-corner-hardware-engineering`, taban `bd5191052800641a8582e45b21896ddcb431a215`. Üç P0 tekrarlandı; **BLOCKED_EXTERNAL_VALIDATION** sürer. 284/284 test,12 kanonik imza/338 parça, gerçek HTTPS'de tanısal PDF/SVG ve CSV/ZIP kilitleri korundu. Fiziksel test veya bütün koşulları karşılayan `HARDWARE_DOCUMENTATION_MATCHED` aday yok. [Araştırma](CLOSED_CORNER_ENGINEERING_RESEARCH.md) · [Donanım kanıtları](CORNER_HARDWARE_EVIDENCE_MATRIX.md) · [Kapalı adaylar](CORNER_DESIGN_CANDIDATES.md) · [Atölye kabulü](CORNER_PHYSICAL_VALIDATION_CHECKLIST.md)
+
+- **001:** Eski 1535 mm B1 paneli 600–850 kg/m³ senaryoda 37,73–53,45 kg, kulp/donanım hariç. İlave menteşeyle onay çıkarılamaz. Wing 77 dört dar yaprak araştırması gerçek donanıma dayanır; mevcut 1512 mm göz, üreticinin 800 mm desteksiz göz koşulunu karşılamaz. Bağımsız dar kapaklı dikdörtgen modül daha düşük belirsizlikli araştırma yönüdür.
+- **002:** Blum 79T8500 en çok 23 mm ön kalınlığıyla 25 mm'ye uymaz. 675×2276×25 mm adayın yalnız paneli 23,04–32,65 kg; 25 kg sınıfı bütün yoğunluklarda geçmez. 450 mm dar yaprak/pocket yeni gövde gerektirir; köşe askısı 355/480 ve A askısı 29/480 açık kalır.
+- **003:** TopLine XL9275786 üç kapaklı fakat **iki raylı**; eski üç bağımsız hat adayının donanımı değildir. 6 mm koridor farkı katalog toleransı değildir; her biri 1 mm'lik altı olumsuz katkı örneğinde pay sıfır. 451 mm strok tek başına 0/480 askı sorununu çözmez. Dar dış çekmece cepheleri + bağımsız üst askı kapakları için yeni prototip önerilir.
+- Kanonik A askıları 001/002/003'te 33/28/0 mm,480 mm senaryo gereksinimine göre `unverified`; üst sürgü rayı etiketlidir. 310/480 mm değerleri uygulamadaki eşya ölçüsü+30 mm handling varsayımından gelir, evrensel ergonomi standardı değildir.
+
+Yukarıdaki yeni araştırma üretim kodu veya kanonik tasarım değişikliği değildir. WS-UX-009a'nın sınırlı üretim kabulü, WS-UX-011 ve WebGL borcunun durumu değişmedi. Üretici/atölye kabulü ve ayrı entegrasyon onayı gelmeden P0 kapıları gevşetilmez.
+
 **14 Kasım 2026 güncel durum:** WS-UX-009a, `9624f90` kaynağı / `55a1639` ilk yayını ile **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, yalnız tek sürgü ve ilişkili çekmeceler kapsamında. İlk kabul Worker'ı `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100. **Dört açık/kısmi kullanıcı bulgusu** kaldı: WS-UX-001/002/003 P0 ve WS-UX-011 P2. WebGL kaynak yönetimi ayrı teknik borçtur. [Üretim raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
 Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe aittir):
