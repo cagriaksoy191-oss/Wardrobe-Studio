@@ -1,4 +1,5 @@
 import { get as idbGet, set as idbSet } from 'idb-keyval';
+import type { RecoveryStatus } from '../core/analysis/safeMotionRecovery';
 import { produce } from 'immer';
 import { create } from 'zustand';
 import { ZodError } from 'zod';
@@ -125,6 +126,11 @@ interface WardrobeState {
   setPartDragging: (active:boolean)=>void;
   notifyMotion: (notice:{id:string;reason:string;blockerId?:string}|null)=>void;
   refreshMotion: ()=>void;
+  motionCommand: { revision: number; ids: string[] };
+  motionRecovery: RecoveryStatus | null;
+  motionRecoveryOffer: { description: string; available: boolean } | null;
+  notifyRecovery: (status: RecoveryStatus | null, offer: { description: string; available: boolean } | null) => void;
+  syncRecoveryTargets: (ids: string[]) => void;
   configureFrontSystem: (bayId:string,frontId:string|undefined,type:FrontType,sliding?:SlidingFrontConfig)=>void;
   patchFrontSystem: (frontId:string,patch:Partial<Front>)=>void;
   splitFrontSystem: (frontId:string)=>void;
@@ -570,6 +576,19 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     isPartDragging:false,motionRevision:0,motionNotice:null,
     setPartDragging:isPartDragging=>set({isPartDragging}),
     refreshMotion:()=>set(s=>({motionRevision:s.motionRevision+1})),
+    motionCommand: { revision: 0, ids: [] },
+    motionRecovery: null,
+    motionRecoveryOffer: null,
+    notifyRecovery: (motionRecovery, motionRecoveryOffer) => {
+      const state = get();
+      if (JSON.stringify([state.motionRecovery, state.motionRecoveryOffer]) !== JSON.stringify([motionRecovery, motionRecoveryOffer])) {
+        set({ motionRecovery, motionRecoveryOffer });
+      }
+    },
+    syncRecoveryTargets: ids => set(state => ({
+      openDoorIds: Object.fromEntries(Object.entries(state.openDoorIds).map(([id, value]) => [id, ids.includes(id) ? false : value])),
+      openDrawerIds: Object.fromEntries(Object.entries(state.openDrawerIds).map(([id, value]) => [id, ids.includes(id) ? false : value])),
+    })),
     notifyMotion:motionNotice=>{const current=get().motionNotice;if(current?.id!==motionNotice?.id||current?.reason!==motionNotice?.reason)set({motionNotice});},
     configureFrontSystem:(bayId,frontId,type,sliding)=>{const model=get().resolved;applyCommand('Kapak sistemi değiştirildi',draft=>{configureFrontInDesign(draft,model,bayId,frontId,type,sliding);});},
     patchFrontSystem:(frontId,patch)=>{applyCommand('Kapak kapsamı ve ray ayarları',draft=>{const front=draft.fronts.find(f=>f.id===frontId);if(!front)throw new Error('Kapak aralığı bulunamadı.');Object.assign(front,patch);});},
@@ -894,6 +913,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       }),
 
     toggleDoor: (doorId) => {
+      set(state => ({ motionCommand: { revision: state.motionCommand.revision + 1, ids: [doorId] } }));
       set((state) => {
         const isCurrentlyOpen = Boolean(state.openDoorIds[doorId]);
         const nextOpen = !isCurrentlyOpen;
@@ -919,6 +939,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     toggleDrawer: (drawerId) => {
+      set(state => ({ motionCommand: { revision: state.motionCommand.revision + 1, ids: [drawerId] } }));
       set((state) => {
         const isCurrentlyOpen = Boolean(state.openDrawerIds[drawerId]);
         const nextOpen = !isCurrentlyOpen;
@@ -945,6 +966,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     setAllDoorsOpen: (open) => {
+      set(state => ({ motionCommand: { revision: state.motionCommand.revision + 1, ids: [...state.resolved.doors, ...(state.resolved.slidingDoors ?? []), ...state.resolved.drawers].map(part => part.id) } }));
       set((state) => {
         const nextDoors: Record<string, boolean> = {};
         for (const door of state.resolved.doors) {
@@ -967,6 +989,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     setAllDrawersOpen: (open) => {
+      set(state => ({ motionCommand: { revision: state.motionCommand.revision + 1, ids: state.resolved.drawers.map(part => part.id) } }));
       set((state) => {
         const nextDrawers: Record<string, boolean> = {};
         const nextDoors = { ...state.openDoorIds };

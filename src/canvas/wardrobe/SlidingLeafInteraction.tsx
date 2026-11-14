@@ -52,6 +52,7 @@ export function SlidingLeafInteraction({leaf,doorEditorMode,multiSelectToolActiv
     try { capture.setPointerCapture?.(e.pointerId); } catch { return; }
     drag.current={plane,start:start.clone(),offset:motionRuntime.positions[leaf.id]??leaf.initialOffsetMm,capture,pointerId:e.pointerId};
     moved.current=false;motionRuntime.draggingId=leaf.id;store.setPartDragging(true);
+    motionRuntime.cancelRecovery('Manuel sürükleme nedeniyle güvenli sıra iptal edildi.');
   };
   const move=(e:ThreeEvent<PointerEvent>)=>{
     const session=drag.current;if(!session||session.pointerId!==e.pointerId)return;e.stopPropagation();
