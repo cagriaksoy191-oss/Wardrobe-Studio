@@ -18,6 +18,7 @@ Faz 2’de önceki büyük L kontrollü Brave ölçümünde hareket CPU p95 aral
 
 ## Yerel araştırma kayıtları
 
+- **16 Kasım 2026 · ContactShadows `7f2134a`, `RESEARCHED_NOT_READY`.** Kilitli Drei çizim sırası ve shader sağlayıcısıyla temas kaynakları açıkça sahiplenildi. AMD ve RTX'te toplam 240 aç/kapa döngüsü, 240/240 aday native hedef dokusu bırakma, sekiz bağlam kurtarma ve altı görsel eş geçti. Performans eşdeğerliği RTX kapalı sahneyle sınırlı. [Yerel karar](WEBGL_RESOURCE_RELEASE_DECISION.md)
 - **15 Kasım 2026 · D3-BASELINE-001.** Tamsayı kesim ebatlarından kesin yarım levha merkezleri türetildi. 25/4 modeli 20 pozitif nominal kesişimden 20 sıfır hacimli yüzey temasına geçti. Dört kanonik modelin türetilmiş imzaları ve pafta farkları ayrı kaydedildi. Fiziksel P0’lar ve MS-EXPORT-001 geçerliliğini sürdürüyor. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md)
 
 **14 Kasım 2026 · WS-UX-009a üretim yayını:** `9624f90` uygulama/test + `55a1639` aday dokümantasyonu, `17ed1fe` üzerinden fast-forward ile `main`'e alındı. Cloudflare Linux build `787f76dd-a7b0-4894-8dd4-3d50a43404f8`: 284/284, build ve statik paket PASS. Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100, Workers Free. Gerçek HTTPS dosya eşleşmesi ve ürün kontrolleriyle kurtarma/iptal/müdahale doğrulandı. Aşağıdaki yerel aday kaydı yayın öncesine aittir. Bu doğrulanmış sonucu kaydeden yalnız Markdown gönderimi ikinci otomatik build oluşturabilir; kaynak ağacı aynı tutulur. [Yayın raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
