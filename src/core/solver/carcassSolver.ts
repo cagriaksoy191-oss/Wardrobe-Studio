@@ -890,8 +890,8 @@ function solveDesignGeometry(design: Design): ResolvedModel {
       const netInnerDepthMm = Math.max(100, runDepth - tb);
 
       const bayStartLocalX = bayCursorX;
-      const bayCenterLocalX = bayStartLocalX + Math.round(outerWidthMm / 2);
-      const bayCenterLocalY = plinthH + Math.round(carcassOuterHeightMm / 2);
+      const bayCenterLocalX = bayStartLocalX + outerWidthMm / 2;
+      const bayCenterLocalY = plinthH + carcassOuterHeightMm / 2;
       const bayCenterLocalZ = runDepth / 2;
 
       const bayWorld = mapRunBoxToWorld(
@@ -961,12 +961,13 @@ function solveDesignGeometry(design: Design): ResolvedModel {
       });
 
       // --- GÖVDE (KARKAS) PANELLERİ ---
+      const depthCenterLocalMm = tb + netInnerDepthMm / 2;
       const leftSideWorld = mapRunBoxToWorld(
         run,
         [
           bayStartLocalX + t / 2,
           bayCenterLocalY,
-          tb + Math.round(netInnerDepthMm / 2),
+          depthCenterLocalMm,
         ],
         [t, carcassOuterHeightMm, netInnerDepthMm]
       );
@@ -991,7 +992,7 @@ function solveDesignGeometry(design: Design): ResolvedModel {
         [
           bayStartLocalX + outerWidthMm - t / 2,
           bayCenterLocalY,
-          tb + Math.round(netInnerDepthMm / 2),
+          depthCenterLocalMm,
         ],
         [t, carcassOuterHeightMm, netInnerDepthMm]
       );
@@ -1016,7 +1017,7 @@ function solveDesignGeometry(design: Design): ResolvedModel {
         [
           shared ? bayStartLocalX + leftInset(bIdx) + netInnerWidthMm / 2 : bayCenterLocalX,
           plinthH + t / 2,
-          tb + Math.round(netInnerDepthMm / 2),
+          depthCenterLocalMm,
         ],
         [netInnerWidthMm, t, netInnerDepthMm]
       );
@@ -1040,7 +1041,7 @@ function solveDesignGeometry(design: Design): ResolvedModel {
         [
           shared ? bayStartLocalX + leftInset(bIdx) + netInnerWidthMm / 2 : bayCenterLocalX,
           plinthH + carcassOuterHeightMm - t / 2,
-          tb + Math.round(netInnerDepthMm / 2),
+          depthCenterLocalMm,
         ],
         [netInnerWidthMm, t, netInnerDepthMm]
       );
@@ -1061,7 +1062,7 @@ function solveDesignGeometry(design: Design): ResolvedModel {
 
       const backWorld = mapRunBoxToWorld(
         run,
-        [bayCenterLocalX, bayCenterLocalY, Math.round(tb / 2)],
+        [bayCenterLocalX, bayCenterLocalY, tb / 2],
         [outerWidthMm, carcassOuterHeightMm, tb]
       );
       panels.push({
@@ -1368,8 +1369,8 @@ function solveSplitTreeRecursive(
             run,
             [
               cursorX + divT / 2,
-              bounds.y0Mm + Math.round(bounds.heightMm / 2),
-              bounds.z0Mm + Math.round(bounds.depthMm / 2),
+              bounds.y0Mm + bounds.heightMm / 2,
+              bounds.z0Mm + bounds.depthMm / 2,
             ],
             [divT, bounds.heightMm, bounds.depthMm]
           );
@@ -1439,9 +1440,9 @@ function solveSplitTreeRecursive(
           const shelfWorld = mapRunBoxToWorld(
             run,
             [
-              bounds.x0Mm + Math.round(bounds.widthMm / 2),
+              bounds.x0Mm + bounds.widthMm / 2,
               cursorY + divT / 2,
-              bounds.z0Mm + Math.round(bounds.depthMm / 2),
+              bounds.z0Mm + bounds.depthMm / 2,
             ],
             [bounds.widthMm, divT, bounds.depthMm]
           );
@@ -1642,9 +1643,9 @@ function solveSplitTreeRecursive(
         const shelfWorld = mapRunBoxToWorld(
           run,
           [
-            bounds.x0Mm + Math.round(bounds.widthMm / 2),
+            bounds.x0Mm + bounds.widthMm / 2,
             cursorY + t / 2,
-            bounds.z0Mm + Math.round(shelfDepth / 2),
+            bounds.z0Mm + shelfDepth / 2,
           ],
           [bounds.widthMm, t, shelfDepth]
         );
@@ -1805,9 +1806,9 @@ function solveSplitTreeRecursive(
     const midShelf = mapRunBoxToWorld(
       run,
       [
-        bounds.x0Mm + Math.round(bounds.widthMm / 2),
+        bounds.x0Mm + bounds.widthMm / 2,
         midShelfCenterY,
-        bounds.z0Mm + Math.round(shelfDepth / 2),
+        bounds.z0Mm + shelfDepth / 2,
       ],
       [bounds.widthMm, t, shelfDepth]
     );

@@ -103,6 +103,7 @@ export function solveCornerJunction(
       });
     }
 
+    // Nominal levha sınırları tamsayı mm. Tek ölçülerde merkez yarım mm olabilir.
     // 1. Sağ Yan Dikme (A koluyla birleşen yapısal yüzey)
     const sideADepth = Math.max(100, depthA - tb);
     panels.push({
@@ -116,9 +117,9 @@ export function solveCornerJunction(
       cutThicknessMm: t,
       boxSizeMm: [t, carcassH, sideADepth],
       worldPositionMm: [
-        armA - Math.round(t / 2),
-        plinthH + Math.round(carcassH / 2),
-        tb + Math.round(sideADepth / 2),
+        armA - t / 2,
+        plinthH + carcassH / 2,
+        tb + sideADepth / 2,
       ],
       rotationYRad: 0,
       grainAxis: 'vertical',
@@ -138,9 +139,9 @@ export function solveCornerJunction(
       cutThicknessMm: t,
       boxSizeMm: [sideBDepth, carcassH, t],
       worldPositionMm: [
-        tb + Math.round(sideBDepth / 2),
-        plinthH + Math.round(carcassH / 2),
-        armB - Math.round(t / 2),
+        tb + sideBDepth / 2,
+        plinthH + carcassH / 2,
+        armB - t / 2,
       ],
       rotationYRad: 0,
       grainAxis: 'vertical',
@@ -160,9 +161,9 @@ export function solveCornerJunction(
       cutThicknessMm: tb,
       boxSizeMm: [backAWidth, carcassH, tb],
       worldPositionMm: [
-        tb + Math.round(backAWidth / 2),
-        plinthH + Math.round(carcassH / 2),
-        Math.round(tb / 2),
+        tb + backAWidth / 2,
+        plinthH + carcassH / 2,
+        tb / 2,
       ],
       rotationYRad: 0,
       grainAxis: 'vertical',
@@ -181,9 +182,9 @@ export function solveCornerJunction(
       cutThicknessMm: tb,
       boxSizeMm: [tb, carcassH, armB],
       worldPositionMm: [
-        Math.round(tb / 2),
-        plinthH + Math.round(carcassH / 2),
-        Math.round(armB / 2),
+        tb / 2,
+        plinthH + carcassH / 2,
+        armB / 2,
       ],
       rotationYRad: 0,
       grainAxis: 'vertical',
