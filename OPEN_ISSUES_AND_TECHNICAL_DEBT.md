@@ -8,6 +8,10 @@ Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe
 
 13 Kasım 2026 · Canlı taban `9e0e3da`. **Beş açık veya kısmi kullanıcı bulgusu** bulunuyor. WS-UX-001/002/003 P0, WS-UX-009a ve WS-UX-011 P2. İlk 17 denetim bulgusunun 13’ü üretimde kapalıdır. Sonradan eklenen WS-UX-018 de kapalıdır. WebGL kaynak ömrü ve reddedilmiş B2 ayrı teknik borç kalemleri. Eski [denetim](COMPREHENSIVE_UX_FUNCTIONAL_AUDIT.md) ve [durum tablosu](CURRENT_ISSUE_STATUS.md) önceki yayınları kaydeder.
 
+## D3-BASELINE-001 · nominal yerleşim · yerel aday
+
+25/4 modelindeki 20 yarım milimetre penetrasyonu yerel dalda 20 yüzey temasına dönüştü. Dört kanonik modelde Design, 338 parça kimliği ve kesim ölçüleri korundu. Yerel kabul **READY_FOR_RELEASE_REVIEW**. Mevcut üretimde bu nominal bulgu açık. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md)
+
 ## WS-UX-001 · P0 · beşgen 18/8 · fiziksel doğrulama bekliyor
 
 - Tekrar: kanonik `diagonal` modelde komşu kapakları kapalı tutun, 3D’de köşe kapağını açın ve Erişim İncelemesi’ndeki raf koridorunu okuyun. Canlı limit **5,1°/110°**, dört raf için **7/7/7/0 mm**, hedef 310 mm. Kapalı cephede depolama kullanılamıyor.

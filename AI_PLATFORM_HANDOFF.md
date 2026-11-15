@@ -54,6 +54,8 @@ Node 24.16.0 referansı [.node-version](.node-version) içinde. Temiz bir çalı
 
 ## Dört açık bulgu ve yerel deneyler
 
+D3-BASELINE-001 için yerel `fix/d3-baseline-001-exact-panel-centering` adayı kesin yarım ölçüyle doğrulandı. 20 nominal penetrasyon yüzey temasına dönüştü. Design ölçüleri ve kesim ebatları tamsayı kalır. Üretim tabanı ve aday imzaları ayrı belgelenmiştir. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md) · [Önce ve sonra](CANONICAL_GEOMETRY_BEFORE_AFTER.md)
+
 WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a sınırlı tek kanat/çekmece kapsamında üretimde doğrulandı; desteklenmeyen hareket zincirleri manuel kalır. WS-UX-011 büyük modelde kısmi kapanmıştır. Hareket CPU iyileştirmesi yayında, 130 hücre seçimi bırakma gecikmesi sürüyor.
 
 Sunum modu kaynak birikimi ayrı teknik borçtur. Minimal `a1e8731` araştırması kaynak birikimini giderdi, GPU eşdeğerliği açık. Eski B1 `c42c5a7`, B2 `a8c1ba3` ve kutu seçimi `7b91a12` adaylarını yayın zincirine birleştirmeyin. Bazı yerel SHA’lar yeni klonda bulunmayabilir. Sonuçlar ve yeniden doğrulama ölçütleri [açık iş listesinde](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) kayıtlı.

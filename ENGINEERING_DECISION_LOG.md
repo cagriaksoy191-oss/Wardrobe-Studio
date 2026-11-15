@@ -16,6 +16,8 @@ Faz 2’de önceki büyük L kontrollü Brave ölçümünde hareket CPU p95 aral
 
 ## Yerel araştırma kayıtları
 
+- **15 Kasım 2026 · D3-BASELINE-001.** Tamsayı kesim ebatlarından kesin yarım levha merkezleri türetildi. 25/4 modeli 20 pozitif nominal kesişimden 20 sıfır hacimli yüzey temasına geçti. Dört kanonik modelin türetilmiş imzaları ve pafta farkları ayrı kaydedildi. Fiziksel P0’lar ve MS-EXPORT-001 geçerliliğini sürdürüyor. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md)
+
 **14 Kasım 2026 · WS-UX-009a üretim yayını:** `9624f90` uygulama/test + `55a1639` aday dokümantasyonu, `17ed1fe` üzerinden fast-forward ile `main`'e alındı. Cloudflare Linux build `787f76dd-a7b0-4894-8dd4-3d50a43404f8`: 284/284, build ve statik paket PASS. Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100, Workers Free. Gerçek HTTPS dosya eşleşmesi ve ürün kontrolleriyle kurtarma/iptal/müdahale doğrulandı. Aşağıdaki yerel aday kaydı yayın öncesine aittir. Bu doğrulanmış sonucu kaydeden yalnız Markdown gönderimi ikinci otomatik build oluşturabilir; kaynak ağacı aynı tutulur. [Yayın raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
 - **14 Kasım 2026 · WS-UX-009a, `feat/safe-motion-recovery`, yayınlanmadı.** Genel hareket motorunu değiştirmek yerine tek kanat ve engelleyen çekmeceler için sınırlı deterministik planlayıcı seçildi. Kopya pozlarda ve her gerçek adımda mevcut kesin çarpışma denetimi kullanılır. Kullanıcı başlatır, iptal/yeni komut/sahne/unmount bütün eski adımları sonlandırır. Başka kanatların taşınması ve P0 fiziksel yeniden tasarımı kapsam dışıdır. 253 mevcut + 31 yeni test, dört kanonik model ve gerçek tarayıcı doğrulandı. [Uygulama, kanıt ve ayrı yayın kararı](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md)
