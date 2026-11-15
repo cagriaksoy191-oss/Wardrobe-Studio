@@ -45,6 +45,13 @@ export interface ProductionPackage {
   functionalAccess: ResolvedFunctionalAccess[];
   surfaceAreasMm2: { physicalShelf: number; netStorage: number; material: number };
 }
+
+export function summarizeProductionAccess(entries: ResolvedFunctionalAccess[]): FunctionalAccessStatus {
+  if (entries.some(entry => entry.status === 'blocked')) return 'blocked';
+  if (!entries.length || entries.some(entry => entry.status === 'unverified')) return 'unverified';
+  return 'usable';
+}
+
 /** Kimlikte sıra veya etiket kullanılmaz; tekrar çözmede aynı fiziksel parça aynı kodu alır. */
 export function partCode(id:string) {let h=2166136261;for(let i=0;i<id.length;i++){h^=id.charCodeAt(i);h=Math.imul(h,16777619);}return `P-${(h>>>0).toString(16).padStart(8,'0').toUpperCase()}`;}
 export function materialForPanel(design:Design,p:ResolvedPanel):MaterialId {
@@ -189,8 +196,7 @@ export function extractProduction(design:Design,model:ResolvedModel,versionName=
   });
   const blocked=issues.some(i=>i.severity==='error');
   const functionalAccess = model.analysis?.functionalAccess ?? [];
-  const accessStatus = functionalAccess.some(entry => entry.status === 'blocked') ? 'blocked'
-    : !functionalAccess.length || functionalAccess.some(entry => entry.status === 'unverified') ? 'unverified' : 'usable';
+  const accessStatus = summarizeProductionAccess(functionalAccess);
   const statusLabel = blocked ? 'ÜRETİM ÇIKTISI ENGELLİ · GEOMETRİ'
     : accessStatus === 'blocked' ? 'KULLANIM ENGELİ · TANISAL PAFTA'
     : accessStatus === 'unverified' ? 'ERİŞİM VE USTA KONTROLÜ GEREKİR' : 'USTA KONTROLÜ GEREKİR';

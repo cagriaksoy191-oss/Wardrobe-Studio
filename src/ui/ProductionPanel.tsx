@@ -1,11 +1,11 @@
-import {useEffect,useMemo,useRef,useState} from 'react';
+import {useEffect,useId,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {useWardrobeStore} from '../store/useWardrobeStore';
 import {useVersionArchive} from '../store/versionArchive';
-import {designSignature} from '../core/versions/designExchange';
 import {assertProductionReady,extractProduction} from '../core/production/productionModel';
 import {buildPrintableReport,buildTechnicalSheets,sheetToSvg} from '../core/production/technicalSheets';
-import {buildCutListCsv} from '../core/production/csvExport';
+import {fullManufacturingExportDenial} from '../core/production/fullExportPolicy';
 import {downloadFile,safeFileName} from '../export/download';
+import {downloadFullManufacturingFile,manufacturingVersion} from '../export/manufacturingDownload';
 import { NumberField } from './Phase4Panels';
 import { StudioDialog } from './StudioDialog';
 import { accessMeasurement, accessWarnings } from '../core/analysis/functionalAccess';
@@ -13,16 +13,19 @@ import { accessMeasurement, accessWarnings } from '../core/analysis/functionalAc
 const button='rounded border border-slate-600 bg-slate-800 px-3 py-2 text-xs text-slate-100 hover:border-sky-400 disabled:cursor-not-allowed disabled:opacity-40';
 export function ProductionPanel({ onReviewAccess }: { onReviewAccess: () => void }) {
   const design=useWardrobeStore(s=>s.design),model=useWardrobeStore(s=>s.resolved),versions=useVersionArchive(s=>s.versions);
-  const version=versions.find(v=>designSignature(v.design)===designSignature(design));
+  const version=useMemo(()=>manufacturingVersion(design,versions),[design,versions]);
   const pkg=useMemo(()=>extractProduction(design,model,version?.name??'Çalışma kopyası'),[design,model,version?.name]);
   const sheets=useMemo(()=>buildTechnicalSheets(design,model,pkg,true),[design,model,pkg]);
   const [chosen,setChosen]=useState('00-KAPAK'),[show,setShow]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[renderPrompt,setRenderPrompt]=useState('');
   const [search,setSearch]=useState(''),[scale,setScale]=useState<'page'|'width'|number>('page');
   const sheetViewport=useRef<HTMLDivElement>(null);
+  const activeTask=useRef<AbortController | null>(null);
+  const exportNoticeId=useId();
   const [capture,setCapture]=useState<{kind:string;data:string;width:number;height:number}|null>(null);
   useEffect(()=>{const ready=(e:Event)=>setCapture((e as CustomEvent).detail);window.addEventListener('wardrobe:capture-ready',ready);return()=>window.removeEventListener('wardrobe:capture-ready',ready);},[]);
   const sheet=sheets.find(s=>s.id===chosen)??sheets[0],svg=useMemo(()=>sheetToSvg(sheet),[sheet]),stem=safeFileName(`${design.name}-${pkg.versionName}`),blocked=pkg.status==='blocked';
   const diagnostic = pkg.accessStatus === 'blocked';
+  const fullExportDenial = fullManufacturingExportDenial(design, model, pkg);
   const geometryErrors = pkg.issues.filter(issue => issue.severity === 'error').length;
   const accessErrors = pkg.functionalAccess.filter(entry => entry.status === 'blocked').length;
   const accessUnknown = pkg.functionalAccess.filter(entry => entry.status === 'unverified').length;
@@ -34,18 +37,43 @@ export function ProductionPanel({ onReviewAccess }: { onReviewAccess: () => void
   const matches = query ? sheets.filter(s =>
     [s.id, s.title, ...s.partCodes].some(text => text.toLocaleLowerCase('tr-TR').includes(query))) : sheets;
   useEffect(() => { sheetViewport.current?.scrollTo(0, 0); }, [chosen]);
-  const task=async(work:()=>Promise<void>)=>{setBusy(true);setMessage('');try{await work();}catch(e){setMessage(e instanceof Error?e.message:'Çıktı oluşturulamadı.');}finally{setBusy(false);}};
+  useEffect(() => useWardrobeStore.subscribe((current, previous) => {
+    if (current.design !== previous.design || current.resolved !== previous.resolved) setMessage('');
+  }), []);
+  useLayoutEffect(() => () => activeTask.current?.abort(), []);
+  const task = async (work: (signal: AbortSignal) => Promise<void>) => {
+    if (activeTask.current) return;
+    const operation = new AbortController();
+    activeTask.current = operation;
+    setBusy(true);
+    setMessage('');
+    try {
+      await work(operation.signal);
+    } catch (error) {
+      if (!operation.signal.aborted) {
+        setMessage(error instanceof Error ? error.message : 'Çıktı oluşturulamadı.');
+      }
+    } finally {
+      activeTask.current = null;
+      if (!operation.signal.aborted) setBusy(false);
+    }
+  };
   const pdf=()=>task(async()=>{assertProductionReady(pkg);const {createProductionPdf,localPdfFont}=await import('../export/pdfWriter');const data=createProductionPdf(pkg,sheets,await localPdfFont());downloadFile(`${stem}-${diagnostic?'tani':'uretim'}.pdf`,data,'application/pdf');setMessage(`${sheets.length} sayfalık ${diagnostic?'tanısal':'teknik'} PDF için indirme başlatıldı.`);});
   const printable=()=>task(async()=>{assertProductionReady(pkg);const {localPdfFont}=await import('../export/pdfWriter');const font=await localPdfFont(),html=buildPrintableReport(pkg,sheets).replace("url('./fonts/NotoSans-Regular.ttf')",`url('data:font/ttf;base64,${font}')`);downloadFile(`${stem}-yazdir.html`,html,'text/html;charset=utf-8');setMessage('Yazdırılabilir rapor için indirme başlatıldı. Dosyayı açıp Yazdır / PDF düğmesini kullanın.');});
-  const zip=()=>task(async()=>{const {createTechnicalZip}=await import('../export/zipWriter');downloadFile(`${stem}-teknik-paket.zip`,createTechnicalZip(design,pkg,sheets,true),'application/zip');setMessage(`${sheets.length} SVG paftası, tam CSV ve kaynak JSON içeren teknik paket için indirme başlatıldı.`);});
+  const fullExport = (format: 'csv' | 'zip') => task(async signal => {
+    const { design, resolved } = useWardrobeStore.getState();
+    const result = await downloadFullManufacturingFile(format, signal);
+    const current = useWardrobeStore.getState();
+    if (!signal.aborted && current.design === design && current.resolved === resolved) setMessage(result);
+  });
   const downloadSvg=()=>task(async()=>{
     downloadFile(`${safeFileName(sheet.id)}.svg`,svg,'image/svg+xml;charset=utf-8');
     setMessage(`${sheet.id} SVG paftası için indirme başlatıldı.`);
   });
   const controls=<div className="flex flex-wrap gap-2">
     <button className={button} disabled={busy||blocked} onClick={()=>void pdf()}>{diagnostic?'Tanısal PDF indir':'PDF indir'} ({sheets.length} sayfa)</button>
-    <button className={button} disabled={busy||blocked||diagnostic} onClick={()=>{try{downloadFile(`${stem}-kesim.csv`,buildCutListCsv(pkg,true),'text/csv;charset=utf-8');setMessage(`${pkg.parts.length} fiziksel parçanın tam CSV listesi için indirme başlatıldı.`);}catch(e){setMessage(String(e));}}}>Tam CSV indir</button>
-    <button className={button} disabled={busy||blocked||diagnostic} onClick={()=>void zip()}>Tüm SVG + CSV + JSON (ZIP)</button>
+    <button className={button} disabled={busy||Boolean(fullExportDenial)} aria-describedby={fullExportDenial?exportNoticeId:undefined} onClick={()=>void fullExport('csv')}>Tam CSV indir</button>
+    <button className={button} disabled={busy||Boolean(fullExportDenial)} aria-describedby={fullExportDenial?exportNoticeId:undefined} onClick={()=>void fullExport('zip')}>Tüm SVG + CSV + JSON (ZIP)</button>
     <button className={button} disabled={busy||blocked} onClick={()=>void printable()}>Yazdırılabilir rapor</button>
     <button className={button} disabled={busy||blocked} onClick={()=>void downloadSvg()}>Bu paftayı SVG indir</button>
   </div>;
@@ -56,8 +84,9 @@ export function ProductionPanel({ onReviewAccess }: { onReviewAccess: () => void
       <p className="text-[11px] text-slate-200">Geometri {geometryErrors} kritik hata · Erişim {accessErrors} engel / {accessUnknown} açık kontrol</p>
       {accessIssue && <p className={`text-xs ${tone}`}>{accessIssue.label} · {accessMeasurement(accessIssue)}</p>}
       <p className="text-[11px] text-slate-300">{pkg.parts.length} fiziksel parça · {pkg.parts.filter(p=>p.shape==='polygon').length} özel poligon · {sheets.length} A3 pafta.</p>
-      {blocked && <p className="text-xs text-red-200">Kritik geometri hatası düzeltilene kadar yalnızca önizleme açık.</p>}
-      {!blocked && diagnostic && <p className="text-xs text-red-200">Tanısal paftaları inceleyin. Kesim listesi ve ZIP, erişim engeli giderilince açılır.</p>}
+      {fullExportDenial && <p id={exportNoticeId} className="text-xs text-red-200">{blocked
+        ? 'Kritik geometri hatası düzeltilene kadar yalnızca önizleme açık.'
+        : fullExportDenial}</p>}
       {pkg.functionalAccess.length > 0 && <button className={button} onClick={onReviewAccess}>Erişim ölçümlerini incele</button>}
     </div>
     <p className="text-[11px] leading-relaxed text-slate-400">Ölçüler modellenen nominal bitmiş geometridir. Bant/kanal payı ve katalog donanımı usta kontrolü gerektirir. Cam/ayna satırları montaj zarfıdır; ham cam kesimi olarak kullanılmaz.</p>
