@@ -1,6 +1,6 @@
 # Mühendislik kararları ve yayın geçmişi
 
-**15 Kasım 2026 · MS-EXPORT-001 yerel karar.** Tam CSV/ZIP için aynı erişim politikası düğmeye ve gerçek indirme eylemine bağlandı. Eylem aktif tasarımın paketini kullanır ve bekleyen ZIP’in tasarım/sürüm sahipliğini doğrular. Geometri temelli tanısal ve QA sözleşmesi ile `unverified` davranışı korunur. Aday yayın değerlendirmesine hazır, main üretim tabanı `bd51910`. [Kabul ve kapsam](MS_EXPORT_001_IMPLEMENTATION_REPORT.md)
+**15 Kasım 2026 · MS-EXPORT-001 üretim kararı.** Tam CSV/ZIP eylem denetimi, iptal ve tanısal sözleşme Windows ve Cloudflare Linux’ta 309/309 testle geçti. `c57a4b2` commit’i, build `7c8c7e0b-e2aa-455e-ae3a-4343ad7440ad` ve Worker `9ce09ac8-d627-421a-88a7-3f6b7a66e0d5` ile %100 trafikte. Üç P0 ve D3-BASELINE-001 açık. [Üretim kabulü](MS_EXPORT_001_PRODUCTION_RELEASE.md) · [Uygulama kapsamı](MS_EXPORT_001_IMPLEMENTATION_REPORT.md)
 
 Her satır kendi döneminin kanıtını kaydeder. Güncel dağıtım durumu için [proje teslimi](PROJECT_FINAL_HANDOFF.md), güncel sorunlar için [açık iş listesi](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) kullanılır.
 

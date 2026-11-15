@@ -1,6 +1,6 @@
 # Açık kullanıcı bulguları ve teknik borç
 
-**15 Kasım 2026 yerel aday.** MS-EXPORT-001 için tam CSV/ZIP eylem denetimi `fix/manufacturing-export-action-guards` dalında doğrulandı ve yayın değerlendirmesine hazır. Üretim kabulü bekliyor. D3-BASELINE-001 nominal yerleşim bulgusu ve WS-UX-001/002/003 fiziksel P0’ları açık. [MS-EXPORT-001 kabul raporu](MS_EXPORT_001_IMPLEMENTATION_REPORT.md)
+**15 Kasım 2026 üretim kabulü.** MS-EXPORT-001, GitHub `main` `c57a4b2` ve Worker `9ce09ac8-d627-421a-88a7-3f6b7a66e0d5` ile Ready, %100 trafikte ve canlı tarayıcıda doğrulandı. Üç fiziksel P0 (WS-UX-001/002/003), D3-BASELINE-001 nominal yerleşim bulgusu, WS-UX-011 ve WebGL kaynak ömrü borcu açık. [Üretim kabulü](MS_EXPORT_001_PRODUCTION_RELEASE.md)
 
 **14 Kasım 2026 güncel durum:** WS-UX-009a, `9624f90` kaynağı / `55a1639` ilk yayını ile **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, yalnız tek sürgü ve ilişkili çekmeceler kapsamında. İlk kabul Worker'ı `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100. **Dört açık/kısmi kullanıcı bulgusu** kaldı: WS-UX-001/002/003 P0 ve WS-UX-011 P2. WebGL kaynak yönetimi ayrı teknik borçtur. [Üretim raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
