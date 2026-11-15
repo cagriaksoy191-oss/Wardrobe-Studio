@@ -1,6 +1,8 @@
 # Wardrobe Studio · proje teslim durumu
 
-**14 Kasım 2026 güncel üretim kabulü:** Uygulama kaynağı `9624f90f3957165feb0d4f45c252deaade7e8546`; ilk yayın `main` commit'i `55a1639494c9132dbb6a2a6e82a5814babc66d8f`. Build `787f76dd-a7b0-4894-8dd4-3d50a43404f8`, Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100, Free. WS-UX-009a yalnız tek kanat/ilişkili çekmeceler için üretimde doğrulandı. 284/284 Linux testi, gerçek HTTPS, dört viewport, veri/üretim ve P0 çıktı kilitleri kontrol edildi. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
+**16 Kasım 2026 doğrulanmış üretim.** D3-BASELINE-001 `3dc5b5a` kaynağıyla yayımlandı. 350/350 Linux testi, kanonik 338 parça, 20/20 nominal yüzey teması ve 24 PDF/SVG pafta farkı canlıda doğrulandı. `POST_D3_BASELINE_001` güncel kanonik test referansıdır. MS-EXPORT-001 ve WS-UX-009a üretimde doğrulanmıştır. Üç fiziksel P0, WS-UX-011 ve WebGL borcu açık. [D3-BASELINE-001 üretim raporu](D3_BASELINE_001_PRODUCTION_RELEASE.md)
+
+**14 Kasım 2026 tarihsel üretim kabulü:** Uygulama kaynağı `9624f90f3957165feb0d4f45c252deaade7e8546`; ilk yayın `main` commit'i `55a1639494c9132dbb6a2a6e82a5814babc66d8f`. Build `787f76dd-a7b0-4894-8dd4-3d50a43404f8`, Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100, Free. WS-UX-009a yalnız tek kanat/ilişkili çekmeceler için üretimde doğrulandı. 284/284 Linux testi, gerçek HTTPS, dört viewport, veri/üretim ve P0 çıktı kilitleri kontrol edildi. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
 Aşağıdaki başlangıç paragrafı 13–14 Kasım devir tabanının tarihsel kaydıdır. Yalnız doküman yeniden yayını, uygulama kodu aynı kalırken Git HEAD ve Worker kimliğini değiştirebilir.
 
@@ -33,7 +35,7 @@ Aşamalar ve ayrıntılı eski kabul kanıtları tarihsel tabanlarına bağlıd�
 
 ## Devir doğrulaması ve sınırlar
 
-Aşağıdaki iki paragraf WS-UX-009a yayını öncesindeki devir kabulünün tarihsel kaydıdır. Güncel 284 test ve gerçek canlı kabulün sonuçları bu belgenin başında ve üretim raporundadır.
+Aşağıdaki iki paragraf WS-UX-009a yayını öncesindeki devir kabulünün tarihsel kaydıdır. O yayındaki 284 test ve canlı kabulün sonuçları bu belgenin başında ve üretim raporundadır.
 
 Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vitest, TypeScript/Vite build, `deploy:check` ve Wrangler dry-run, tam/üretim npm audit (0 bilinen bulgu), dört tarihsel kabul fixture’ında eşit Design/ResolvedModel/ProductionPackage parmak izleri ve 338 fiziksel parça. Canlı HTTPS’de 11 dosya karşılaştırıldı. GitHub Cloudflare kontrolü ve etkin Worker gözlendi. Build’de Zod yorum açıklaması ve ana paket boyutu uyarıları görüldü. [Doğrulama yöntemi ve sayımlar](ENGINEERING_INVARIANTS.md) · [Yayın denetimi](DEVELOPMENT_AND_RELEASE_GUIDE.md)
 

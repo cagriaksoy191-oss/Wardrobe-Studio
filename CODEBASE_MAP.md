@@ -84,7 +84,7 @@ Aşağıdaki özgün kayıt önceki aşamalara aittir. Eski satır referansları
 
 `Design → solveDesign → ResolvedModel → extractProduction → TechnicalSheet / CSV / PDF / ZIP`.
 
-`Design` içine çözülen konum, BOM veya geçici açık kapak pozları yazılmaz. Niyet/kesim uzunlukları tamsayı mm; tek kalınlıktaki merkezler yarım mm, döner yüzeyler trigonometrik mm koordinatı taşıyabilir. Gövde, arkalık, bölücü, raf ve köşe kutularının montaj merkezleri nominal yüzlerden hesaplanır. [Merkezleme regresyonu](tests/exact-panel-centering.test.ts) Metreye dönüşüm 3D canvas içinde kalır. Beşgen `outerFrontSpanMm` dış Pisagor uzunluğu; `frontOpeningWidthMm` dikmeler sonrası net açıklıktır.
+`Design` içine çözülen konum, BOM veya geçici açık kapak pozları yazılmaz. Niyet/kesim uzunlukları tamsayı mm; tek kalınlıktaki merkezler yarım mm, döner yüzeyler trigonometrik mm koordinatı taşıyabilir. Gövde, arkalık, bölücü, raf ve köşe kutularının montaj merkezleri nominal yüzlerden hesaplanır. [Merkezleme regresyonu](tests/exact-panel-centering.test.ts) [D3-BASELINE-001 üretim raporu](D3_BASELINE_001_PRODUCTION_RELEASE.md) Metreye dönüşüm 3D canvas içinde kalır. Beşgen `outerFrontSpanMm` dış Pisagor uzunluğu; `frontOpeningWidthMm` dikmeler sonrası net açıklıktır.
 
 `useWardrobeStore.openNamedVersion` bir Undo komutudur; checkpoint korunur. İsimli arşiv anahtarı `wardrobe-studio:named-versions:v1`, mevcut oturum `wardrobe-studio:session:v2` / `session-sync:v2` anahtarlarından ayrıdır. Sürgü hareketi imperative simülatörde saklanır; UI'ya yalnız bildirim/drag bitişi yansır.
 

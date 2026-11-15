@@ -81,7 +81,7 @@ try {
 
 #### POST_D3_BASELINE_001
 
-D3-BASELINE-001 merkezleme geçişinin test referansı. Geometri ve üretim farkları ilgili panel merkezlerinden gelir. [Alan ve pafta karşılaştırması](CANONICAL_GEOMETRY_BEFORE_AFTER.md) · [Test fikstürü](tests/fixtures/d3-panel-centering-fingerprints.json)
+16 Kasım 2026 canlı kabulünde D3-BASELINE-001 ile doğrulanan güncel kanonik test referansı. [D3-BASELINE-001 üretim raporu](D3_BASELINE_001_PRODUCTION_RELEASE.md) Geometri ve üretim farkları ilgili panel merkezlerinden gelir. [Alan ve pafta karşılaştırması](CANONICAL_GEOMETRY_BEFORE_AFTER.md) · [Test fikstürü](tests/fixtures/d3-panel-centering-fingerprints.json)
 
 | Model | Design SHA-256 | Geometri SHA-256 | Üretim SHA-256 |
 | --- | --- | --- | --- |

@@ -1,6 +1,6 @@
 # Açık kullanıcı bulguları ve teknik borç
 
-**15 Kasım 2026 üretim kabulü.** MS-EXPORT-001, GitHub `main` `c57a4b2` ve Worker `9ce09ac8-d627-421a-88a7-3f6b7a66e0d5` ile Ready, %100 trafikte ve canlı tarayıcıda doğrulandı. Üç fiziksel P0 (WS-UX-001/002/003), D3-BASELINE-001 nominal yerleşim bulgusu, WS-UX-011 ve WebGL kaynak ömrü borcu açık. [Üretim kabulü](MS_EXPORT_001_PRODUCTION_RELEASE.md)
+**15 Kasım 2026 tarihsel üretim kabulü.** MS-EXPORT-001, GitHub `main` `c57a4b2` ve Worker `9ce09ac8-d627-421a-88a7-3f6b7a66e0d5` ile Ready, %100 trafikte ve canlı tarayıcıda doğrulandı. Üç fiziksel P0 (WS-UX-001/002/003), D3-BASELINE-001 nominal yerleşim bulgusu, WS-UX-011 ve WebGL kaynak ömrü borcu açık. [Üretim kabulü](MS_EXPORT_001_PRODUCTION_RELEASE.md)
 
 **14 Kasım 2026 güncel durum:** WS-UX-009a, `9624f90` kaynağı / `55a1639` ilk yayını ile **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, yalnız tek sürgü ve ilişkili çekmeceler kapsamında. İlk kabul Worker'ı `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100. **Dört açık/kısmi kullanıcı bulgusu** kaldı: WS-UX-001/002/003 P0 ve WS-UX-011 P2. WebGL kaynak yönetimi ayrı teknik borçtur. [Üretim raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
@@ -8,9 +8,9 @@ Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe
 
 13 Kasım 2026 · Canlı taban `9e0e3da`. **Beş açık veya kısmi kullanıcı bulgusu** bulunuyor. WS-UX-001/002/003 P0, WS-UX-009a ve WS-UX-011 P2. İlk 17 denetim bulgusunun 13’ü üretimde kapalıdır. Sonradan eklenen WS-UX-018 de kapalıdır. WebGL kaynak ömrü ve reddedilmiş B2 ayrı teknik borç kalemleri. Eski [denetim](COMPREHENSIVE_UX_FUNCTIONAL_AUDIT.md) ve [durum tablosu](CURRENT_ISSUE_STATUS.md) önceki yayınları kaydeder.
 
-## D3-BASELINE-001 · nominal yerleşim · yerel aday
+## D3-BASELINE-001 · nominal yerleşim · üretimde doğrulandı
 
-25/4 modelindeki 20 yarım milimetre penetrasyonu yerel dalda 20 yüzey temasına dönüştü. Dört kanonik modelde Design, 338 parça kimliği ve kesim ölçüleri korundu. Yerel kabul **READY_FOR_RELEASE_REVIEW**. Mevcut üretimde bu nominal bulgu açık. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md)
+16 Kasım 2026. 25/4 modelindeki 20 yarım milimetre penetrasyonu canlı geometri kaynağında 20 sıfır hacimli yüzey temasına dönüştü. **FIXED_AND_PRODUCTION_VERIFIED**. Üç fiziksel P0, WS-UX-011 ve WebGL kaynak ömrü açık. [D3-BASELINE-001 üretim raporu](D3_BASELINE_001_PRODUCTION_RELEASE.md)
 
 ## WS-UX-001 · P0 · beşgen 18/8 · fiziksel doğrulama bekliyor
 
