@@ -38,4 +38,18 @@ Askılık için komşu depolar kapalı tutulup gereken üst çift kapak kendi g�
 
 `DUAL3_UNLIMITED155`: komşular155° ileri sırada ilk kolon çekmeceleri **10,675076 mm**'de durur; çekmece-önce/kapak-sonra ters çevrimi başlangıca dönmez. Bu varyant **NO_GO** olarak tutulur. Galerideki tek bölme açma resmi ve451 mm bağımsız-bölme ölçümü bu olumsuz ortak sıra sonucunun yerine kullanılamaz.
 
+### Çekmece süpürme hacminin sabit komşu pozuyla kesişimi
+
+Her çekmece katısının kapalı konumdan ulaşılan veya doğrudan istenen stroka kadar doğrusal XZ süpürmesi, dışbükey zarf×Y aralığı olarak hesaplandı. Her komşu pozdaki kapak/kulp, öteki çekmece ve sabit gövde katılarıyla hacimsel kesişimler toplandı. Aşağıdaki her değer, test edilen tek çekmece/komşu pozları arasındaki en büyük çift bazlı toplamdır; çiftlerin küresel hacim birleşimi veya birlikte hareket eden parçaların süpürme kesişimi değildir.
+
+| Düzen | Çekmece/poz sayısı | İzinli yol, en büyük mm³ | Sınırı yok sayan451 mm, en büyük mm³ |
+| --- | ---: | ---: | ---: |
+| Orijinal kör |3|0|7.956.602|
+| SINGLE3 |30|0|0|
+| DUAL3 |60|0|0|
+| DUAL2 |40|0|0|
+| DUAL3_UNLIMITED155 |60|0|2.454.941,620|
+
+Orijinal engel alt sürgü kanadı; izinli kayan nokta sonu49,95 mm, kanonik tam-mm raporu49 mm. Negatif155° örneğinde en kötü engel A1 sağ tam boy kör kapaktır. İzinli yolun kesişimsiz kalması, stroku durduran mevcut kısıtın çalıştığını gösterir. Ölçüm komutu `node research/b3/drawer-sweep.mjs`; her katının kimliği ve hacmi `artifacts/portable-cad/drawer-sweep-verification.json` içinde.
+
 Özet sınıf: geometrik katı ve sınırlı çevrim PASS, erişim **ACCESS_PARTIAL**, donanım **HARDWARE_UNVERIFIED**, insan/oda/yük kabulü **PHYSICAL_TEST_REQUIRED**.

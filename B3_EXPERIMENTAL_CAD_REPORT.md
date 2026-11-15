@@ -6,7 +6,7 @@
 
 Üç sınırlı B3 düzeni kapalı cepheyi ve 451 mm karşılaştırma strokunu birlikte sağlayan **EXPERIMENTAL_GEOMETRY_PASS / ACCESS_PARTIAL / HARDWARE_UNVERIFIED / PHYSICAL_TEST_REQUIRED** adaylarıdır. Fiziksel olarak kullanılabilir hacim UNKNOWN; WS-UX-003 kapanmadı. Hiçbiri varsayılan tasarım seçilmedi veya üretime onaylanmadı. Kapasite kaybına kullanıcı onayı varsayılmadı.
 
-`SINGLE3`: tek dar kolonda üç dış çekmece ve üst askılık, diğer A kolonunda raf. `DUAL3`: iki kolonda altışar değil, toplam altı çekmece ve iki üst askılık. `DUAL2`: iki kolonda toplam dört yüksek çekmece ve iki üst askılık. Sınırsız tam boy 155° `DUAL3_UNLIMITED155`, hatalı sırada ~10,675 mm duruş ve başlangıca dönememe nedeniyle sistem olarak **NO_GO**. Kapalı geometri PASS bu olumsuz hareket sonucunu geçersiz kılmaz.
+`SINGLE3`: tek dar kolonda üç dış çekmece ve üst askılık, diğer A kolonunda raf. `DUAL3`: iki kolonda toplam altı çekmece ve iki üst askılık. `DUAL2`: iki kolonda toplam dört yüksek çekmece ve iki üst askılık. Sınırsız tam boy 155° `DUAL3_UNLIMITED155`, hatalı sırada ~10,675 mm duruş ve başlangıca dönememe nedeniyle sistem olarak **NO_GO**. Kapalı geometri PASS bu olumsuz hareket sonucunu geçersiz kılmaz.
 
 ## Gerçek deneysel montaj
 
