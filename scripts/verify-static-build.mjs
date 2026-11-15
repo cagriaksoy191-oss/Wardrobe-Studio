@@ -27,7 +27,7 @@ async function listFiles(directory, prefix = '') {
   return files;
 }
 
-const publicFiles = new Set(['fonts/NotoSans-Regular.ttf', 'fonts/OFL.txt', '_headers']);
+const publicFiles = new Set(['fonts/NotoSans-Regular.ttf', 'fonts/OFL.txt', '_headers', 'THIRD_PARTY_NOTICES.txt']);
 for (const name of await listFiles(path.join(root, 'public'))) {
   assert(publicFiles.has(name), `Review the new public file before publishing: ${name}`);
 }
@@ -36,6 +36,9 @@ const assetsDirectory = path.join(root, 'dist');
 const files = await listFiles(assetsDirectory);
 assert(files.includes('index.html'), 'Run npm run build first.');
 assert(files.includes('fonts/NotoSans-Regular.ttf'), 'The PDF font is missing.');
+const notices = 'THIRD_PARTY_NOTICES.txt';
+assert(files.includes(notices), 'Third-party license notice is missing.');
+assert.deepEqual(await readFile(path.join(assetsDirectory, notices)), await readFile(path.join(root, 'public', notices)));
 assert(files.length <= 20_000, 'The Cloudflare Free asset count limit is exceeded.');
 
 let totalBytes = 0;

@@ -1,5 +1,5 @@
+import { ContactShadows } from './ContactShadows';
 import {
-  ContactShadows,
   Grid,
   OrbitControls,
   OrthographicCamera,
