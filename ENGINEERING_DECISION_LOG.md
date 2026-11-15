@@ -1,5 +1,9 @@
 # Mühendislik kararları ve yayın geçmişi
 
+## 15 Kasım 2026 · taşınabilir D3 ve B3 araştırması
+
+Üretime alınmadı; `research/b3-blind-corner-cad`, taban3cc309c. ÜçB3 düzeni15mm MOVENTO kutusu ve bağımsız üst askıyla kısıtlı deneysel erişimi iyileştirir. Tam boy kapakta92° ideal limit şartı, üstte155° ideal pivot; sınırsız155° negatif örnekNO_GO. GeometriPASS, fiziksel/hardwarePASS değildir; netkapasite%1,2303–%3,2592 azalır, varsayılan veya kayıp onayı seçilmedi.20orijinal25/4 nominal kesişme koordinat yuvarlamasından; kesim değişmeden kopya tanıda sıfır, fiziksel imalat kusuru kanıtlanmadı. İki gerçekZIP ve34/11sayfalık atlas,147görünüm ve kullanıcı çift tıklama kabulü tamamlandı.284+24+16+4test/12SHA/338parça korundu. Mainbd51910, Workerc1a6055a… Ready/%100 korundu, previewbuild kapalı yeniden okundu. Kaynak/rapor özel araştırma dalına gönderilebilir; mainmerge/Cloudflaredeploy yetkisi yok. [Tam kabul](B3_EXPERIMENTAL_CAD_REPORT.md) · [Teslim](CAD_GALLERY_PORTABILITY_VERIFICATION.md).
+
 Her satır kendi döneminin kanıtını kaydeder. Güncel dağıtım durumu için [proje teslimi](PROJECT_FINAL_HANDOFF.md), güncel sorunlar için [açık iş listesi](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) kullanılır.
 
 | Yayına ulaşan Git tabanı | Cloudflare Build / Worker | Karar ve kanıt |

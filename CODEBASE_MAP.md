@@ -1,5 +1,13 @@
 # Wardrobe Studio · güncel kaynak kod haritası
 
+## 15 Kasım2026 · üretimden yalıtılmış B3 ve taşınabilir CAD
+
+`research/b3/prototype.mjs`: kanoniğe dokunmadan üç dış çekmece/üst askı montajı,15mm kutular, deneysel92° tam boy limit ve donanım rezervleri. `measure.mjs`: D3-1 ortak hacim/alan, askı zarfı ve11işlem sırası; `overlap-audit.mjs`:20nominal25/4 kesişme ve kesim değiştirmeyen kopya tanısı; `report-overlap.mjs`: her çiftin Git'tekiMarkdown tablosu; `cad.node-test.mjs`:16bağımsız test; `verify-production.mjs`:12golden/338parça ve tanısalPDF/SVG.
+
+`research/portable-cad/drawing.mjs`: ortak vektör pafta komutları+gerçek katı rasterleri; `generate.mjs`:16D3/5B3×7görünüm, self-containedHTML,JSON/SVG ve34/11sayfa planı; `build_three_preview.mjs`: mevcutThree/esbuild ile40derinlik tamponlu sahne; `create_atlas.py`: aynı komutlardan gömülüNoto PDF; `pdf_qa.py`: font/sayfa sınırı ve temas sayfaları; `finalize.mjs`: deterministikZIP,hashmanifest,bağımsız çıkarma; `portability.node-test.mjs`:4paket testi. Eksik3D yakalama sessizce alternatif çizime düşmez, hata verir. Araştırma dizinleri `.gitignore *` ile Tailwind taramasından korunur; yalnız gözden geçirilen kaynaklar zorla izlenir, ham artifacts takip edilmez.
+
+Kaynaklar uygulamadan import edilmez. CADJSON Designv1 içe aktarma girdisi değildir; türetilmiş deneysel montaj içerir. Üretim çözümü/kesim çıktısı/şema/depolama/WS-UX-009a değişmedi. [Araştırma kabulü](B3_EXPERIMENTAL_CAD_REPORT.md) ve [gerçek teslim](CAD_GALLERY_PORTABILITY_VERIFICATION.md) ölçüm sınırlarını açıklar.
+
 **14 Kasım 2026 · yalnız araştırma aracı:** [`scripts/research-corner-hardware.mjs`](scripts/research-corner-hardware.mjs), üretim tabanı `bd51910`. Uygulamaya import edilmeden `phase5Example → solveDesign → extractProduction/buildMotionScene` çağırır; 12 referans SHA/338 parça, üç eski adayın kopyasında açma/ters kapama, bağımsız panel kütlesi/moment,6 mm pay duyarlılığı ve dikdörtgen topoloji ön elemesi yapar. Çıktılar Git dışı `artifacts/corner-hardware-research/` altında. Şema, çözücü, kanonik örnek, hareket güvenliği ve üretim kapıları değişmez. Donanım gerçekliği, eksikler ve fiziksel kabul [araştırma raporunda](CLOSED_CORNER_ENGINEERING_RESEARCH.md) ve bağlı üç raporda; bu araç gerçek üretici kinematiği veya fiziksel test yerine geçmez.
 
 Üretim uygulama kaynağı `9624f90`; WS-UX-009a'nın ilk yayın/kabul commit'i `55a1639`. Yalnız doküman gönderimleri uygulama kaynağını değiştirmez. Başlangıç: [AI devir rehberi](AI_PLATFORM_HANDOFF.md). Teknik sözleşme: [mühendislik değişmezleri](ENGINEERING_INVARIANTS.md). Aşağıdaki harita işlev, sembol ve ilgili testlerle aranabilir.
