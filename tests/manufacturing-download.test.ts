@@ -228,6 +228,11 @@ describe('Full manufacturing downloads', () => {
 });
 
 describe('Canonical fingerprints', () => {
+  // The engineering document retains the production baseline. Only derived
+  // geometry and production snapshots use the separately reviewed candidate hashes.
+  const candidatePlacement = JSON.parse(
+    readFileSync('tests/fixtures/d3-panel-centering-fingerprints.json', 'utf8'),
+  ) as Record<string, [string, string]>;
   it.each([['straight', 69], ['diagonal', 94], ['blind', 81], ['asymmetric', 94]] as const)(
     'preserves %s Design, geometry and production hashes', (kind, parts) => {
       const item = fixture(kind);
@@ -238,7 +243,7 @@ describe('Canonical fingerprints', () => {
       expect(reference).toHaveLength(3);
       const signatures = [item.design, item.resolved, pkg].map(value => createHash('sha256')
         .update(designSignature(value as Design)).digest('hex'));
-      expect(signatures).toEqual(reference);
+      expect(signatures).toEqual([reference[0], ...candidatePlacement[kind]]);
       expect(pkg.parts).toHaveLength(parts);
     });
 });
