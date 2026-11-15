@@ -51,6 +51,8 @@ Cloudflare ayarlarında özel GitHub deposu bağlı, üretim dalı `main`, üret
 3. GitHub kontrolünde ve Cloudflare Builds logunda tam SHA, test ve build sonucu, ardından etkin Worker UUID’si ve trafik payı. Cloudflare planı Free kalmalı.
 4. İzole profille gerçek HTTPS tarayıcı kabulünü ve paket karşılaştırmasını yapın. Onaylı yayın raporuna test, build, Worker, trafik, HTTPS ve açık bulguları kaydedin.
 
+D3-BASELINE-001 geçişi, tamsayı kesim ölçülerini koruyan türetilmiş koordinat değişikliğidir. Kanonik test kapısı 350 uygulama testi içinde `POST_D3_BASELINE_001` fikstürünü kullanır. Üretim tabanına geri dönülürse o sürümün `PRE_D3_BASELINE_001` imzaları ve eski çizim koordinatları geçerlidir. [Kanonik referanslar](ENGINEERING_INVARIANTS.md#parmak-izi-karşılaştırması) · [Değişen 24 pafta](CANONICAL_GEOMETRY_BEFORE_AFTER.md)
+
 ## Gerçek paket ve tarayıcı kabulü
 
 Aday SHA’sını temiz worktree’de derleyin. `dist/index.html` referanslarının canlı ana HTML’de aynı hash’li CSS/JS dosyalarına gittiğini kontrol edin. Ana HTML, CSS, JS, lazy export chunk’ları ve fontları GET ile indirip HTTP 2xx ve SHA-256 kıyaslayın. Tarihsel 11 dosyalık kıyasta `index.html` ve OFL metni için yalnız CRLF/LF normalleştirmesine izin verildi. JS, CSS ve font baytları birebir karşılaştırıldı. `_headers` bir yapılandırma dosyasıdır, içeriği yerine HTTP başlıklarını kontrol edin. SPA fallback ile gizli dosya yolunun 200 vermesi mümkündür. Yanıtın ana HTML olup olmadığını ve istenen özel dosya içeriğinin açığa çıkmadığını inceleyin.

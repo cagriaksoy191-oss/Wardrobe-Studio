@@ -228,22 +228,17 @@ describe('Full manufacturing downloads', () => {
 });
 
 describe('Canonical fingerprints', () => {
-  // The engineering document retains the production baseline. Only derived
-  // geometry and production snapshots use the separately reviewed candidate hashes.
-  const candidatePlacement = JSON.parse(
+  const baseline = JSON.parse(
     readFileSync('tests/fixtures/d3-panel-centering-fingerprints.json', 'utf8'),
-  ) as Record<string, [string, string]>;
+  ) as { reference: string; models: Record<string, [string, string, string]> };
   it.each([['straight', 69], ['diagonal', 94], ['blind', 81], ['asymmetric', 94]] as const)(
     'preserves %s Design, geometry and production hashes', (kind, parts) => {
       const item = fixture(kind);
       const pkg = production(item);
-      const line = readFileSync('ENGINEERING_INVARIANTS.md', 'utf8')
-        .split('\n').find(row => row.startsWith(`| \`${kind}\` |`))!;
-      const reference = Array.from(line.matchAll(/\`([a-f0-9]{64})\`/g), match => match[1]);
-      expect(reference).toHaveLength(3);
+      expect(baseline.reference).toBe('POST_D3_BASELINE_001');
       const signatures = [item.design, item.resolved, pkg].map(value => createHash('sha256')
         .update(designSignature(value as Design)).digest('hex'));
-      expect(signatures).toEqual([reference[0], ...candidatePlacement[kind]]);
+      expect(signatures).toEqual(baseline.models[kind]);
       expect(pkg.parts).toHaveLength(parts);
     });
 });

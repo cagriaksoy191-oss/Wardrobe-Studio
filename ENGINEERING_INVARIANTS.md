@@ -68,9 +68,24 @@ try {
 '@ | node --input-type=module
 ```
 
+#### PRE_D3_BASELINE_001
+
+Üretim tabanı `c57a4b2` ve önceki çözümün tarihsel imzaları.
+
 | Model | Design SHA-256 | Geometri SHA-256 | Üretim SHA-256 |
 | --- | --- | --- | --- |
 | `straight` | `e1c33d152db9328e304c4d030d049fda84582aaac567eadb56cea7656e6491b0` | `7fcca6a76561727d3e69441720f74938cd38d4e20f5f8d5e71553bcac68c73a8` | `192d047b1db2f452d13f16be89e3b24441efe547400bbfb728f00ceb052030d4` |
 | `diagonal` | `a4168587a1e2535b5ac374e443979ac449543d2d11d117f562a79f390a8e9a7e` | `d7fc97c501b6dd68c7159dda9443fa7b53cf56a77413820f08ab7c8a9b048101` | `5c200b4f4c35b882894fe5ccd7ce797b63d216669ee9063b9150b7011e77028f` |
 | `blind` | `a313f6b547d93dfe50889a7edf6b60270d54a9b43b1eab99a4514a2051de00b2` | `0877f5fcf310556cf921fbabf67384a719c03a26140bc9bd8c9cf1e02d15cc30` | `737c193abff836e4118de2b51900cbc946575fb5257e5e99a23bd338934f498b` |
 | `asymmetric` | `b54123c5b527fc79d492525621734f5287f67deabda964736aeb92284637f854` | `fdbd3ee9fed83028ad534440786bf6d803afc2d0b85e967059f74e4a0a0b70b4` | `75dc34e92ed9427cb158483a96b6c6906adf30d3e374dba7a5b7e27b6a3af4c8` |
+
+#### POST_D3_BASELINE_001
+
+D3-BASELINE-001 merkezleme geçişinin test referansı. Geometri ve üretim farkları ilgili panel merkezlerinden gelir. [Alan ve pafta karşılaştırması](CANONICAL_GEOMETRY_BEFORE_AFTER.md) · [Test fikstürü](tests/fixtures/d3-panel-centering-fingerprints.json)
+
+| Model | Design SHA-256 | Geometri SHA-256 | Üretim SHA-256 |
+| --- | --- | --- | --- |
+| `straight` | `e1c33d152db9328e304c4d030d049fda84582aaac567eadb56cea7656e6491b0` | `3ad8406d135e56a7fa69bb3723e91311eac15a940af8245f4f0ee23e80cd8518` | `3abf32fc5412f844c160410aaccfece4bb7f9709f2024faf6313fbd9956d5f18` |
+| `diagonal` | `a4168587a1e2535b5ac374e443979ac449543d2d11d117f562a79f390a8e9a7e` | `0989f474a4e0c645760bddce2444adcfcf47ae728f2896f5ae38f7ea227fd260` | `0064548c147a93d8c8444d816d9c71e8a041bac5693b3661430a4e1127d33392` |
+| `blind` | `a313f6b547d93dfe50889a7edf6b60270d54a9b43b1eab99a4514a2051de00b2` | `095afe19236b5444dcc6932cdb6c17360508a3ea3602f3674a2d61d87bf0aeb0` | `0d90050032153569c03819e416746210543689ecb67d806abb756c036541f2e1` |
+| `asymmetric` | `b54123c5b527fc79d492525621734f5287f67deabda964736aeb92284637f854` | `65f964b117ba69d454595131f49b8cf4f517c760813549e32aa4ecc9416d345c` | `cb1c61c776967d57a154ec801c09f27886c3c252df3c8fa837a6978b1492b4f7` |
