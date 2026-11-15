@@ -1,5 +1,7 @@
 # Wardrobe Studio · yapay zekâ devir rehberi
 
+**15 Kasım 2026 yerel aday.** `fix/manufacturing-export-action-guards` dalında MS-EXPORT-001 düzeltmesi doğrulandı. Tam CSV/ZIP komutu aktif tasarımı tekrar denetler ve ZIP beklerken tasarım veya ilgili sürüm değişirse isteği iptal eder. 309 test, 12 kanonik SHA ve 338 parça doğrulandı. Üretim yayını ayrı onay bekliyor. [Kabul raporu](MS_EXPORT_001_IMPLEMENTATION_REPORT.md)
+
 **14 Kasım 2026 · WS-UX-009a üretim kabulü:** Uygulama kaynağı `9624f90f3957165feb0d4f45c252deaade7e8546`, uygulamayı yayınlayan `main` commit'i `55a1639494c9132dbb6a2a6e82a5814babc66d8f`. İlk kabul build'i `787f76dd-a7b0-4894-8dd4-3d50a43404f8`, Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`: Ready, %100 trafik, Workers Free. Linux 284/284 test; gerçek HTTPS'de masaüstü/mobil kurtarma, iptal ve veri/üretim kontrolleri geçti. **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, yalnız tek sürgü ve ilişkili çekmeceler için. Dört açık/kısmi bulgu ve ayrı WebGL borcu sürer. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
 Bu kimlikler ilk doğrulanmış uygulama yayınının tarihli kanıtıdır. Sonraki yalnız doküman gönderimi Git HEAD'ini ve Worker kimliğini değiştirebilir; güncel sürümü Git/Cloudflare üzerinden ayrıca okuyun.
