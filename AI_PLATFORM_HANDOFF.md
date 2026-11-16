@@ -60,7 +60,7 @@ D3-BASELINE-001 için yerel `fix/d3-baseline-001-exact-panel-centering` adayı k
 
 WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a sınırlı tek kanat/çekmece kapsamında üretimde doğrulandı; desteklenmeyen hareket zincirleri manuel kalır. WS-UX-011 büyük modelde kısmi kapanmıştır. Hareket CPU iyileştirmesi yayında, 130 hücre seçimi bırakma gecikmesi sürüyor.
 
-Sunum modu kaynak birikimi ayrı teknik borçtur. `27361cb` tabanından açılan `fix/webgl-contact-shadow-lifecycle` dalındaki `7f2134a` iki GPU'da kaynak birikimini durdurdu. Açık/LED performans eşdeğerliği belirsiz ve aday `RESEARCHED_NOT_READY`. Eski `a1e8731`, B1 `c42c5a7`, B2 `a8c1ba3` ve kutu seçimi `7b91a12` araştırma kayıtları korunur. Yerel SHA’lar temiz klonda bulunmayabilir. [Yerel karar](WEBGL_RESOURCE_RELEASE_DECISION.md) · [Açık iş listesi](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
+Sunum modu kaynak birikimi ayrı teknik borçtur. `27361cb` tabanından açılan `fix/webgl-contact-shadow-lifecycle` dalındaki `7f2134a` iki GPU'da kaynak birikimini durdurdu. `codex/webgl-non-inferiority` aynı kodu 102 başsız çiftte doğruladı. Bağımsız normal pencere tekrarında ağır açık sahneler geçti, Radeon LED kare p95 üst sınırı +2,0339 ms ile +2,0 ms eşiğine sığmadı. Aday `RESEARCHED_NOT_READY`. Eski `a1e8731`, B1 `c42c5a7`, B2 `a8c1ba3` ve kutu seçimi `7b91a12` araştırma kayıtları korunur. Yerel SHA’lar temiz klonda bulunmayabilir. [Güncel yerel karar](WEBGL_FINAL_RELEASE_READINESS.md) · [İlk yerel karar](WEBGL_RESOURCE_RELEASE_DECISION.md) · [Açık iş listesi](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
 
 ## Yayın ve önerilen ilk görev
 

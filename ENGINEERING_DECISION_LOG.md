@@ -18,6 +18,7 @@ Faz 2’de önceki büyük L kontrollü Brave ölçümünde hareket CPU p95 aral
 
 ## Yerel araştırma kayıtları
 
+- **16 Kasım 2026 · ContactShadows gerilememe doğrulaması · `RESEARCHED_NOT_READY`.** Ürün ağacı `fafec94`, başsız 102 eş ve 6/6 ana koşul, normal pencere 18 bağımsız eş ve 17/18 ölçüt. Radeon LED kare p95 üst sınırı +2,0339 ms, eşik +2,0 ms. Başsız ve normal sonuçlar ayrı tutuldu. Ürün dosyaları önceki adayla aynı. [Son karar](WEBGL_FINAL_RELEASE_READINESS.md)
 - **16 Kasım 2026 · ContactShadows `7f2134a`, `RESEARCHED_NOT_READY`.** Kilitli Drei çizim sırası ve shader sağlayıcısıyla temas kaynakları açıkça sahiplenildi. AMD ve RTX'te toplam 240 aç/kapa döngüsü, 240/240 aday native hedef dokusu bırakma, sekiz bağlam kurtarma ve altı görsel eş geçti. Performans eşdeğerliği RTX kapalı sahneyle sınırlı. [Yerel karar](WEBGL_RESOURCE_RELEASE_DECISION.md)
 - **15 Kasım 2026 · D3-BASELINE-001.** Tamsayı kesim ebatlarından kesin yarım levha merkezleri türetildi. 25/4 modeli 20 pozitif nominal kesişimden 20 sıfır hacimli yüzey temasına geçti. Dört kanonik modelin türetilmiş imzaları ve pafta farkları ayrı kaydedildi. Fiziksel P0’lar ve MS-EXPORT-001 geçerliliğini sürdürüyor. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md)
 
