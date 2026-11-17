@@ -1,6 +1,8 @@
 # Wardrobe Studio · proje teslim durumu
 
-**16 Kasım 2026 doğrulanmış üretim.** D3-BASELINE-001 `3dc5b5a` kaynağıyla yayımlandı. 350/350 Linux testi, kanonik 338 parça, 20/20 nominal yüzey teması ve 24 PDF/SVG pafta farkı canlıda doğrulandı. `POST_D3_BASELINE_001` güncel kanonik test referansıdır. MS-EXPORT-001 ve WS-UX-009a üretimde doğrulanmıştır. Üç fiziksel P0, WS-UX-011 ve WebGL borcu açık. [D3-BASELINE-001 üretim raporu](D3_BASELINE_001_PRODUCTION_RELEASE.md)
+**17 Kasım 2026 doğrulanmış üretim.** ContactShadows kaynak ömrü düzeltmesi `ddfc3a5`, `d6dcabd` ilk uygulama sürümüyle Workers Free üzerinde yayımlandı. 354/354 Linux testi, 12 HTTPS dosyası ve gerçek tarayıcıda Sunum Modu, kamera, LED, güvenli hareket, kayıt ve üretim çıktıları doğrulandı. Resmî Radeon LED protokolü `RESEARCHED_NOT_READY` olarak kapatıldı. Yayın kullanıcının açık mühendislik risk kabulüne dayanır. Üç fiziksel P0 ve WS-UX-011 açık. [WebGL üretim raporu](WEBGL_CONTACT_SHADOWS_PRODUCTION_RELEASE.md)
+
+**16 Kasım 2026 doğrulanmış üretim.** D3-BASELINE-001 `3dc5b5a` kaynağıyla yayımlandı. 350/350 Linux testi, kanonik 338 parça, 20/20 nominal yüzey teması ve 24 PDF/SVG pafta farkı canlıda doğrulandı. `POST_D3_BASELINE_001` güncel kanonik test referansıdır. MS-EXPORT-001 ve WS-UX-009a üretimde doğrulanmıştır. Bu tarihte üç fiziksel P0, WS-UX-011 ve WebGL borcu açıktı. [D3-BASELINE-001 üretim raporu](D3_BASELINE_001_PRODUCTION_RELEASE.md)
 
 **14 Kasım 2026 tarihsel üretim kabulü:** Uygulama kaynağı `9624f90f3957165feb0d4f45c252deaade7e8546`; ilk yayın `main` commit'i `55a1639494c9132dbb6a2a6e82a5814babc66d8f`. Build `787f76dd-a7b0-4894-8dd4-3d50a43404f8`, Worker `da47d81f-f73e-4c6d-b1d6-7afacec73cad`, Ready / %100, Free. WS-UX-009a yalnız tek kanat/ilişkili çekmeceler için üretimde doğrulandı. 284/284 Linux testi, gerçek HTTPS, dört viewport, veri/üretim ve P0 çıktı kilitleri kontrol edildi. [Üretim kabul raporu](SAFE_MOTION_RECOVERY_PRODUCTION_RELEASE.md)
 
@@ -44,10 +46,10 @@ Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vite
 ## Gelecekteki çalışma sırası
 
 1. Güvenli başlangıç için temiz klonda test/build ve dört kanonik tasarımın imzalarını doğrulayın.
-2. WS-UX-011 ve Sunum Modu WebGL kaynak yönetimini yeni ölçüm kanıtıyla araştırın. Başarısız adayları doğrudan birleştirmeyin.
+2. Kullanıcı yeni görev verdiğinde WS-UX-011 için büyük seçim bırakma gecikmesini inceleyin. Sunum Modu için normal kaynak ömrü ve işlev regresyon kontrollerini sürdürün. Kapanan Radeon LED araştırma serisini yeniden başlatmayın.
 3. WS-UX-009a'nın üretimde doğrulanmış sınırlı sırasını koruyun; desteklenmeyen park yollarında manuel kurtarmayı sürdürün.
 4. WS-UX-001/002/003 için donanım, tolerans, yük ve gerçek erişim onayını tamamlayın. Fiziksel kabul beklerken üretim kapıları korunur.
-5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Dört açık/kısmi bulgu ve ayrı WebGL borcu bu sırada izlenir.
+5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Üç fiziksel P0 ve kısmi WS-UX-011 bu sırada izlenir.
 
 ## Sonraki kabul
 
