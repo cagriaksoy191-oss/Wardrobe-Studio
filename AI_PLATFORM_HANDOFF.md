@@ -64,6 +64,8 @@ Sunum modu kaynak birikimi ayrı teknik borçtur. `27361cb` tabanından açılan
 
 ## Yayın ve önerilen ilk görev
 
+**17 Kasım 2026 WebGL nihai karar.** Normal Radeon LED’de 16 yeni çiftten ikisi pencere odağı ölçütünden elendi. Eksik örneklem nedeniyle aday `RESEARCHED_NOT_READY`. Araştırma kapatıldı. [Nihai karar](WEBGL_FINAL_LED_RELEASE_DECISION.md)
+
 İlk iş olarak temiz klonda dalı ve tabanı doğrulayın, test/build/dry-run ve dört sentetik örneği tekrar çalıştırın. Sonuçları kod veya canlı ortamı değiştirmeden raporlayın. İlk fiziksel inceleme için kör köşe üç ray adayının üretici kesiti ve tolerans verisini araştırmak, ayrı bir geliştirme kararı için kanıt sağlar.
 
 Canlı yayın ve ücretli servis değişikliği açık kullanıcı onayı gerektirir. Onaylı yayında doğru SHA, Linux Cloudflare build, trafik alan Worker ve canlı HTTPS paket baytları birlikte doğrulanır. `main` gönderimi otomatik üretim yayını başlatabilir. Geri alma önce doğrulanmış Worker sürümüne ve ardından onaylı Git düzeltmesine dayanır. [Yayın rehberi](DEVELOPMENT_AND_RELEASE_GUIDE.md)

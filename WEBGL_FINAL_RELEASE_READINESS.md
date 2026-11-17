@@ -1,5 +1,7 @@
 # ContactShadows · son yayın incelemesi
 
+**17 Kasım 2026 güncellemesi.** Yalnız kalan normal Radeon LED koşulu için 16 yeni çift çalıştırıldı. İki çift önceden belirlenen pencere odağı ölçütünden elendi. On altı geçerli çift koşulu sağlanmadı ve karar `RESEARCHED_NOT_READY` kaldı. Araştırma kapatıldı. Aşağıdaki sonuçlar 16 Kasım tarihli kayıttır. [Nihai Radeon LED kararı](WEBGL_FINAL_LED_RELEASE_DECISION.md)
+
 **`RESEARCHED_NOT_READY`** · 16 Kasım 2026 · `codex/webgl-non-inferiority`. Aday kaynak `ddfc3a5`, test `7f2134a`, önceki belge `fafec94`. Dondurulan ana protokol `4fbe85b`, bağımsız normal pencere protokolü `e0d88cc`. Ürün kaynakları, paket kilidi ve MIT bildirimi `fafec94` ile eş. Yeni Git değişiklikleri araştırma belgelerinden oluşur. [Ana protokol](WEBGL_NON_INFERIORITY_PROTOCOL.md) · [Ek protokol](WEBGL_HEADED_CONFIRMATION_PROTOCOL.md)
 
 | Yayın kabulü | Sonuç |
