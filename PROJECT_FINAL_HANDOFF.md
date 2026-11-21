@@ -1,5 +1,7 @@
 # Wardrobe Studio · proje teslim durumu
 
+**21 Kasım 2026 · nihai teslim.** Canlı taban `5044f17`, build `b8558118-d594-4f98-a615-aedc8d31288d`, Worker `c352f36f-107a-4fc5-90cc-4464dcb8367b`, Ready / %100, Workers Free. 358/358 test ve 12/12 kanonik imza, 338 fiziksel parça. Fiziksel durum **PHYSICAL_PRODUCTION_VALIDATION_PENDING**. Aşağıdaki tarihli paragraflar önceki yayın ve aday kanıtlarıdır. [Nihai yazılım kararı](FINAL_SOFTWARE_ACCEPTANCE_REPORT.md) · [Üretim tabanı](FINAL_PRODUCTION_BASELINE.md) · [Fiziksel risk ve deneyler](FINAL_OPEN_RISKS_AND_PHYSICAL_VALIDATION.md)
+
 **21 Kasım 2026 doğrulanmış üretim.** WS-UX-011 ilk uygulama yayını `23c72df`, Cloudflare build `5ea6e18c-10cb-4681-a179-f30d874bfab7`, Worker `ceb5a259-89d7-48fb-a8a5-dbdac8f229b1`. Ready, %100, Workers Free. 358 test, canlı 130 hücre seçimi, normal model, güvenli hareket ve üç fiziksel P0 üretim kilidi doğrulandı. [WS-UX-011 yayın raporu](WS_UX_011_PRODUCTION_RELEASE.md)
 
 **21 Kasım 2026 yerel WS-UX-011 adayı.** Büyük modellerde renk başına toplu seçim çizimi seçimin sırasını, davranışını ve kanonik üretim verisini korudu. 22+22 ölçümde bırakma kare p95’i 25,4→21,4 ms, panel p95’i 55,2→46,2 ms. 358 test ve gerçek tarayıcı kabulü geçti. **READY_FOR_RELEASE_REVIEW**. Üretim onayı ayrı. [WS-UX-011 raporu](WS_UX_011_FINAL_REMEDIATION_REPORT.md)
@@ -45,7 +47,7 @@ Aşağıdaki iki paragraf WS-UX-009a yayını öncesindeki devir kabulünün tar
 
 Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vitest, TypeScript/Vite build, `deploy:check` ve Wrangler dry-run, tam/üretim npm audit (0 bilinen bulgu), dört tarihsel kabul fixture’ında eşit Design/ResolvedModel/ProductionPackage parmak izleri ve 338 fiziksel parça. Canlı HTTPS’de 11 dosya karşılaştırıldı. GitHub Cloudflare kontrolü ve etkin Worker gözlendi. Build’de Zod yorum açıklaması ve ana paket boyutu uyarıları görüldü. [Doğrulama yöntemi ve sayımlar](ENGINEERING_INVARIANTS.md) · [Yayın denetimi](DEVELOPMENT_AND_RELEASE_GUIDE.md)
 
-Önceki kabulde tarayıcı arayüzü, sentetik kayıt, 3D/2D ve üretim çıktı akışları denenmişti. Devirde uzun GPU/etkileşim ölçümleri ve tam canlı tarayıcı kabul matrisi yeniden çalıştırılmadı. Atölye donanım onayı, yük altında hareket, tolerans ve erişim açık. Üç P0 fiziksel bulgu, manuel kurtarma ve büyük seçim gecikmesi sürüyor. GPU cleanup ve iki kutu seçimi deneyi yerel araştırma olarak kalır. [Güncel açık işler](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
+Önceki kabulde tarayıcı arayüzü, sentetik kayıt, 3D/2D ve üretim çıktı akışları denenmişti. Devirde uzun GPU/etkileşim ölçümleri ve tam canlı tarayıcı kabul matrisi yeniden çalıştırılmadı. Atölye donanım onayı, yük altında hareket, tolerans ve erişim açık. Üç P0 fiziksel bulgu, henüz sınırlı manuel kurtarma ve büyük seçim gecikmesi o tarihte açıktı. GPU kaynak temizliği ve iki kutu seçimi deneyi yerel araştırma olarak kaydedilmişti. Sonraki düzeltmeler ve canlı kabul için [nihai kabul raporuna](FINAL_SOFTWARE_ACCEPTANCE_REPORT.md) bakın. [Güncel açık işler](OPEN_ISSUES_AND_TECHNICAL_DEBT.md)
 
 ## Gelecekteki çalışma sırası
 

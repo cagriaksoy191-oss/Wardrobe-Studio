@@ -1,6 +1,6 @@
 # Wardrobe Studio · güncel kaynak kod haritası
 
-Üretim uygulama kaynağı `9624f90`; WS-UX-009a'nın ilk yayın/kabul commit'i `55a1639`. Yalnız doküman gönderimleri uygulama kaynağını değiştirmez. Başlangıç: [AI devir rehberi](AI_PLATFORM_HANDOFF.md). Teknik sözleşme: [mühendislik değişmezleri](ENGINEERING_INVARIANTS.md). Aşağıdaki harita işlev, sembol ve ilgili testlerle aranabilir.
+Güncel paket ilk kez `23c72df` ile yayımlandı. `5044f17` üzerindeki uygulama ağacı ve çalışan Worker aynı paketle doğrulandı. Aşağıdaki harita işlev, sembol ve ilgili testlerle aranabilir. [Üretim tabanı](FINAL_PRODUCTION_BASELINE.md) · [AI devir rehberi](AI_PLATFORM_HANDOFF.md) · [Mühendislik değişmezleri](ENGINEERING_INVARIANTS.md)
 
 ## Çalışma zamanları ve veri akışı
 
@@ -55,7 +55,7 @@
 
 Aşağıdaki özgün kayıt önceki aşamalara aittir. Eski satır referanslarını ve ortam yollarını tarihsel bağlamda okuyun.
 
-> **Aşama 5 son durum:** Güncel davranış, doğrulama ve sınırlar `PHASE5_VERIFICATION.md` içindedir. Aşağıdaki ana harita tarihsel Aşama 3 devir kaydıdır; Aşama 4 ergonomi/envanter/engel/şablonları da korunur. Güncel ek dosyalar ve veri akışı aşağıdadır.
+> Aşağıdaki ana harita Aşama 3 devir kaydını temel alır. Aşama 4 ve 5 kapsamı için ilgili tarihsel doğrulama belgelerini, güncel sınırlar için [nihai kabul raporunu](FINAL_SOFTWARE_ACCEPTANCE_REPORT.md) kullanın.
 
 ## Aşama 5 kaynak haritası
 

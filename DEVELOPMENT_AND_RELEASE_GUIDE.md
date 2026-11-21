@@ -1,5 +1,7 @@
 # Windows geliştirme ve yayın rehberi
 
+21 Kasım 2026 doğrulamasındaki CI tabanı 358 testtir. Etkin Worker, canlı statik varlıkların SHA-256 değerleri ve geri dönüş referansı güncel üretim tabanında kayıtlıdır. Tarihli örnek dağıtım kimliklerini sonraki yayın kararlarında canlı panelden yeniden doğrulayın. [Üretim tabanı](FINAL_PRODUCTION_BASELINE.md) · [Bakım ve AI devri](FINAL_MAINTENANCE_AND_AI_HANDOFF.md)
+
 Komutları yetkilendirilmiş depo kökünde PowerShell ile çalıştırın. Özgün dizin `C:\dev\Wardrobe-Studio`. Ayrı bir dal/worktree kullanırken kullanıcının çalışma ağacını, yerel tasarımlarını ve diğer dalları koruyun.
 
 ## Git ve temiz kurulum
@@ -38,7 +40,7 @@ npm audit --omit=dev
 
 `deploy:check`, build + statik izin listesi + `wrangler deploy --dry-run` çalıştırır. Hazır `dist` ile yalnız dry-run için `npx wrangler deploy --dry-run`. Yerel statik paket için `npm run preview:cloudflare` ve `http://127.0.0.1:8787/`. Vite önizleme için `npm run preview -- --host 127.0.0.1`. `npm run deploy` gerçek yayın komutudur ve kullanıcı onayı gerektirir. [Statik paket denetimi](scripts/verify-static-build.mjs) · [Wrangler ayarı](wrangler.jsonc)
 
-Devir sonucu 253/253, iki audit’te 0 bilinen bulgu, `deploy:verify` 12 dosya ve 3.317.608 bayt, en büyük 1.897.495 bayt. Wrangler 14 dizin girdisi okudu, binding yok ve dry-run ile çıktı. Zod `@__PURE__` yorumları ve ana JS paket boyutu build uyarısı verdi. Denetim, Free için 20.000 dosya ve tek dosya 25 MiB sınırını kullanır. Yayın öncesi güncel plan ve sınırları kontrol edin. [Cloudflare statik limitleri](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
+21 Kasım kabulünde 358/358 test, iki audit’te 0 bilinen bulgu ve 13 statik dosyada 3.330.741 bayt doğrulandı. En büyük varlık 1.909.185 bayt. Wrangler dry-run binding göstermedi. Zod `@__PURE__` yorumları ve ana JS paket boyutu build uyarısı verdi. Denetim, Free için 20.000 dosya ve tek dosya 25 MiB sınırını kullanır. Yayın öncesi güncel plan ve sınırları kontrol edin. [Cloudflare statik limitleri](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)
 
 ## Hesap ve otomatik yayın
 

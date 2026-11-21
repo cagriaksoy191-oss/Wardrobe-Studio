@@ -9,13 +9,13 @@ Bu dosya, **Wardrobe Studio** kod tabanında çalışan yazılım geliştirme aj
 - **Proje Adı:** Wardrobe Studio — Parametrik 3D/2D Gömme ve L-Köşe Gardırop Tasarım Stüdyosu.
 - **Aktif Çalışma Dizini:** `C:\dev\Wardrobe-Studio`
   - **KESİN KURAL:** Tüm dosya okuma, yazma, test ve derleme işlemleri yalnızca `C:\dev\Wardrobe-Studio` içinde yapılmalıdır. Eski OneDrive klasörlerine kesinlikle dosya yazmayın.
-- **Mevcut Durum:** **Aşama 1-5 tamamlanmıştır.** Güncel teslim ve gerçek sınırlamalar `PHASE5_VERIFICATION.md` içindedir. Eski Aşama 4 kaydı `PHASE4_VERIFICATION.md` içinde korunur. Genel denetim/refactor veya yeni ürün kapsamı kullanıcıdan ayrı talimat gelmeden başlatılmamalıdır.
+- **Mevcut durum.** Aşama 1–5 tamamlandı. [Nihai kabul](FINAL_SOFTWARE_ACCEPTANCE_REPORT.md), [üretim tabanı](FINAL_PRODUCTION_BASELINE.md) ve [üç fiziksel P0](FINAL_OPEN_RISKS_AND_PHYSICAL_VALIDATION.md) güncel durumu kaydeder. Aşama 4 ve 5 doğrulama raporları tarihsel kayıtlardır. Genel denetim, refactor veya yeni ürün kapsamı kullanıcıdan ayrı talimat gerektirir.
 
 ---
 
 ## 2. Okunması Gereken Belge Hiyerarşisi
 
-Yeni platform veya temiz klonda önce [AI_PLATFORM_HANDOFF.md](AI_PLATFORM_HANDOFF.md) dosyasını okuyun. Yetkilendirilmiş yeni klon kökü, özgün makinedeki çalışma dizini sınırının karşılığıdır. Güncel üretim tabanı, açık P0 güvenlik kapıları ve test sayımı devir belgelerinde bulunur. Aşağıdaki eski sayımlar tarihsel referanstır.
+Yeni platform veya temiz klonda önce [AI_PLATFORM_HANDOFF.md](AI_PLATFORM_HANDOFF.md) dosyasını okuyun. Yetkilendirilmiş yeni klon kökü, özgün makinedeki çalışma dizini sınırının karşılığıdır. Güncel üretim tabanı, açık P0 güvenlik kapıları ve test sayımı devir belgelerinde bulunur. Eski doğrulama raporlarının sayımları tarihsel referanstır.
 
 Yeni bir göreve başlamadan önce kök dizindeki şu belgeleri sırasıyla inceleyin:
 
@@ -30,7 +30,7 @@ Yeni bir göreve başlamadan önce kök dizindeki şu belgeleri sırasıyla ince
 ## 3. Değiştirilemez Mimari Kurallar (Architectural Invariants)
 
 1. **Tamsayı Milimetre (`integer mm`) Kuralı:**
-   - Veri modelinde (`Design`), parametrik çözücüde (`src/core/solver/`) ve ağaç mutasyonlarında (`treeMutator.ts`) tüm uzunluk, genişlik, yükseklik ve kalınlıklar **tamsayı milimetre (`Math.round`)** olarak tutulur ve hesaplanır.
+   - Veri modelindeki (`Design`) ölçüler ve çözülen kesim boyutları **tamsayı milimetredir**. Türetilen nominal panel merkezleri, D3-BASELINE-001 gereği tek ölçülü panelleri yüzlerine oturtmak için yarım milimetre olabilir.
    - Kayan noktalı (`float`) metre dönüşümü (`MM_TO_M = 0.001`) yalnızca `src/canvas/` altındaki R3F 3D/2D sahne bileşenlerinde uygulanır.
 2. **Sabit / Esnek (`Fixed / Flex`) Tamsayı Dağıtımı:**
    - Bölme genişlikleri ve hücre bölünmeleri [`distributeIntegerMm`](file:///C:/dev/Wardrobe-Studio/src/core/solver/flexSolver.ts) ile çözülür. Yuvarlama farkı (`remainderMm`) son serbest esnek öğeye eklenerek `toplam(resolvedMm) + araBölücüler === totalSpanMm` eşitliği `%100` korunur.
@@ -39,7 +39,7 @@ Yeni bir göreve başlamadan önce kök dizindeki şu belgeleri sırasıyla ince
    - 3D koordinatlar, panel kesim ebatları, çekmece kasa parçaları, kapak pivotları ve uyarılar asla `Design` içine kaydedilmez; her zaman `solveDesign(design)` (`src/core/solver/carcassSolver.ts`) ile deterministik olarak türetilir.
 4. **Paylaşımlı Dikme (`Shared Partition`) ve Parametrik Kalınlıklar:**
    - Yan yana duran `N` adet bölme (`Bay`), `N + 1` adet dikey panel (`divider`) paylaşır.
-   - Gövde/raf paneli kalınlığı (`panelThicknessMm`, varsayılan `18 mm`, desteklenen `16/18/22/25 mm`) ve arkalık kalınlığı (`backPanelThicknessMm`, varsayılan `8 mm`, desteklenen `6/8/10/18 mm`) parametriktir. Kod içinde sabit `18` veya `8` sayısal varsayımı yapmayın; her zaman `run.panelThicknessMm` ve `run.backPanelThicknessMm` değerlerini kullanın.
+   - Gövde/raf kalınlığı (`panelThicknessMm`, varsayılan 18 mm, 12–36 mm) ve arkalık kalınlığı (`backPanelThicknessMm`, varsayılan 8 mm, 3–18 mm) parametriktir. `run.panelThicknessMm` ve `run.backPanelThicknessMm` değerlerini kullanın.
 5. **L-Köşe Matematiği (Beşgen & Kör Köşe):**
    - Beşgen köşe (`diagonal`), A kolundan `diagonalArmAMm` ve B kolundan `diagonalArmBMm` tüketir. Asimetrik kol derinliklerinde (`D_A != D_B`) ön kapak açıklığı Pisagor formülüyle $\sqrt{(\text{Arm}_A - D_B)^2 + (\text{Arm}_B - D_A)^2}$ olarak hesaplanır.
    - Kör köşe (`blind`), öncelikli kolun derinliği + klapa (`runA.depthMm + fillerWidthMm`) kadar yanaşan koldan tüketir; `fillerWidthMm < 45 mm` ise çakışma hatası üretilir.
@@ -66,8 +66,8 @@ Yeni bir göreve başlamadan önce kök dizindeki şu belgeleri sırasıyla ince
 Her geliştirme adımından sonra aşağıdaki komutları `C:\dev\Wardrobe-Studio` dizininde çalıştırarak sıfır hata koşulunu doğrulayın:
 
 ```powershell
-# Birim testlerini çalıştır (Mevcut 120 test + yeni eklenen testler %100 geçmelidir)
-npm test -- --run
+# Güncel 358 test ve yeni testler CI ayarıyla geçmeli
+npm test -- --run --maxWorkers=2 --testTimeout=30000
 
 # TypeScript sıkı tip denetimi ve Vite üretim derlemesi (0 hata ile tamamlanmalıdır)
 npm run build

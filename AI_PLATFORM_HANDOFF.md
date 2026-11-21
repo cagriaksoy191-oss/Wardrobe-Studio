@@ -1,5 +1,7 @@
 # Wardrobe Studio · yapay zekâ devir rehberi
 
+**21 Kasım 2026 · güncel üretim tabanı.** `origin/main` `5044f17`, etkin Worker `c352f36f-107a-4fc5-90cc-4464dcb8367b`, Ready, %100 ve Workers Free. 358/358 uygulama testi, 12 kanonik SHA-256 ve 338 parça. WS-UX-011, MS-EXPORT-001, D3-BASELINE-001 ve sınırlı kapsamlı WS-UX-009a üretimde doğrulandı. ContactShadows kaynak ömrü düzeltmesi üretimde ve resmî performans protokolü `RESEARCHED_NOT_READY`. Üç fiziksel P0 açık. Aşağıdaki tarihli paragraflar eski adayları ve ilk yayın kayıtlarını korur. [Üretim tabanı](FINAL_PRODUCTION_BASELINE.md) · [Nihai kabul](FINAL_SOFTWARE_ACCEPTANCE_REPORT.md) · [AI bakım sırası](FINAL_MAINTENANCE_AND_AI_HANDOFF.md)
+
 **21 Kasım 2026 doğrulanmış üretim.** WS-UX-011, `23c72df` ilk uygulama yayını ve Worker `ceb5a259-89d7-48fb-a8a5-dbdac8f229b1` ile doğrulandı. 358/358 Linux testi, 12 HTTPS dosyası, 63/64/65 eşik geçişi, 130 hücre ve canlı sentetik akışlar geçti. **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**, doğrulanan büyük model kullanımında. Üç fiziksel P0 açık. [Yayın raporu](WS_UX_011_PRODUCTION_RELEASE.md)
 
 **21 Kasım 2026 yerel WS-UX-011 adayı.** `fix/ws-ux-011-marquee-interaction`, üretim tabanı `26841cc`. Büyük modellerde dikdörtgen seçim kenarları aynı renge göre bir çizimde toplanır. 22+22 Brave ölçümünde aynı sıralı 130 hücre, %15,7 daha düşük bırakma kare p95’i ve %16,3 daha düşük panel p95’i gözlendi. 358 test ve dört kanonik model geçti. **READY_FOR_RELEASE_REVIEW**. Üretim durumu için aşağıdaki tarihli kayıtlar geçerlidir. [WS-UX-011 raporu](WS_UX_011_FINAL_REMEDIATION_REPORT.md)
@@ -62,7 +64,7 @@ Node 24.16.0 referansı [.node-version](.node-version) içinde. Temiz bir çalı
 
 ## Açık fiziksel bulgular ve yerel deneyler
 
-D3-BASELINE-001 için yerel `fix/d3-baseline-001-exact-panel-centering` adayı kesin yarım ölçüyle doğrulandı. 20 nominal penetrasyon yüzey temasına dönüştü. Design ölçüleri ve kesim ebatları tamsayı kalır. Üretim tabanı ve aday imzaları ayrı belgelenmiştir. [Yerel kabul](D3_BASELINE_001_RELEASE_DECISION.md) · [Önce ve sonra](CANONICAL_GEOMETRY_BEFORE_AFTER.md)
+D3-BASELINE-001 kesin nominal panel yerleşimi `3dc5b5a` ile üretimde doğrulandı. 20 penetrasyon yüzey temasına dönüştü. Design ölçüleri ve kesim ebatları tamsayı kalır. Deneysel D3 ve B3 donanım prototipleri fiziksel doğrulama kapsamındadır. [D3-BASELINE-001 üretim kabulü](D3_BASELINE_001_PRODUCTION_RELEASE.md) · [Güncel imzalar](FINAL_PRODUCTION_BASELINE.md) · [Fiziksel deneyler](FINAL_OPEN_RISKS_AND_PHYSICAL_VALIDATION.md)
 
 WS-UX-001 beşgen raf erişimi (5,1°/110°), WS-UX-002 asimetrik beşgen ve 25 mm menteşe/askı erişimi (12,8°/110°), WS-UX-003 kör köşe çekmece stroku (49/451 mm) fiziksel doğrulama bekler. WS-UX-009a sınırlı tek kanat ve ilişkili çekmeceler kapsamında üretimde doğrulandı. Desteklenmeyen hareket zincirleri manuel kalır. WS-UX-011 için doğrulanan büyük seçim akışı üretimde kabul edildi. [WS-UX-011 yayını](WS_UX_011_PRODUCTION_RELEASE.md)
 

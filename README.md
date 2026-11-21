@@ -5,6 +5,8 @@ Tarayıcıda çalışan parametrik 3D/2D düz ve L-köşe gardırop tasarım st�
 - İlk devir ve güvenli başlangıç · [AI_PLATFORM_HANDOFF.md](AI_PLATFORM_HANDOFF.md)
 - Yeni bir yapay zekâ konuşmasına yapıştırılacak talimat · [START_HERE_NEW_AI.md](START_HERE_NEW_AI.md)
 - Tamamlanan aşamalar ve güncel teslim · [PROJECT_FINAL_HANDOFF.md](PROJECT_FINAL_HANDOFF.md)
+- Nihai kabul ve canlı sürüm · [Kabul raporu](FINAL_SOFTWARE_ACCEPTANCE_REPORT.md) · [Üretim tabanı](FINAL_PRODUCTION_BASELINE.md)
+- Fiziksel doğrulama ve sonraki bakım · [Açık riskler](FINAL_OPEN_RISKS_AND_PHYSICAL_VALIDATION.md) · [Bakım ve AI devri](FINAL_MAINTENANCE_AND_AI_HANDOFF.md)
 - Kaynak dosyaları ve ilgili testler · [CODEBASE_MAP.md](CODEBASE_MAP.md)
 - Geliştirme, yayın ve geri alma · [DEVELOPMENT_AND_RELEASE_GUIDE.md](DEVELOPMENT_AND_RELEASE_GUIDE.md)
 - Üretim, ölçü ve veri kuralları · [ENGINEERING_INVARIANTS.md](ENGINEERING_INVARIANTS.md)

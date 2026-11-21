@@ -1,5 +1,7 @@
 # Mühendislik değişmezleri
 
+21 Kasım 2026 itibarıyla 358 uygulama testi ve dört `POST_D3_BASELINE_001` modelinde 12 SHA-256, 338 fiziksel parça ve 20 nominal panel teması doğrulandı. [Üretim tabanı ve güncel imzalar](FINAL_PRODUCTION_BASELINE.md) · [Fiziksel kabul sınırları](FINAL_OPEN_RISKS_AND_PHYSICAL_VALIDATION.md)
+
 Her değişiklikte ilgili otomatik kontrolleri ve kullanıcıya yansıyan akışı çalıştırın. Bu belge [AGENTS.md](AGENTS.md), [ana plan](wardrobe_studio_master_plan.md) ve [ek gereksinimleri](wardrobe_studio_additional_requirements.md) tamamlar.
 
 | Kural | Uygulama ve doğrulama |
