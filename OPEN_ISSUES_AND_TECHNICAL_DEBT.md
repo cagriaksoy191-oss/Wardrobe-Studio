@@ -48,6 +48,8 @@ Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe
 
 ## WS-UX-011 · P2 · büyük kutu seçimi · kısmi
 
+- **21 Kasım 2026 yerel aday `READY_FOR_RELEASE_REVIEW`.** Büyük modelde toplu kenar çizimiyle bırakma kare p95’i 25,4→21,4 ms, ilk tıklanabilir panel p95’i 55,2→46,2 ms. 44/44 sürüklemede aynı sıralı 130 hücre, normal model kısa kontrolü ve 358 test geçti. Tek Radeon 610M ortamı, panel p95’inin bir blokta ters yönde oynaması ve yaklaşık %20 hedefinin altında kalan kazanım kabul raporunda yer alıyor. Üretim bulgusu açık. [WS-UX-011 aday raporu](WS_UX_011_FINAL_REMEDIATION_REPORT.md)
+
 - Tekrar: ayrı profilde 14 bölmeli büyük L, 144 çözülmüş hücre, 130 beklenen seçim, 1600×900 CSS ve DPR 1 referansıyla kutu seçimini etkinleştirin. Aynı kamera/işaretçi yoluyla sürükleme, bırakma ve bağlamsal panelin hazır olmasını birlikte ölçün. Hareket CPU optimizasyonu üretimdedir. Çok sayıda seçimde bırakma gecikmesi sürüyor.
 - Geçici yol: seçim alanını daraltın veya küçük gruplar halinde seçin.
 - İlk deney (`MARQUEE_TRACE_AND_REMEDIATION.md`): `App` aboneliğinde geçici hover önizlemesi daraltıldı. Sürükleme p95 iyileşti. Bırakma kare p95 iki turda **76,3→122,5 ms**, **78,4→125,2 ms** olduğundan yama geri alındı.
