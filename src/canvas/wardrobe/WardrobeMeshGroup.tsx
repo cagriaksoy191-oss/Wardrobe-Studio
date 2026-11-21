@@ -1,4 +1,4 @@
-import { Edges } from '@react-three/drei';
+import { Edges, Line } from '@react-three/drei';
 import { type ThreeEvent, useFrame } from '@react-three/fiber';
 import { memo, useMemo, useRef } from 'react';
 import * as THREE from 'three';
@@ -29,6 +29,7 @@ import { motionRuntime } from '../scene/MotionController';
 import { SlidingLeafInteraction, slidingAsDoor } from './SlidingLeafInteraction';
 import { slidingCellHasOpening } from '../../core/analysis/motionConstraints';
 import { useWardrobeStore } from '../../store/useWardrobeStore';
+import { appendCellBoxOutline, cellBoxSizeMetres } from './boxSelectionOutline';
 
 const MM_TO_M = 0.001;
 // Z-fighting'i önlemek için çakışık yüzeylerde 0.1 mm mikro daraltma
@@ -37,6 +38,18 @@ const COPLANAR_INSET_M = 0.0001;
 // Three.js Mesh.prototype.raycast referansını koru (undefined geçildiğinde prototip metodunun ezilmesini önler)
 const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => null;
 const MESH_RAYCAST: THREE.Object3D['raycast'] = THREE.Mesh.prototype.raycast;
+const CELL_HIGHLIGHT_WIDTH = 2.2;
+// Choose the rendering path for the solved model so it stays stable throughout a drag.
+const CELL_OUTLINE_BATCH_MIN_MODEL_SIZE = 64;
+
+function cellHighlightColor(
+  conflict: boolean, resolved: boolean, hovered: boolean, selected: boolean,
+) {
+  if (conflict) return '#f87171';
+  if (resolved) return '#34d399';
+  if (hovered) return '#38bdf8';
+  return selected ? '#f59e0b' : undefined;
+}
 
 interface SpringTrackState {
   pos: number; // 0 (kapalı) .. 1 (tam açık)
@@ -118,6 +131,30 @@ export function WardrobeMeshGroup({
     () => panels.filter((p) => !p.animatedUnitId),
     [panels]
   );
+
+  const batchBoxOutlines = cells.length >= CELL_OUTLINE_BATCH_MIN_MODEL_SIZE;
+  const { cellVolumes, boxOutlines } = useMemo(() => {
+    const boxOutlines = new Map<string, [number, number, number][]>();
+    const selected = new Set(selectedCellIds);
+    const hovered = new Set(hoveredMarqueeCellIds);
+    const neighbors = new Set(resizeDraft?.neighborCellIds);
+    const hasConflict = Boolean(resizeDraft && (resizeDraft.conflictOverlapMm > 0 || resizeDraft.exceedsBoundary));
+    const isResolved = Boolean(resizeDraft && resizeDraft.conflictOverlapMm === 0 && !resizeDraft.exceedsBoundary);
+    const cellVolumes = doorEditorMode ? [] : cells.map(cell => {
+      const isSelected = selected.has(cell.id) || cell.id === selectedCellId;
+      const isMarqueeHovered = hovered.has(cell.id);
+      const isConflictNeighbor = hasConflict && neighbors.has(cell.id);
+      const isResolvedNeighbor = isResolved && neighbors.has(cell.id);
+      const color = cellHighlightColor(isConflictNeighbor, isResolvedNeighbor, isMarqueeHovered, isSelected);
+      if (batchBoxOutlines && color && (cell.polygonXZMm?.length ?? 0) < 3) {
+        const points = boxOutlines.get(color) ?? [];
+        if (!boxOutlines.has(color)) boxOutlines.set(color, points);
+        appendCellBoxOutline(points, cell);
+      }
+      return { cell, isSelected, isMarqueeHovered, isConflictNeighbor, isResolvedNeighbor };
+    });
+    return { cellVolumes, boxOutlines };
+  }, [batchBoxOutlines, cells, doorEditorMode, hoveredMarqueeCellIds, resizeDraft, selectedCellId, selectedCellIds]);
 
   return (
     <group>
@@ -243,36 +280,21 @@ export function WardrobeMeshGroup({
           })}
 
       {/* 5. SEÇİLEBİLİR İÇ BÖLME / RAF ARALIĞI / KÖŞE HACMİ KATMANI */}
-      {!doorEditorMode &&
-        cells.map((cell) => {
-          const isSelected =
-            selectedCellIds.includes(cell.id) || cell.id === selectedCellId;
-          const isMarqueeHovered = hoveredMarqueeCellIds.includes(cell.id);
-          const isConflictNeighbor =
-            resizeDraft !== null &&
-            (resizeDraft.conflictOverlapMm > 0 || resizeDraft.exceedsBoundary) &&
-            resizeDraft.neighborCellIds.includes(cell.id);
-          const isResolvedNeighbor =
-            resizeDraft !== null &&
-            resizeDraft.conflictOverlapMm === 0 &&
-            !resizeDraft.exceedsBoundary &&
-            resizeDraft.neighborCellIds.includes(cell.id);
-
-          return (
-            <CellVolume
-              key={cell.id}
-              cell={cell}
-              isSelected={isSelected}
-              isMarqueeHovered={isMarqueeHovered}
-              isConflictNeighbor={isConflictNeighbor}
-              isResolvedNeighbor={isResolvedNeighbor}
-              doorVisibilityMode={doorVisibilityMode}
-              openDoorIds={openDoorIds}
-              onSelectCell={onSelectCell}
-              onCellPointerDown={onCellPointerDown}
-            />
-          );
-        })}
+      {cellVolumes.map(volume => (
+        <CellVolume
+          key={volume.cell.id}
+          {...volume}
+          batchBoxOutlines={batchBoxOutlines}
+          doorVisibilityMode={doorVisibilityMode}
+          openDoorIds={openDoorIds}
+          onSelectCell={onSelectCell}
+          onCellPointerDown={onCellPointerDown}
+        />
+      ))}
+      {/* One non-interactive outline per color for rectangular cells. */}
+      {Array.from(boxOutlines, ([color, points]) => (
+        <Line key={color} segments points={points} color={color} lineWidth={CELL_HIGHLIGHT_WIDTH} raycast={NOOP_RAYCAST} />
+      ))}
 
       {/* 5.5 YÖNLÜ BOYUTLANDIRMA HAREKETLİ SINIR / ÇAKIŞMA HACMİ ÖNİZLEMESİ */}
       {resizeDraft?.conflictBoxWorldCenterMm && resizeDraft.conflictBoxWorldSizeMm && (
@@ -482,6 +504,7 @@ interface SelectableCellVolumeProps {
   isMarqueeHovered: boolean;
   isConflictNeighbor: boolean;
   isResolvedNeighbor: boolean;
+  batchBoxOutlines: boolean;
   doorVisibilityMode: DoorVisibilityMode;
   openDoorIds: Record<string, boolean>;
   onSelectCell: (cellId: string, bayId: string, additive?: boolean) => void;
@@ -494,6 +517,7 @@ function SelectableCellVolume({
   isMarqueeHovered,
   isConflictNeighbor,
   isResolvedNeighbor,
+  batchBoxOutlines,
   doorVisibilityMode,
   openDoorIds,
   onSelectCell,
@@ -540,16 +564,16 @@ function SelectableCellVolume({
           ? 0.16
           : 0.0;
 
-  const edgeColor = isConflictNeighbor
-    ? '#f87171'
-    : isResolvedNeighbor
-      ? '#34d399'
-      : isMarqueeHovered
-        ? '#38bdf8'
-        : '#f59e0b';
-
-  const showHighlightEdges =
-    isSelected || isMarqueeHovered || isConflictNeighbor || isResolvedNeighbor;
+  const edgeColor = cellHighlightColor(isConflictNeighbor, isResolvedNeighbor, isMarqueeHovered, isSelected);
+  const highlight = edgeColor && (
+    <Edges
+      scale={1}
+      threshold={15}
+      color={edgeColor}
+      lineWidth={CELL_HIGHLIGHT_WIDTH}
+      raycast={NOOP_RAYCAST}
+    />
+  );
 
   const polygonExtrudeGeom = useMemo(() => {
     if (!cell.polygonXZMm || cell.polygonXZMm.length < 3) return null;
@@ -602,15 +626,7 @@ function SelectableCellVolume({
           opacity={fillOpacity}
           depthWrite={false}
         />
-        {showHighlightEdges && (
-          <Edges
-            scale={1}
-            threshold={15}
-            color={edgeColor}
-            lineWidth={2.2}
-            raycast={NOOP_RAYCAST}
-          />
-        )}
+        {highlight}
       </mesh>
     );
   }
@@ -620,11 +636,7 @@ function SelectableCellVolume({
     cell.worldCenterMm[1] * MM_TO_M,
     cell.worldCenterMm[2] * MM_TO_M,
   ];
-  const sizeM: [number, number, number] = [
-    Math.max(0.02, cell.worldSizeMm[0] * MM_TO_M - 0.004),
-    Math.max(0.02, cell.worldSizeMm[1] * MM_TO_M - 0.002),
-    Math.max(0.02, cell.worldSizeMm[2] * MM_TO_M - 0.004),
-  ];
+  const sizeM = cellBoxSizeMetres(cell);
 
   return (
     <mesh
@@ -659,15 +671,7 @@ function SelectableCellVolume({
         opacity={fillOpacity}
         depthWrite={false}
       />
-      {showHighlightEdges && (
-        <Edges
-          scale={1}
-          threshold={15}
-          color={edgeColor}
-          lineWidth={2.2}
-          raycast={NOOP_RAYCAST}
-        />
-      )}
+      {!batchBoxOutlines && highlight}
     </mesh>
   );
 }
