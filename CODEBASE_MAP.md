@@ -270,6 +270,7 @@ C:\dev\Wardrobe-Studio\
   - `Çoklu Seçim Aracı` (`multiSelectToolActive`) açıkken veya `Shift` tuşu basılıyken ya da zaten seçili bir hücrenin üzerinden sürükleme başlatıldığında `doesCellIntersectScreenRect` çalışır; çerçeve içine giren görünür hücreler canlı olarak `hoveredMarqueeCellIds` ile vurgulanır ve fare bırakıldığında `setSelectedCells` ile seçilir.
 
 ### 4.2. `WardrobeMeshGroup.tsx` — 3D Geometri, Raycast Önceliği ve Kinematik Animasyonlar
+- **Kutu seçimi kenarları.** 64 veya daha fazla çözülmüş hücreli modellerde dikdörtgen kutuların kenarları renk başına bir Drei `Line` içinde çizilir. [boxSelectionOutline.ts](src/canvas/wardrobe/boxSelectionOutline.ts) kutu başına 12 segmentin dünya noktalarını üretir. Küçük modeller ve poligon kenarlar mevcut `Edges` yolunu kullanır. Seçim çizgilerinde `NOOP_RAYCAST` etkindir. [Eşik ve üretim doğrulaması](WS_UX_011_PRODUCTION_RELEASE.md)
 - **`NOOP_RAYCAST` Güvenliği:** Dosya başında `const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => {};` tanımlıdır. Tüm vurgu kutuları, tel kafesler, LED şeritler, kıyafet önizlemeleri ve çakışma önizleme kutuları `raycast={NOOP_RAYCAST}` kullanır.
 - **Hücre Tıklama ve Kapak Önceliği:**
   - `DoorLeafAnimated` bileşeninde kapaklara tıklandığında `e.stopPropagation()` çağrılır:

@@ -1,5 +1,7 @@
 # Wardrobe Studio · proje teslim durumu
 
+**21 Kasım 2026 doğrulanmış üretim.** WS-UX-011 ilk uygulama yayını `23c72df`, Cloudflare build `5ea6e18c-10cb-4681-a179-f30d874bfab7`, Worker `ceb5a259-89d7-48fb-a8a5-dbdac8f229b1`. Ready, %100, Workers Free. 358 test, canlı 130 hücre seçimi, normal model, güvenli hareket ve üç fiziksel P0 üretim kilidi doğrulandı. [WS-UX-011 yayın raporu](WS_UX_011_PRODUCTION_RELEASE.md)
+
 **21 Kasım 2026 yerel WS-UX-011 adayı.** Büyük modellerde renk başına toplu seçim çizimi seçimin sırasını, davranışını ve kanonik üretim verisini korudu. 22+22 ölçümde bırakma kare p95’i 25,4→21,4 ms, panel p95’i 55,2→46,2 ms. 358 test ve gerçek tarayıcı kabulü geçti. **READY_FOR_RELEASE_REVIEW**. Üretim onayı ayrı. [WS-UX-011 raporu](WS_UX_011_FINAL_REMEDIATION_REPORT.md)
 
 **17 Kasım 2026 doğrulanmış üretim.** ContactShadows kaynak ömrü düzeltmesi `ddfc3a5`, `d6dcabd` ilk uygulama sürümüyle Workers Free üzerinde yayımlandı. 354/354 Linux testi, 12 HTTPS dosyası ve gerçek tarayıcıda Sunum Modu, kamera, LED, güvenli hareket, kayıt ve üretim çıktıları doğrulandı. Resmî Radeon LED protokolü `RESEARCHED_NOT_READY` olarak kapatıldı. Yayın kullanıcının açık mühendislik risk kabulüne dayanır. Üç fiziksel P0 ve WS-UX-011 açık. [WebGL üretim raporu](WEBGL_CONTACT_SHADOWS_PRODUCTION_RELEASE.md)
@@ -48,10 +50,10 @@ Bu devirde yeniden çalıştırılanlar: temiz `npm ci`, 18 dosyada 253/253 Vite
 ## Gelecekteki çalışma sırası
 
 1. Güvenli başlangıç için temiz klonda test/build ve dört kanonik tasarımın imzalarını doğrulayın.
-2. WS-UX-011 yerel adayını 21 Kasım ölçümleri ve işlev kanıtıyla inceleyin. Sunum Modu için normal kaynak ömrü ve işlev regresyon kontrollerini sürdürün. Kapanan Radeon LED araştırma serisini yeniden başlatmayın.
+2. WS-UX-011 için 63/64/65 eşik, büyük ve normal model seçimi ile Sunum Modu kaynak ömrü kontrollerini normal regresyon kapsamına alın.
 3. WS-UX-009a'nın üretimde doğrulanmış sınırlı sırasını koruyun; desteklenmeyen park yollarında manuel kurtarmayı sürdürün.
 4. WS-UX-001/002/003 için donanım, tolerans, yük ve gerçek erişim onayını tamamlayın. Fiziksel kabul beklerken üretim kapıları korunur.
-5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Üç fiziksel P0 ve kısmi WS-UX-011 bu sırada izlenir.
+5. Güvenilir otomatik kontrollerin ardından kullanıcı kendi tasarım iş akışıyla kabul testi yapar. Açık üç fiziksel P0 bu sırada izlenir.
 
 ## Sonraki kabul
 

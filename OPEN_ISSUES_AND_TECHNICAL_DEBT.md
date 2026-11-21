@@ -1,5 +1,7 @@
 # Açık kullanıcı bulguları ve teknik borç
 
+**21 Kasım 2026 güncel durum.** Üç fiziksel P0 açık. WS-UX-011 doğrulanan büyük model kutu seçiminde **FIXED_AND_PRODUCTION_BROWSER_VERIFIED**. 64 hücre eşiği ve küçük model çizim yolu doğrulandı. Performans değerleri Brave / Radeon 610M ölçümüne aittir. [WS-UX-011 yayın raporu](WS_UX_011_PRODUCTION_RELEASE.md)
+
 **17 Kasım 2026 güncel durum.** WS-UX-001, WS-UX-002 ve WS-UX-003 fiziksel P0 olarak açık. WS-UX-011 kısmi kapanmış P2 olarak açık. ContactShadows kaynak ömrü düzeltmesi üretimde doğrulandı. Normal Brave Radeon 610M LED performans protokolü `RESEARCHED_NOT_READY` olarak kapatıldı. Üretim yayını bu performans belirsizliğinin açık mühendislik risk kabulüne dayanır. [WebGL üretim raporu](WEBGL_CONTACT_SHADOWS_PRODUCTION_RELEASE.md)
 
 **15 Kasım 2026 tarihsel üretim kabulü.** MS-EXPORT-001, GitHub `main` `c57a4b2` ve Worker `9ce09ac8-d627-421a-88a7-3f6b7a66e0d5` ile Ready, %100 trafikte ve canlı tarayıcıda doğrulandı. Üç fiziksel P0 (WS-UX-001/002/003), D3-BASELINE-001 nominal yerleşim bulgusu, WS-UX-011 ve WebGL kaynak ömrü borcu açık. [Üretim kabulü](MS_EXPORT_001_PRODUCTION_RELEASE.md)
@@ -46,7 +48,9 @@ Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe
 - **14 Kasım yerel aday:** `feat/safe-motion-recovery`, taban `17ed1fe`. “Güvenli sırayla kapat” yalnız doğrulanmış planla ve kullanıcı başlatmasıyla çalışır. Bilinen 1458,05 / 86,05 mm engeli; 1964 mm park → üç çekmeceyi sırayla 0 → kanadı 0 akışıyla çözüldü. 284 test, değişmeyen dört kanonik imza, masaüstü/mobil viewport, iptal/manuel müdahale/yeni sahne kabulü doğrulandı. **IMPLEMENTED_AND_BROWSER_VERIFIED_PENDING_RELEASE**; üretimde açık durum devam eder. [Tam rapor](SAFE_MOTION_RECOVERY_IMPLEMENTATION_REPORT.md)
 - Sınır: tek sürgü ve kendi kapanışını engelleyen çekmeceler. Diğer kanatları taşıyan genel planlayıcı yok. Güvenli park yolu bulunamayan zincirler manuel kalır. Üç P0, WS-UX-011 ve WebGL borcu bu adayda çözülmüş sayılmaz.
 
-## WS-UX-011 · P2 · büyük kutu seçimi · kısmi
+## WS-UX-011 · P2 · büyük kutu seçimi · doğrulanan kapsamda kapalı
+
+- **21 Kasım 2026 üretim kabulü.** `23c72df`, Worker `ceb5a259-89d7-48fb-a8a5-dbdac8f229b1`, Ready / %100. 130 hücre ve normal model gerçek HTTPS kabulü geçti. Aynı 64 hücreli sahnede tekrarlı seçim kaynak sayacı sabit kaldı. Aşağıdaki maddeler önceki deneylerin tarihsel kaydıdır. [Yayın kabulü](WS_UX_011_PRODUCTION_RELEASE.md)
 
 - **21 Kasım 2026 yerel aday `READY_FOR_RELEASE_REVIEW`.** Büyük modelde toplu kenar çizimiyle bırakma kare p95’i 25,4→21,4 ms, ilk tıklanabilir panel p95’i 55,2→46,2 ms. 44/44 sürüklemede aynı sıralı 130 hücre, normal model kısa kontrolü ve 358 test geçti. Tek Radeon 610M ortamı, panel p95’inin bir blokta ters yönde oynaması ve yaklaşık %20 hedefinin altında kalan kazanım kabul raporunda yer alıyor. Üretim bulgusu açık. [WS-UX-011 aday raporu](WS_UX_011_FINAL_REMEDIATION_REPORT.md)
 
@@ -72,6 +76,6 @@ Tarihsel başlangıç envanteri (13 Kasım; aşağıdaki beşli sayım bu tarihe
 
 ## Sonraki ajanın öncelikleri
 
-Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. WS-UX-009a'nın doğrulanmış sınırlarını ve manuel kurtarmayı koruyun. WS-UX-011 için bırakma gecikmesi, WS-UX-001/002/003 için fiziksel mühendislik ve gerçek iş akışı kabulü açıktır. WebGL doğrulaması normal bakım ve regresyon kontrollerinde kalır. Yeni yayınlar ayrı kullanıcı yetkisi gerektirir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
+Temiz klonda test ve dört kanonik örnek doğrulamasıyla başlayın. WS-UX-009a'nın doğrulanmış sınırlarını ve manuel kurtarmayı koruyun. WS-UX-001/002/003 için fiziksel mühendislik ve gerçek iş akışı kabulü açıktır. Kutu seçimi ve WebGL normal bakım ve regresyon kontrollerinde izlenir. Yeni yayınlar ayrı kullanıcı yetkisi gerektirir. [Kabul koşulları](PROJECT_FINAL_HANDOFF.md)
 
 Yerel ham izler, profiller ve araştırma raporları Git klonunun parçası değildir. Bu belge kararları, ölçüm sınırlarını ve tekrar adımlarını saklar. Fiziksel üretim kapıları ancak doğrulanmış donanım ve atölye kabulüyle yeniden değerlendirilir.
