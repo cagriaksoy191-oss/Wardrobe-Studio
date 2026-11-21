@@ -1,0 +1,17 @@
+# Wardrobe Studio · açık riskler ve fiziksel doğrulama
+
+**PHYSICAL_PRODUCTION_VALIDATION_PENDING** · 21 Kasım 2026. Üç fiziksel P0 modelinde tam üretim CSV/ZIP kilitleri etkin. Tanısal PDF, SVG ve HTML paftaları engelleri ve üretim dışı damgayı gösterir. Referans değerler simülasyon ve gerçek uygulama çıktılarından gelir.
+
+| Açık sorun | Mevcut semptom | Fiziksel kabul deneyi |
+|---|---|---|
+| WS-UX-001 · P0 · beşgen 18/8 | Komşu kapaklar kapalıyken 5,1° / 110° hareket. Raf girişleri 7/7/7/0 mm, hedef 310 mm. | Uygun tam menteşe, taban plakası, delik ve kapak örtüşmesi konfigürasyonuyla 1:1 köşe kurun. Yüklü kapakta süpürmeyi, komşu ön yüzleri, tutamakları, elle erişimi ve tüm raflarda gerçek geçişi ölçün. |
+| WS-UX-002 · P0 · asimetrik beşgen 25/4 | 600/480 mm kollarda 12,8° / 110°. Raf girişleri 14/14/14/7 mm, hedef 310 mm. Askılık erişimi ve menteşe uyumluluğu açık. | 25 mm kanat ve 4 mm arkalıkla 1:1 kurulum. Menteşe ve plaka üreticisinin taşıma ve montaj değerlerini doğrulayın. Gerçek askı ve dolu giysiyle iki kolu, rafları ve ters hareketi ölçün. |
+| WS-UX-003 · P0 · kör köşe | Üç A2 iç çekmecede 49/451 mm strok, 1102/1706 mm geçiş. Askı erişimi de kısıtlı. | Üretici rayı, kılavuz ve stoperlerle 1:1 cephe kurun. Rayların gerçek park alanını, yüklü üç çekmecenin tam strokunu, askılığın kullanımını, ters sıralamayı, kanat sarkmasını ve el boşluklarını kaydedin. |
+
+Üç deneyde de donanımın üretici ürün kodunu, izin verilen kapak ölçüsü/ağırlığını, ray yükünü, montaj deliklerini, minimum açıklıklarını ve ayar aralığını belgeleyin. Gerçek malzeme ve yükle tolerans birikimini, tekrarlı açma-kapamayı, teması ve sıkışma noktalarını kontrol edin. Ölçüleri, yükleri, fotoğraf/video kanıtını ve atölye kabulünü ayrı kaydedin. Üretim kilidini kaldırmayı bu fiziksel kanıttan sonraki ayrı karar olarak ele alın. D3 ve B3 deneysel CAD alternatifleri araştırma kapsamında kalır. [Açık sorun envanteri](OPEN_ISSUES_AND_TECHNICAL_DEBT.md) · [Fizibilite](CLOSED_CORNER_FEASIBILITY.md) · [Donanım kontrol listesi](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/blob/f8a7e7f72222a996d746a78c767be2f497a102b8/CORNER_PHYSICAL_VALIDATION_CHECKLIST.md) · [D3 prototip şartnamesi](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/blob/3cc309c616ec95b382487e535ddc53d9cdcecca4/D3_PHYSICAL_PROTOTYPE_SPEC.md) · [B3 deneysel CAD](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/blob/51710d27e8d1769e1dbd229f49aa0406bd422c49/B3_EXPERIMENTAL_CAD_REPORT.md)
+
+## Sürdürülen yazılım riskleri
+
+- ContactShadows kaynak ömrü düzeltmesi üretimde ve doğrulanmış. Normal Brave/Radeon 610M LED resmî performans protokolü **`RESEARCHED_NOT_READY`**. Son deneyde 14/16 geçerli çift kaldı. 15. çiftin üretim penceresi ve 16. çiftte iki pencere odaksız olduğu için elendi. Ortalama kare p95 farkı −0,693 ms, betimleyici. Önceki altı çiftin tek taraflı %95 üst sınırı +2,034 ms idi. Yayın bu performans belirsizliğinin açık mühendislik risk kabulüne dayanıyor. [WebGL yayın raporu](WEBGL_CONTACT_SHADOWS_PRODUCTION_RELEASE.md)
+- WS-UX-011 doğrulanan büyük model ve kutu seçimi kapsamında kapalı. Panel p95’teki yaklaşık %16 iyileşme geçmiş Radeon 610M ölçümüne aittir. [WS-UX-011 yayın raporu](WS_UX_011_PRODUCTION_RELEASE.md)
+- Büyük Vite ana paketi uyarısı sürüyor. 390 px kontrolü masaüstü Chromium mobil emülasyonunda yapıldı. Tarayıcı verisi origin ve profil bazındadır. Kullanıcı tarafından dışa aktarılan JSON, farklı profil/adres veya tarayıcı verisi kaybı durumunda aktarım için kullanılabilir. [Bakım ve devir](FINAL_MAINTENANCE_AND_AI_HANDOFF.md)
