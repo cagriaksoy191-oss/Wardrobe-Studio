@@ -35,13 +35,13 @@ describe('Phase 3 Shell — VF-01 / VF-08 / PE-05 / PE-12 Mobile Portrait & Land
 });
 
 describe('Phase 3 Shell — VF-02 WCAG 1.4.4 150% Text-Scale Header', () => {
-  it('uses em-based responsive header breakpoints and min-width: 0 tracks while preserving 1660px compatibility', () => {
+  it('uses flex-wrap header with rem-floored .studio-brand so 150% html font-size wraps cleanly without crushing brand', () => {
     expect(cssSource).toMatch(/@media\s*\(max-width:\s*1660px\),\s*\(max-width:\s*104em\)/);
     expect(cssSource).toContain('max-width: 84em');
     expect(cssSource).toContain('max-width: 72.5em');
     expect(cssSource).toContain('max-width: 62.5em');
-    expect(cssSource).toMatch(/\.studio-header\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
-    expect(cssSource).toMatch(/\.studio-brand\s*\{[\s\S]*min-width:\s*0;[\s\S]*overflow:\s*hidden;/);
+    expect(cssSource).toMatch(/\.studio-header\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-wrap:\s*wrap;/);
+    expect(cssSource).toMatch(/\.studio-brand\s*\{[\s\S]*flex:\s*1 1 12rem;[\s\S]*min-width:\s*12rem;/);
   });
 });
 
@@ -62,9 +62,11 @@ describe('Phase 3 Shell — VF-03 / VF-06 / WCAG 2.4.1 Accessible Modal Drawers,
     expect(appSource).toContain('handleTrapKeyDown');
   });
 
-  it('moves focus into #studio-history-menu immediately on open so focus never drops to body', () => {
+  it('moves focus into #studio-history-menu immediately on open (sync useLayoutEffect + pointer mousedown guard) so focus never drops to body', () => {
     expect(appSource).toContain('id="studio-history-menu"');
     expect(appSource).toContain('historyCloseButtonRef');
+    expect(appSource).toContain('useLayoutEffect(');
+    expect(appSource).toContain('onMouseDown={(e) => e.preventDefault()}');
     expect(appSource).toMatch(/if\s*\(!showHistoryMenu\)\s*return;[\s\S]*historyCloseButtonRef\.current/);
   });
 });

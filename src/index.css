@@ -130,15 +130,15 @@
   margin-top: 0.25rem;
 }
 
-/* Application Header (IA-01 & IA-11) — em-aware for WCAG 1.4.4 text scaling up to 200% */
+/* Application Header (IA-01 & IA-11) — flex-wrap + rem floor so 100% stays 1-row & 150%+ text-scale never crushes brand (VF-02) */
 .studio-header {
   position: relative;
   z-index: 70;
-  display: grid;
-  grid-template-areas: "brand views fronts session";
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: 0.45rem 0.5rem;
   padding: 0.5rem 0.75rem;
 }
 .studio-header > * {
@@ -146,7 +146,8 @@
 }
 .studio-brand {
   grid-area: brand;
-  min-width: 0;
+  flex: 1 1 12rem;
+  min-width: 12rem;
   overflow: hidden;
 }
 .studio-brand h1 {
@@ -156,12 +157,14 @@
 }
 .studio-views {
   grid-area: views;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   min-height: 34px;
 }
 .studio-front-toolbar {
   grid-area: fronts;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
 }
@@ -172,6 +175,8 @@
 }
 .studio-session {
   grid-area: session;
+  flex: 0 0 auto;
+  margin-left: auto;
   justify-self: end;
   display: flex;
   align-items: center;
@@ -303,12 +308,15 @@
   }
 }
 
-/* Compact door/drawer open-all buttons to icons (with aria-label) on mid desktop widths & scaled text (62.5625em–84em) */
+/* Compact door/drawer open-all buttons to icons (with aria-label) on mid desktop widths (62.5625em–84em) */
 @media (min-width: 62.5625em) and (max-width: 84em) {
   .studio-header {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
     gap: 0.35rem;
     padding: 0.45rem 0.55rem;
+  }
+  .studio-brand {
+    flex: 1 1 11rem;
+    min-width: 11rem;
   }
   .studio-front-toolbar > button {
     justify-content: center;
@@ -321,6 +329,10 @@
 }
 
 @media (min-width: 62.5625em) and (max-width: 72.5em) {
+  .studio-brand {
+    flex: 1 1 9.5rem;
+    min-width: 9.5rem;
+  }
   .studio-brand h1 {
     font-size: 0.75rem;
   }
@@ -367,13 +379,17 @@
   }
 }
 
-/* Stacked multi-row header for tablet widths & 150%+ text-scale desktop (<= 62.5em, i.e., 1000px@100% / 1500px@150%) */
+/* Stacked multi-row header for tablet widths (<= 62.5em / 1000px) */
 @media (max-width: 62.5em) {
   .studio-header {
+    display: grid;
     grid-template-areas: "brand session" "views views" "fronts fronts";
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.35rem;
     padding: 0.4rem 0.5rem;
+  }
+  .studio-brand {
+    min-width: 0;
   }
   .studio-views > button { flex: 1; justify-content: center; min-width: 0; }
   .studio-front-toolbar > :first-child { flex: 1; justify-content: center; }
@@ -420,6 +436,7 @@
 /* Single-row sleek 52px mobile header, 48px thumb-friendly bottom dock & collapsed scene/analysis toolbars (VF-01, VF-08, PE-05, PE-12) */
 @media (max-width: 640px), (max-height: 500px) {
   .studio-header {
+    display: grid;
     grid-template-areas: "brand session";
     grid-template-columns: minmax(0, 1fr) auto;
     min-height: 52px;
@@ -427,6 +444,7 @@
     padding: 0.25rem 0.4rem;
   }
   .studio-brand {
+    min-width: 0;
     gap: 0.4rem;
   }
   .studio-brand-mark {

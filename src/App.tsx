@@ -27,7 +27,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   HANDLE_FINISH_CATALOG,
   HANDLE_STYLE_CATALOG,
@@ -463,11 +463,17 @@ export function App() {
   }, [isCompactViewport, compactPanel, introDestination]);
 
   // Move focus directly into İşlem Geçmişi menu on open so focus never drops to <body> (VF-06)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!showHistoryMenu) return;
-    requestAnimationFrame(() => {
-      (historyCloseButtonRef.current ?? historyMenuRef.current)?.focus();
-    });
+    const focusHistory = () => {
+      const target = historyCloseButtonRef.current ?? historyMenuRef.current;
+      if (target && !historyMenuRef.current?.contains(document.activeElement)) {
+        target.focus();
+      }
+    };
+    focusHistory();
+    const timer = window.setTimeout(focusHistory, 0);
+    return () => window.clearTimeout(timer);
   }, [showHistoryMenu]);
 
   const focusHistoryTrigger = () => {
@@ -1307,6 +1313,7 @@ export function App() {
               aria-expanded={showHistoryMenu}
               aria-controls="studio-history-menu"
               aria-label={`İşlem geçmişi (${historyPast.length} geri, ${historyFuture.length} ileri adım)`}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 setShowHistoryMenu((open) => !open);
                 setShowTools(false);
