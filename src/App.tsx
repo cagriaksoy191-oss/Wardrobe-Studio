@@ -25,6 +25,7 @@ import {
   Undo2,
   Unlock,
   Upload,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -44,7 +45,8 @@ import {
 import { type BlankDesignOptions, SAMPLE_DESIGNS } from './core/presets/sampleDesigns';
 import type {
   BaseFinishStyle,
-  BayFrontMode,
+  Design,
+  Front,
   HandleFinishId,
   HandleStyleId,
   InsertType,
@@ -52,15 +54,27 @@ import type {
   LayoutKind,
   LedColorTempId,
   OwnerType,
+  ResolvedBay,
+  ResolvedDoorLeaf,
+  ResolvedSlidingLeaf,
   ServiceItemSpec,
   SideFinishStyle,
   TopFinishStyle,
 } from './core/schema/types';
+import { DEFAULT_PROFILES } from './core/analysis/studioAnalysis';
 import { type SurfaceMaterialSlot, useWardrobeStore } from './store/useWardrobeStore';
 import { NumberField } from './ui/NumberField';
-import { CommandFeedback, IssueDetails, Phase4InteriorPanel, Phase4RoomPanel } from './ui/Phase4Panels';
+import {
+  CarcassConstructionPanel,
+  CommandFeedback,
+  InventoryPanel,
+  IssueDetails,
+  ObstaclePanel,
+  RoomErgonomicsPanel,
+  StorageTemplatePanel,
+} from './ui/Phase4Panels';
 import { MotionNotice } from './canvas/scene/MotionController';
-import { FrontSystemEditor } from './ui/FrontSystemEditor';
+import { DoorInspectorPanel } from './ui/DoorInspectorPanel';
 import { VersionPanel } from './ui/VersionPanel';
 import { ProductionPanel } from './ui/ProductionPanel';
 import { extractProduction } from './core/production/productionModel';
@@ -83,6 +97,75 @@ const OWNER_LABELS: Record<OwnerType, { label: string; badgeClass: string }> = {
     badgeClass: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200',
   },
 };
+
+function formatPresetSubtitle(preset: Design): string {
+  const runA = preset.runs[0];
+  const runB = preset.runs[1];
+  const junc = preset.junctions[0];
+  if (preset.layoutKind === 'straight' || !runB) {
+    return `Düz · ${runA.lengthMm}×${runA.heightMm}×${runA.depthMm} mm · Sorunsuz`;
+  }
+  const kindLabel = junc?.type === 'blind' ? 'Kör Köşe L' : 'Beşgen L';
+  const depthHint =
+    runA.depthMm !== runB.depthMm ? ` · Asimetrik (${runA.depthMm}/${runB.depthMm} mm)` : '';
+  return `${kindLabel} · ${runA.lengthMm}×${runB.lengthMm} mm${depthHint}`;
+}
+
+function summarizeBayFront(
+  bay: ResolvedBay,
+  bayFronts: Front[],
+  bayDoors: ResolvedDoorLeaf[],
+  baySlidingDoors: ResolvedSlidingLeaf[]
+): { label: string; detail: string } {
+  if (bayFronts.length > 0) {
+    const uniqueTypes = new Set(bayFronts.map((f) => f.type));
+    if (uniqueTypes.size > 1 || bayFronts.length > 1) {
+      return {
+        label: 'Karma cephe',
+        detail: `${bayFronts.length} bağımsız bölge · ${bayDoors.length + baySlidingDoors.length} kanat`,
+      };
+    }
+    const onlyType = bayFronts[0].type;
+    if (onlyType === 'sliding') {
+      return {
+        label: 'Sürgülü',
+        detail: `${baySlidingDoors.length || bayFronts[0].sliding?.leafCount || 2} kanat`,
+      };
+    }
+    if (onlyType === 'open') {
+      return {
+        label: 'Açık',
+        detail: 'Kapaksız bölme',
+      };
+    }
+    return {
+      label: 'Menteşeli',
+      detail: `${bayDoors.length} kanat`,
+    };
+  }
+  if (bay.frontMode === 'open') {
+    return { label: 'Açık', detail: 'Kapaksız gövde' };
+  }
+  if (bay.frontMode === 'sliding') {
+    return { label: 'Sürgülü', detail: `${baySlidingDoors.length} kanat` };
+  }
+  if (bay.frontMode === 'double') {
+    return { label: 'Çift menteşeli', detail: `${bayDoors.length} kanat · ${bay.hingeAngleDeg}°` };
+  }
+  if (bay.frontMode === 'singleLeft') {
+    return { label: 'Tek kapak · Sol', detail: `${bay.hingeAngleDeg}° menteşe` };
+  }
+  if (bay.frontMode === 'singleRight') {
+    return { label: 'Tek kapak · Sağ', detail: `${bay.hingeAngleDeg}° menteşe` };
+  }
+  return {
+    label: 'Otomatik menteşeli',
+    detail:
+      bayDoors.length > 0
+        ? `${bayDoors.length} kanat · ${bay.hingeAngleDeg}°`
+        : `${bay.hingeAngleDeg}° menteşe`,
+  };
+}
 
 export function App() {
   const {
@@ -128,6 +211,7 @@ export function App() {
     startBlankDesign,
     saveCheckpoint,
     updateRunDimension,
+    updateRoomHeight,
     updateMaterialThicknesses,
     setCornerType,
     setCornerHangingRod,
@@ -138,7 +222,6 @@ export function App() {
     setBaySize,
     toggleBayLock,
     setBayOwner,
-    setBayFrontConfig,
     setCellInsert,
     setMaterials,
     setSurfaceMaterial,
@@ -165,20 +248,24 @@ export function App() {
   const historyButtonRef = useRef<HTMLButtonElement>(null);
   const historyMenuRef = useRef<HTMLDivElement>(null);
   const sceneViewButtonRef = useRef<HTMLButtonElement>(null);
+  const setupToggleButtonRef = useRef<HTMLButtonElement>(null);
+  const selectionToggleButtonRef = useRef<HTMLButtonElement>(null);
   const blankBuilderRef = useRef<HTMLElement>(null);
   const examplesSummaryRef = useRef<HTMLElement>(null);
   const [firstUseDismissed, setFirstUseDismissed] = useState(false);
   const [introDestination, setIntroDestination] = useState<'create' | 'examples' | null>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [blankCreatedNotice, setBlankCreatedNotice] = useState<string | null>(null);
   const firstUse = isFirstUse && persistenceStatus === 'idle' && !firstUseDismissed;
   const [importError, setImportError] = useState<string | null>(null);
   const [showHistoryMenu, setShowHistoryMenu] = useState<boolean>(false);
   const [showAdvancedRightInspector, setShowAdvancedRightInspector] = useState<boolean>(false);
 
-  // Aşama 3: "3. Malzeme" adımı alt sekme durumu
+  // Adım 3 ("3. Görünüm") ve Adım 4 ("4. Çıktı") alt sekme durumları (IA-07)
   const [materialSubTab, setMaterialSubTab] = useState<
-    'materials' | 'handles' | 'exterior' | 'led-studio' | 'items' | 'versions' | 'production'
+    'materials' | 'handles' | 'exterior' | 'led-studio' | 'items'
   >('materials');
+  const [outputSubTab, setOutputSubTab] = useState<'production' | 'versions'>('production');
   const [activeMaterialSlot, setActiveMaterialSlot] = useState<SurfaceMaterialSlot>('door');
   const [compactPanel, setCompactPanel] = useState<'setup' | 'selection' | null>(null);
   const [showTools, setShowTools] = useState(false);
@@ -195,9 +282,31 @@ export function App() {
   const [blankLayout, setBlankLayout] = useState<LayoutKind>('l-shape');
   const [blankCorner, setBlankCorner] = useState<JunctionType>('diagonal');
   const [blankMeasureDrafts, setBlankMeasureDrafts] = useState<BlankMeasureDrafts>({
-    lengthAMm: '2800', depthAMm: '600', lengthBMm: '2200', depthBMm: '600', heightMm: '2400', roomHeightMm: '2550',
+    lengthAMm: '2800', depthAMm: '600', lengthBMm: '2200', depthBMm: '550', heightMm: '2400', roomHeightMm: '2550',
   });
   const blankMeasurements = useMemo(() => readBlankMeasurements(blankMeasureDrafts, blankLayout), [blankMeasureDrafts, blankLayout]);
+
+  const closeCompactPanel = (restoreFocus = false) => {
+    const previous = compactPanel;
+    setCompactPanel(null);
+    if (!restoreFocus || !previous) return;
+    requestAnimationFrame(() => {
+      const targetBtn =
+        previous === 'setup' ? setupToggleButtonRef.current : selectionToggleButtonRef.current;
+      if (targetBtn && targetBtn.offsetParent !== null) {
+        targetBtn.focus();
+      }
+    });
+  };
+
+  useEffect(() => {
+    const handleOpenSelectionDrawer = () => {
+      setCompactPanel('selection');
+    };
+    window.addEventListener('wardrobe:open-selection-drawer', handleOpenSelectionDrawer);
+    return () =>
+      window.removeEventListener('wardrobe:open-selection-drawer', handleOpenSelectionDrawer);
+  }, []);
 
   const focusHistoryTrigger = () => {
     if (historyButtonRef.current && historyButtonRef.current.offsetParent !== null) {
@@ -264,7 +373,9 @@ export function App() {
             toolsButtonRef.current.focus();
           }
         }
-        setCompactPanel(null);
+        if (compactPanel) {
+          closeCompactPanel(true);
+        }
       }
       const target = e.target as HTMLElement | null;
       const isEditingInput =
@@ -296,7 +407,7 @@ export function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, saveCheckpoint, showHistoryMenu, showTools]);
+  }, [undo, redo, saveCheckpoint, showHistoryMenu, showTools, compactPanel]);
 
   const handleExportJson = () => {
     try {
@@ -343,7 +454,12 @@ export function App() {
     startBlankDesign(opts);
     if (useWardrobeStore.getState().commandError) return;
     setShowBlankBuilder(false);
+    setFirstUseDismissed(true);
+    setActiveStep('interior-fronts');
     setCompactPanel(null);
+    setBlankCreatedNotice(
+      'Boş gardırop oluşturuldu. 3D sahnede bir bölmeye tıklayarak raf/çekmece ekleyin veya Kapak Düzenle ile cephe seçin.'
+    );
   };
 
   const blankMeasureInput = (key: BlankMeasure, fullWidth = false) => {
@@ -374,9 +490,24 @@ export function App() {
   const bayDoors = selectedBay
     ? resolved.doors.filter((d) => d.bayId === selectedBay.id)
     : [];
+  const baySlidingDoors = selectedBay
+    ? (resolved.slidingDoors ?? []).filter((d) => d.bayIds.includes(selectedBay.id))
+    : [];
+  const selectedBayFronts = selectedBay
+    ? design.fronts.filter((f) => f.bayIds.includes(selectedBay.id))
+    : [];
+  const activeBayFrontSummary = selectedBay
+    ? summarizeBayFront(selectedBay, selectedBayFronts, bayDoors, baySlidingDoors)
+    : null;
   const bayDrawers = selectedBay
     ? resolved.drawers.filter((d) => d.bayId === selectedBay.id)
     : [];
+  const profiles = design.ergonomics ?? DEFAULT_PROFILES;
+  const obstacleCount = design.obstacles?.length ?? 0;
+  const inventoryTargets = design.inventory ?? [];
+  const inventoryShortfallCount = (resolved.analysis?.inventory ?? []).filter(
+    (row) => row.shortfall > 0
+  ).length;
 
   const anyDoorOpen =
     hasOpenSlidingLeaf ||
@@ -419,12 +550,120 @@ export function App() {
     : !lastCheckpointAt ? 'Kaydet'
     : persistenceStatus === 'partial' ? 'Tek depoda kayıt'
     : 'Kayıt noktası';
-  const showInspector = activeStep !== 'view-export' || materialInspector;
+  const isPresentationOrOutputStep =
+    activeStep === 'view-export' || activeStep === 'versions-production';
+  const showInspector = doorEditorMode || !isPresentationOrOutputStep || materialInspector;
   const accessProblems = useMemo(() => accessWarnings(resolved.analysis?.functionalAccess ?? []), [resolved]);
   const accessBlocks = accessProblems.filter(entry => entry.status === 'blocked');
   const wideSpans = resolved.issues.filter(issue => issue.code === 'SHELF_SPAN_EXCEEDED');
   const otherIssues = resolved.issues.filter(issue => issue.code !== 'SHELF_SPAN_EXCEEDED')
     .sort((a, b) => Number(b.severity === 'error') - Number(a.severity === 'error'));
+
+  const renderBaysSection = () => (
+    <section aria-label="Bölmeler ve genişlikler" className="studio-section space-y-2.5">
+      <h2 className="studio-section-title">Bölmeler ve genişlikler</h2>
+      <div className="space-y-1.5">
+        {resolved.bays.map((bay) => {
+          const isSelected = bay.id === selectedBayId;
+          const ownerMeta = OWNER_LABELS[bay.owner];
+          const runOfBay = design.runs.find((r) => r.id === bay.runId);
+          const canDelete = (runOfBay?.bays.length ?? 1) > 1;
+
+          return (
+            <div
+              key={bay.id}
+              className={`rounded-lg border p-2 text-xs transition ${
+                isSelected
+                  ? 'border-sky-500 bg-sky-500/10'
+                  : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <button
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => selectBay(bay.id)}
+                  className="min-w-0 flex-1 rounded text-left"
+                >
+                  <div className="flex items-center justify-between gap-1.5">
+                    <span className="truncate font-semibold text-white">{bay.label}</span>
+                    <span
+                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${ownerMeta.badgeClass}`}
+                    >
+                      {ownerMeta.label}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between font-mono text-[11px]">
+                    <span className="text-slate-300">
+                      Dış: <strong className="text-slate-100">{bay.outerWidthMm} mm</strong>
+                    </span>
+                    <span className="text-sky-300">
+                      Net: <strong>{bay.netInnerWidthMm} mm</strong>
+                    </span>
+                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200">
+                      {bay.sizeSpec.kind === 'fixed'
+                        ? 'Sabit'
+                        : `Esnek (${bay.sizeSpec.weight}x)`}
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between border-t border-slate-800/80 pt-1.5">
+                <button
+                  type="button"
+                  aria-pressed={bay.locked}
+                  aria-label={
+                    bay.locked
+                      ? `${bay.label} genişlik kilidini aç`
+                      : `${bay.label} genişliğini kilitle`
+                  }
+                  onClick={() => toggleBayLock(bay.runId, bay.id)}
+                  className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium transition ${
+                    bay.locked
+                      ? 'border-amber-500/50 bg-amber-500/20 text-amber-200'
+                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-white'
+                  }`}
+                  title={bay.locked ? 'Ölçü kilitli — açmak için tıklayın' : 'Ölçüyü kilitle'}
+                >
+                  {bay.locked ? (
+                    <Lock className="h-3 w-3" aria-hidden="true" />
+                  ) : (
+                    <Unlock className="h-3 w-3" aria-hidden="true" />
+                  )}
+                  <span>{bay.locked ? 'Kilitli' : 'Serbest'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!canDelete}
+                  aria-label={
+                    canDelete
+                      ? `${bay.label} bölmesini sil`
+                      : `${bay.label} silinemez, en az bir bölme gereklidir`
+                  }
+                  onClick={() => {
+                    if (!canDelete) return;
+                    removeBay(bay.runId, bay.id);
+                    setExportNotice(`${bay.label} bölmesi silindi. Geri Al (Ctrl+Z) ile geri getirebilirsiniz.`);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-transparent px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-35"
+                  title={
+                    canDelete
+                      ? `${bay.label} bölmesini sil (Geri Al ile kurtarılabilir)`
+                      : 'Kolda en az bir bölme kalmalıdır'
+                  }
+                >
+                  <Trash2 className="h-3 w-3" aria-hidden="true" />
+                  <span>Sil</span>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 
   return (
     <div className="studio-app flex min-w-0 flex-col bg-slate-950 text-slate-100">
@@ -597,7 +836,7 @@ export function App() {
               title={
                 historyPast.length > 0
                   ? `Geri Al (${historyPast.length} adım): ${historyPast[historyPast.length - 1].label}`
-                  : 'Geri Al (Ctrl+Z) — Kayıt noktasındasınız'
+                  : 'Geri Al (Ctrl+Z) — Geçmiş boş'
               }
             >
               <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -814,21 +1053,26 @@ export function App() {
 
               <button
                 type="button"
-                disabled={historyPast.length === 0}
+                disabled={!hasUnsavedChanges}
                 onClick={() => {
                   revertToCheckpoint();
                   setShowHistoryMenu(false);
                 }}
-                className="w-full rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
+                className="flex w-full items-center justify-between gap-2 rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
               >
-                Son kayıt noktasına dön ({historyPast.length} adım)
+                <span>Son kayıt noktasına dön</span>
+                {hasUnsavedChanges && (
+                  <span className="rounded bg-amber-500/30 px-1.5 py-0.5 text-[10px] font-semibold text-amber-100">
+                    Değişiklik var
+                  </span>
+                )}
               </button>
 
               {/* Tıklanabilir Son İşlemler Listesi */}
               <div className="max-h-48 space-y-1 overflow-y-auto pr-0.5">
                 {historyPast.length === 0 ? (
                   <div className="py-2 text-center text-[11px] text-slate-400">
-                    Kayıt noktasından bu yana işlem yapılmadı.
+                    Henüz geri alınacak işlem yok.
                   </div>
                 ) : (
                   [...historyPast].reverse().map((step, revIdx) => {
@@ -865,58 +1109,166 @@ export function App() {
         <span>JSON açılamadı. Çalışma kopyası korundu. {importError}</span>
         <button type="button" className="shrink-0 underline" onClick={() => setImportError(null)}>Kapat</button>
       </div>}
-      {firstUse && <section aria-label="İlk tasarım" className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-sky-800 bg-sky-950/60 px-3 py-2 text-xs text-sky-100">
-        <p><strong>İlk tasarım</strong> · Ekranda hazır bir örnek var. Aşağıdaki erişim uyarısı bu örneğe ait.</p>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button type="button" className="rounded border border-emerald-500 px-2 py-1.5 text-emerald-100" onClick={() => openIntroDestination('create')}>Kendi gardırobunu oluştur</button>
-          <button type="button" className="rounded border border-sky-700 px-2 py-1.5" onClick={() => openIntroDestination('examples')}>Hazır örnekleri incele</button>
-          <button type="button" className="rounded border border-sky-700 px-2 py-1.5" onClick={() => fileInputRef.current?.click()}>JSON dosyası aç</button>
-          <button type="button" className="rounded px-2 py-1.5 underline" onClick={() => { setFirstUseDismissed(true); sceneViewButtonRef.current?.focus(); }}>Başlangıcı gizle</button>
+      {firstUse && (
+        <section
+          aria-label="İlk tasarım"
+          className="studio-first-use-banner flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-sky-800 bg-sky-950/60 px-3 py-2 text-xs text-sky-100"
+        >
+          <p className="min-w-0 truncate sm:whitespace-normal">
+            <strong>İlk tasarım</strong>
+            <span className="studio-banner-detail">
+              {' · '}
+              {accessBlocks.length > 0
+                ? 'Ekranda hazır bir örnek var. Aşağıdaki erişim uyarısı bu örneğe ait.'
+                : 'Ölçüleri soldan düzenleyebilir veya 3D sahnede bir bölmeye tıklayarak hemen tasarlamaya başlayabilirsiniz.'}
+            </span>
+          </p>
+          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              className="rounded border border-emerald-500 px-2 py-1.5 text-emerald-100"
+              onClick={() => openIntroDestination('create')}
+            >
+              Kendi gardırobunu oluştur
+            </button>
+            <button
+              type="button"
+              className="studio-banner-secondary-action rounded border border-sky-700 px-2 py-1.5"
+              onClick={() => openIntroDestination('examples')}
+            >
+              Hazır örnekleri incele
+            </button>
+            <button
+              type="button"
+              className="studio-banner-secondary-action rounded border border-sky-700 px-2 py-1.5"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              JSON dosyası aç
+            </button>
+            <button
+              type="button"
+              className="rounded px-2 py-1.5 underline"
+              onClick={() => {
+                setFirstUseDismissed(true);
+                sceneViewButtonRef.current?.focus();
+              }}
+            >
+              Başlangıcı gizle
+            </button>
+          </div>
+        </section>
+      )}
+      {blankCreatedNotice && (
+        <div
+          role="status"
+          className="flex shrink-0 items-center justify-between gap-3 border-b border-emerald-700/70 bg-emerald-950/60 px-3 py-2 text-xs text-emerald-100"
+        >
+          <span>{blankCreatedNotice}</span>
+          <button
+            type="button"
+            onClick={() => setBlankCreatedNotice(null)}
+            className="shrink-0 rounded border border-emerald-500/40 px-2 py-0.5 text-[11px] font-medium text-emerald-200 hover:bg-emerald-900/60"
+          >
+            Kapat
+          </button>
         </div>
-      </section>}
-      {accessBlocks.length > 0 && <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-rose-900 bg-rose-950/50 px-3 py-1 text-xs text-rose-100">
-        <span role="status">{resolved.corners.some(corner => corner.type === 'diagonal' && accessBlocks[0].bayId === corner.id)
-          ? 'Köşe kapağı erişimi engelliyor' : 'İşlevsel erişim engeli'} · {accessBlocks.length} bölüm</span>
-        <button type="button" className="min-h-8 rounded border border-rose-600/70 px-2.5 py-1 text-rose-100 hover:bg-rose-900"
-          onClick={() => setShowAccessReview(true)}>Erişim ve çözümleri incele</button>
-      </div>}
+      )}
+      {accessBlocks.length > 0 && (
+        <div className="studio-access-banner flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-rose-900 bg-rose-950/50 px-3 py-1 text-xs text-rose-100">
+          <span role="status" className="studio-access-status">
+            {resolved.corners.some(
+              (corner) => corner.type === 'diagonal' && accessBlocks[0].bayId === corner.id
+            )
+              ? 'Köşe kapağı erişimi engelliyor'
+              : 'İşlevsel erişim engeli'}{' '}
+            · {accessBlocks.length} bölüm
+          </span>
+          <button
+            type="button"
+            className="min-h-8 shrink-0 rounded border border-rose-600/70 px-2.5 py-1 text-rose-100 hover:bg-rose-900"
+            onClick={() => setShowAccessReview(true)}
+          >
+            Erişim ve çözümleri incele
+          </button>
+        </div>
+      )}
       {showAccessReview && <AccessReview onClose={() => setShowAccessReview(false)} onApplied={() => {
         setShowAccessReview(false);
         requestAnimationFrame(() => sceneViewButtonRef.current?.focus());
       }} />}
       <nav aria-label="Dar ekran panelleri" className="studio-compact-nav flex shrink-0 gap-2 border-b border-slate-800 px-2 py-1 xl:hidden">
-        <button type="button" aria-expanded={compactPanel === 'setup'} aria-controls="studio-setup"
-          className="rounded border border-slate-700 px-3 py-2 text-xs aria-expanded:border-sky-400"
-          onClick={() => setCompactPanel(compactPanel === 'setup' ? null : 'setup')}>Tasarım paneli</button>
-        <button type="button" aria-expanded={compactPanel === 'selection'} aria-controls="studio-selection"
-          className="rounded border border-slate-700 px-3 py-2 text-xs aria-expanded:border-sky-400"
-          onClick={() => setCompactPanel(compactPanel === 'selection' ? null : 'selection')}>Seçim ve uyarılar</button>
+        <button
+          ref={setupToggleButtonRef}
+          type="button"
+          aria-expanded={compactPanel === 'setup'}
+          aria-controls="studio-setup"
+          className="rounded border border-slate-700 px-3 py-2 text-xs font-medium aria-expanded:border-sky-400"
+          onClick={() => setCompactPanel(compactPanel === 'setup' ? null : 'setup')}
+        >
+          Tasarım paneli
+        </button>
+        <button
+          ref={selectionToggleButtonRef}
+          type="button"
+          aria-expanded={compactPanel === 'selection'}
+          aria-controls="studio-selection"
+          className="rounded border border-slate-700 px-3 py-2 text-xs font-medium aria-expanded:border-sky-400"
+          onClick={() => setCompactPanel(compactPanel === 'selection' ? null : 'selection')}
+        >
+          Seçim ve uyarılar
+        </button>
       </nav>
+      {compactPanel && (
+        <div
+          aria-hidden="true"
+          onClick={() => closeCompactPanel(true)}
+          className="fixed inset-0 z-[90] bg-slate-950/75 backdrop-blur-xs xl:hidden"
+        />
+      )}
 
       {/* ANA ÇALIŞMA ALANI */}
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        {/* SOL PANEL: 3 ADIMLI İŞ AKIŞI, ŞABLONLAR, KOL ÖLÇÜLERİ, MALZEME KALINLIKLARI, KÖŞE VE BÖLMELER */}
-        <aside id="studio-setup" aria-label="Tasarım paneli" className={`studio-setup ${compactPanel === 'setup' ? 'absolute inset-y-0 left-0 z-60 flex' : 'hidden'} w-80 max-w-full shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 xl:static xl:flex`}>
+        {/* SOL PANEL: 4 ADIMLI İŞ AKIŞI (1. ODA, 2. İÇ & KAPAK, 3. GÖRÜNÜM, 4. ÇIKTI) */}
+        <aside
+          id="studio-setup"
+          aria-label="Tasarım paneli"
+          className={`studio-setup ${
+            compactPanel === 'setup'
+              ? 'studio-mobile-drawer studio-mobile-drawer-left flex'
+              : 'hidden'
+          } w-80 max-w-full shrink-0 flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 xl:static xl:z-auto xl:flex`}
+        >
           <div className="sticky top-0 z-10 shrink-0 border-b border-slate-800 bg-slate-950 p-2">
-            <button type="button" className="mb-1 rounded border border-slate-700 px-2 py-1 text-xs xl:hidden" onClick={() => setCompactPanel(null)}>Tasarım panelini kapat</button>
-            <nav aria-label="Tasarım adımları" className="grid grid-cols-3 gap-1 rounded-lg bg-slate-900 p-1 text-[11px]">
+            <div className="mb-1.5 flex items-center justify-between gap-2 xl:hidden">
+              <span className="text-xs font-semibold text-slate-100">Tasarım paneli</span>
+              <button
+                type="button"
+                aria-label="Tasarım panelini kapat"
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-100 hover:border-sky-400"
+                onClick={() => closeCompactPanel(true)}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+                <span>Kapat</span>
+              </button>
+            </div>
+            <nav aria-label="Tasarım adımları" className="grid grid-cols-4 gap-1 rounded-lg bg-slate-900 p-1 text-[11px]">
               <button
                 type="button"
                 aria-current={activeStep === 'room-carcass' ? 'step' : undefined}
                 onClick={() => setActiveStep('room-carcass')}
-                className={`rounded py-1.5 font-medium transition ${
+                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
                   activeStep === 'room-carcass'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
                     : 'text-slate-300 hover:text-white'
                 }`}
               >
-                1. Oda & Köşe
+                1. Oda
               </button>
               <button
                 type="button"
                 aria-current={activeStep === 'interior-fronts' ? 'step' : undefined}
                 onClick={() => setActiveStep('interior-fronts')}
-                className={`rounded py-1.5 font-medium transition ${
+                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
                   activeStep === 'interior-fronts'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
                     : 'text-slate-300 hover:text-white'
@@ -928,22 +1280,33 @@ export function App() {
                 type="button"
                 aria-current={activeStep === 'view-export' ? 'step' : undefined}
                 onClick={() => setActiveStep('view-export')}
-                className={`rounded py-1.5 font-medium transition ${
+                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
                   activeStep === 'view-export'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
                     : 'text-slate-300 hover:text-white'
                 }`}
               >
-                3. Malzeme / Çıktı
+                3. Görünüm
+              </button>
+              <button
+                type="button"
+                aria-current={activeStep === 'versions-production' ? 'step' : undefined}
+                onClick={() => setActiveStep('versions-production')}
+                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
+                  activeStep === 'versions-production'
+                    ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                4. Çıktı
               </button>
             </nav>
           </div>
 
-          {activeStep === 'interior-fronts' && <><FrontSystemEditor/><Phase4InteriorPanel /></>}
-          {/* ADIM 1: ODA, ŞABLONLAR, KOL ÖLÇÜLERİ, MALZEME KALINLIKLARI VE KÖŞE */}
+          {/* ADIM 1 (1. ODA): GÖREV ÖNCELİKLİ ÖLÇÜLER, KÖŞE, BÖLMELER VE KATLANABİLİR UZMAN AYARLARI */}
           {activeStep === 'room-carcass' && (
             <>
-              {/* ÖRNEK TASARIM ŞABLONLARI VE SIFIRDAN BAŞLA */}
+              {/* 1. GARDIROP OLUŞTUR VE HAZIR ÖRNEKLER */}
               <div className="studio-section space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h2 className="studio-section-title">Gardırop oluştur</h2>
@@ -1078,7 +1441,9 @@ export function App() {
                 )}
 
                 <details className="space-y-1.5" open={examplesOpen} onToggle={event => setExamplesOpen(event.currentTarget.open)}>
-                  <summary ref={examplesSummaryRef} className="cursor-pointer py-1 text-xs text-slate-200">Hazır örnekler</summary>
+                  <summary ref={examplesSummaryRef} className="cursor-pointer py-1 text-xs font-medium text-slate-200">
+                    Hazır örnekler
+                  </summary>
                   {Object.values(SAMPLE_DESIGNS).map((preset) => {
                     const active = design.id === preset.id;
                     return (
@@ -1087,7 +1452,10 @@ export function App() {
                         type="button"
                         aria-pressed={active}
                         onClick={() => {
-                          if (openNamedVersion(preset, preset.name)) setCompactPanel(null);
+                          if (openNamedVersion(preset, preset.name)) {
+                            setBlankCreatedNotice(null);
+                            setCompactPanel(null);
+                          }
                         }}
                         className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition ${
                           active
@@ -1095,17 +1463,19 @@ export function App() {
                             : 'border-slate-800 bg-slate-950/60 text-slate-200 hover:border-slate-700'
                         }`}
                       >
-                        {preset.name}
+                        <span className="block leading-snug">{preset.name}</span>
+                        <span className="mt-0.5 block font-mono text-[11px] font-normal text-slate-400">
+                          {formatPresetSubtitle(preset)}
+                        </span>
                       </button>
                     );
                   })}
                 </details>
               </div>
-              {!showBlankBuilder && <Phase4RoomPanel />}
 
-              {/* DUVAR KOLLARI VE ASİMETRİK DERİNLİK AYARLARI */}
-              <section aria-label="Kol ölçüleri ve derinlik" className="studio-section space-y-3">
-                <h2 className="studio-section-title">Kol ölçüleri ve derinlik (mm)</h2>
+              {/* 2. DUVAR VE YÜKSEKLİK ÖLÇÜLERİ (HEMEN KATLAMA ÜSTÜNDE) */}
+              <section aria-label="Duvar ve yükseklik ölçüleri" className="studio-section space-y-3">
+                <h2 className="studio-section-title">Duvar ve yükseklik ölçüleri (mm)</h2>
 
                 {design.runs.map((run) => {
                   if (design.layoutKind === 'straight' && run.wallAxis !== 'A') return null;
@@ -1182,96 +1552,26 @@ export function App() {
                 <p id="top-filler-help" className="studio-helper">
                   Gövdenin üstündeki dikey dolgu yüksekliği. Dekoratif taç biçimi Gömme sekmesinde ayrı seçilir.
                 </p>
+
+                <div className="studio-form-grid grid grid-cols-2 gap-x-2 border-t border-slate-800/80 pt-2.5">
+                  <NumberField
+                    label="Oda tavan yüksekliği (mm)"
+                    value={design.roomHeightMm}
+                    min={1800}
+                    max={4000}
+                    onCommit={(value) => updateRoomHeight('roomHeightMm', value)}
+                  />
+                  <NumberField
+                    label="Bilinen montaj boşluğu (mm)"
+                    value={design.ceilingClearanceMm ?? 0}
+                    max={300}
+                    onCommit={(value) => updateRoomHeight('ceilingClearanceMm', value)}
+                  />
+                </div>
+                <p className="studio-helper">Montaj boşluğunu yerinde ölçüm kesinleşince girin.</p>
               </section>
 
-              {/* İKİ PARAMETRELİ PANEL KALINLIĞI SİSTEMİ */}
-              <section aria-label="Panel kalınlıkları" className="studio-section space-y-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="studio-section-title">Panel kalınlıkları (Gövde / Arkalık)</h2>
-                  <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-300">
-                    {resolved.panelThicknessMm} / {resolved.backPanelThicknessMm} mm
-                  </span>
-                </div>
-
-                <div className="studio-card space-y-2.5 text-[11px]">
-                  {/* 1. Ana Panel Kalınlığı */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-200">Ana Panel Kalınlığı (mm)</span>
-                      <div className="flex gap-1" role="group" aria-label="Ana panel kalınlığı hazır değerleri">
-                        {[18, 22, 25].map((presetT) => (
-                          <button
-                            key={presetT}
-                            type="button"
-                            aria-pressed={resolved.panelThicknessMm === presetT}
-                            aria-label={`Ana panel kalınlığını ${presetT} mm yap`}
-                            onClick={() => updateMaterialThicknesses(presetT, undefined)}
-                            className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
-                              resolved.panelThicknessMm === presetT
-                                ? 'border-amber-400 bg-amber-500/25 font-bold text-amber-200'
-                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
-                            }`}
-                          >
-                            {presetT}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <NumberField
-                      label="Ana Panel Kalınlığı (mm)"
-                      hideLabel
-                      min={12}
-                      max={36}
-                      value={resolved.panelThicknessMm}
-                      onCommit={(next) => updateMaterialThicknesses(next, undefined)}
-                    />
-                  </div>
-
-                  {/* 2. Arkalık ve Çekmece Tabanı Kalınlığı */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-slate-200">
-                        Arkalık ve Çekmece Tabanı (mm)
-                      </span>
-                      <div className="flex gap-1" role="group" aria-label="Arkalık kalınlığı hazır değerleri">
-                        {[8, 4, 3].map((presetTb) => (
-                          <button
-                            key={presetTb}
-                            type="button"
-                            aria-pressed={resolved.backPanelThicknessMm === presetTb}
-                            aria-label={`Arkalık kalınlığını ${presetTb} mm yap`}
-                            onClick={() => updateMaterialThicknesses(undefined, presetTb)}
-                            className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
-                              resolved.backPanelThicknessMm === presetTb
-                                ? 'border-emerald-400 bg-emerald-500/25 font-bold text-emerald-200'
-                                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
-                            }`}
-                          >
-                            {presetTb}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <NumberField
-                      label="Arkalık ve Çekmece Tabanı Kalınlığı (mm)"
-                      hideLabel
-                      min={3}
-                      max={18}
-                      value={resolved.backPanelThicknessMm}
-                      onCommit={(next) => updateMaterialThicknesses(undefined, next)}
-                    />
-                  </div>
-
-                  <div className="rounded bg-slate-900/90 px-2 py-1.5 font-mono text-[11px] text-slate-300">
-                    800 mm Dış Bölme → Net İç:{' '}
-                    <strong className="text-sky-300">
-                      {800 - 2 * resolved.panelThicknessMm} mm
-                    </strong>
-                  </div>
-                </div>
-              </section>
-
-              {/* L-KÖŞE BİRLEŞİMİ AYARLARI */}
+              {/* 3. L-KÖŞE BİRLEŞİMİ AYARLARI */}
               {design.layoutKind === 'l-shape' && activeJunction && (
                 <section aria-label="L-köşe birleşimi" className="studio-section space-y-2.5">
                   <h2 className="studio-section-title">L-köşe birleşimi</h2>
@@ -1286,7 +1586,7 @@ export function App() {
                           : 'border-slate-800 bg-slate-950 text-slate-300 hover:text-white'
                       }`}
                     >
-                      Beşgen / Diyagonal
+                      Beşgen Köşe
                     </button>
                     <button
                       type="button"
@@ -1298,9 +1598,14 @@ export function App() {
                           : 'border-slate-800 bg-slate-950 text-slate-300 hover:text-white'
                       }`}
                     >
-                      Kör Köşe (Klapalı)
+                      Kör Köşe
                     </button>
                   </div>
+                  <p className="studio-helper">
+                    {activeJunction.type === 'diagonal'
+                      ? 'Beşgen köşe: İki kolu 45° açılı tek köşe modülüyle birleştirir ve iç raflara doğrudan erişim sağlar.'
+                      : 'Kör köşe: Bir kol köşeye kadar uzanır, diğer kol klapa payıyla yanaşır; derin askı veya yüklük için uygundur.'}
+                  </p>
 
                   {activeJunction.type === 'diagonal' ? (
                     <>
@@ -1402,79 +1707,268 @@ export function App() {
                   )}
                 </section>
               )}
+
+              {/* 4. BÖLMELER VE GENİŞLİKLER */}
+              {renderBaysSection()}
+
+              {/* 5. AŞAMALI AÇILIM (VARSAYILAN KAPALI UZMAN AKORDEONLARI) */}
+              <details className="studio-accordion">
+                <summary>
+                  <span>Panel kalınlıkları ve gövde konstrüksiyonu</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-300">
+                      {resolved.panelThicknessMm} / {resolved.backPanelThicknessMm} mm
+                    </span>
+                    <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </summary>
+                <div className="studio-accordion-body space-y-3">
+                  <div className="studio-card space-y-2.5 text-[11px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="studio-section-title">Panel kalınlıkları (Gövde / Arkalık)</span>
+                    </div>
+
+                    {/* 1. Ana Panel Kalınlığı */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-200">Ana Panel Kalınlığı (mm)</span>
+                        <div className="flex gap-1" role="group" aria-label="Ana panel kalınlığı hazır değerleri">
+                          {[18, 22, 25].map((presetT) => (
+                            <button
+                              key={presetT}
+                              type="button"
+                              aria-pressed={resolved.panelThicknessMm === presetT}
+                              aria-label={`Ana panel kalınlığını ${presetT} mm yap`}
+                              onClick={() => updateMaterialThicknesses(presetT, undefined)}
+                              className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
+                                resolved.panelThicknessMm === presetT
+                                  ? 'border-amber-400 bg-amber-500/25 font-bold text-amber-200'
+                                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {presetT}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <NumberField
+                        label="Ana Panel Kalınlığı (mm)"
+                        hideLabel
+                        min={12}
+                        max={36}
+                        value={resolved.panelThicknessMm}
+                        onCommit={(next) => updateMaterialThicknesses(next, undefined)}
+                      />
+                    </div>
+
+                    {/* 2. Arkalık ve Çekmece Tabanı Kalınlığı */}
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-200">
+                          Arkalık ve Çekmece Tabanı (mm)
+                        </span>
+                        <div className="flex gap-1" role="group" aria-label="Arkalık kalınlığı hazır değerleri">
+                          {[8, 4, 3].map((presetTb) => (
+                            <button
+                              key={presetTb}
+                              type="button"
+                              aria-pressed={resolved.backPanelThicknessMm === presetTb}
+                              aria-label={`Arkalık kalınlığını ${presetTb} mm yap`}
+                              onClick={() => updateMaterialThicknesses(undefined, presetTb)}
+                              className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
+                                resolved.backPanelThicknessMm === presetTb
+                                  ? 'border-emerald-400 bg-emerald-500/25 font-bold text-emerald-200'
+                                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+                              }`}
+                            >
+                              {presetTb}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <NumberField
+                        label="Arkalık ve Çekmece Tabanı Kalınlığı (mm)"
+                        hideLabel
+                        min={3}
+                        max={18}
+                        value={resolved.backPanelThicknessMm}
+                        onCommit={(next) => updateMaterialThicknesses(undefined, next)}
+                      />
+                    </div>
+
+                    <div className="rounded bg-slate-900/90 px-2 py-1.5 font-mono text-[11px] text-slate-300">
+                      800 mm Dış Bölme → Net İç:{' '}
+                      <strong className="text-sky-300">
+                        {800 - 2 * resolved.panelThicknessMm} mm
+                      </strong>
+                    </div>
+                  </div>
+
+                  <CarcassConstructionPanel embedded />
+                </div>
+              </details>
+
+              <details className="studio-accordion">
+                <summary>
+                  <span>Kişiler ve ergonomi</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-300">
+                      {Math.round(profiles.anne.heightMm / 10)} / {Math.round(profiles.baba.heightMm / 10)} cm
+                    </span>
+                    <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </summary>
+                <div className="studio-accordion-body">
+                  <RoomErgonomicsPanel embedded />
+                </div>
+              </details>
+
+              <details className="studio-accordion">
+                <summary>
+                  <span>Oda engelleri</span>
+                  <span className="flex items-center gap-1.5">
+                    {obstacleCount > 0 && (
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
+                        {obstacleCount} engel
+                      </span>
+                    )}
+                    <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </summary>
+                <div className="studio-accordion-body">
+                  <ObstaclePanel embedded />
+                </div>
+              </details>
             </>
           )}
 
-          {/* ADIM 2: İÇ DÜZEN & KAPAK ODAKLI SOL GEZGİN */}
+          {/* ADIM 2 (2. İÇ & KAPAK): GÖREV ÖNCELİKLİ İÇ DÜZEN, BÖLMELER VE KATLANABİLİR ŞABLON/ENVANTER */}
           {activeStep === 'interior-fronts' && (
-            <section aria-label="İç düzen ve kapak gezgini" className="studio-section space-y-2.5">
-              <div className="flex items-center justify-between">
-                <h2 className="studio-section-title">İç düzen ve kapak gezgini</h2>
-                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
-                  Adım 2
-                </span>
-              </div>
-              <p className="studio-helper">
-                3D sahnedeki <strong>+ Bölme Ekle</strong> butonlarıyla veya aşağıdan yeni bölme
-                ekleyin; bölmeye, çekmeceye veya kapağa tıkladığınızda yanında açılan bağlamsal
-                panel ile doğrudan düzenleyin.
-              </p>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {design.runs.map((run) => {
-                  if (design.layoutKind === 'straight' && run.wallAxis !== 'A') return null;
-                  return (
-                    <button
-                      key={run.id}
-                      type="button"
-                      onClick={() => addBay(run.id)}
-                      className="flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2.5 py-1.5 text-[11px] font-medium text-sky-200 hover:bg-sky-500/25"
-                    >
-                      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                      {run.wallAxis} Koluna Bölme Ekle
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  aria-pressed={doorEditorMode}
-                  onClick={() => setDoorEditorMode(!doorEditorMode)}
-                  className={`flex items-center gap-1 rounded border px-2.5 py-1.5 text-[11px] font-semibold ${
-                    doorEditorMode
-                      ? 'border-amber-400 bg-amber-500 text-slate-950'
-                      : 'border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
-                  }`}
-                >
-                  <DoorOpen className="h-3.5 w-3.5" aria-hidden="true" />
-                  {doorEditorMode ? 'Kapak Düzenle (Aktif)' : 'Kapak Düzenle'}
-                </button>
-              </div>
-            </section>
+            <>
+              <section aria-label="İç düzen ve kapak" className="studio-section space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="studio-section-title">İç düzen ve kapak</h2>
+                  <button
+                    type="button"
+                    aria-pressed={doorEditorMode}
+                    onClick={() => setDoorEditorMode(!doorEditorMode)}
+                    className={`flex items-center gap-1 rounded border px-2.5 py-1 text-[11px] font-semibold transition ${
+                      doorEditorMode
+                        ? 'border-amber-400 bg-amber-500 text-slate-950'
+                        : 'border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                    }`}
+                  >
+                    <DoorOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                    {doorEditorMode ? 'Kapak Düzenle (Aktif)' : 'Kapak Düzenle'}
+                  </button>
+                </div>
+                <p className="studio-helper">
+                  3D sahnede bir bölmeye veya çekmeceye tıklayarak iç modül ekleyin; cephe ve kapak
+                  ayarları için <strong>Kapak Düzenle</strong> modunu açın.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {design.runs.map((run) => {
+                    if (design.layoutKind === 'straight' && run.wallAxis !== 'A') return null;
+                    return (
+                      <button
+                        key={run.id}
+                        type="button"
+                        onClick={() => addBay(run.id)}
+                        className="flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2.5 py-1.5 text-[11px] font-medium text-sky-200 hover:bg-sky-500/25"
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                        +{run.wallAxis} Bölme Ekle
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedBay && activeBayFrontSummary && (
+                  <div className="studio-card flex items-center justify-between gap-2 text-[11px]">
+                    <div className="min-w-0">
+                      <span className="block truncate font-semibold text-slate-100">
+                        {selectedBay.label}
+                      </span>
+                      <span className="block text-slate-300">
+                        Aktif cephe: <strong className="text-sky-200">{activeBayFrontSummary.label}</strong>
+                        {' · '}
+                        {activeBayFrontSummary.detail}
+                      </span>
+                    </div>
+                    {!doorEditorMode && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDoorEditorMode(true);
+                          if (window.innerWidth < 1280) setCompactPanel('selection');
+                        }}
+                        className="shrink-0 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-medium text-amber-200 hover:border-amber-400"
+                      >
+                        Cepheyi düzenle
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+
+              {renderBaysSection()}
+
+              <details className="studio-accordion">
+                <summary>
+                  <span>Özel depolama ve bölme kopyalama</span>
+                  <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
+                </summary>
+                <div className="studio-accordion-body">
+                  <StorageTemplatePanel embedded />
+                </div>
+              </details>
+
+              <details className="studio-accordion">
+                <summary>
+                  <span>Envanter ve kapasite planı</span>
+                  <span className="flex items-center gap-1.5">
+                    {inventoryShortfallCount > 0 ? (
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
+                        {inventoryShortfallCount} eksik
+                      </span>
+                    ) : inventoryTargets.length > 0 ? (
+                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-200">
+                        {inventoryTargets.length} hedef
+                      </span>
+                    ) : null}
+                    <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </summary>
+                <div className="studio-accordion-body">
+                  <InventoryPanel embedded />
+                </div>
+              </details>
+            </>
           )}
 
-          {/* ADIM 3: MALZEME, KULP, GÖMME BİTİŞ, LED AYDINLATMA, SUNUM MODU VE 3D EŞYALAR (AŞAMA 3) */}
+          {/* ADIM 3 (3. GÖRÜNÜM): 5 DENGELİ GÖRSEL STİL SEKMESİ (IA-07) */}
           {activeStep === 'view-export' && (
             <div className="space-y-3 p-3">
-              {/* Alt Sekme Seçici */}
-              <div role="group" aria-label="Malzeme ve çıktı sekmeleri" className="grid grid-cols-4 gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-[11px]">
-                {[
-                  { id: 'materials', label: 'Yüzey' },
-                  { id: 'handles', label: 'Kulp' },
-                  { id: 'exterior', label: 'Gömme' },
-                  { id: 'led-studio', label: 'LED/Işık' },
-                  { id: 'items', label: '3D Eşya' },
-                  { id: 'versions', label: 'Sürüm / AI' },
-                  { id: 'production', label: 'Üretim' },
-                ].map((tab) => (
+              {/* Dengeli 5'li Görsel Stil Sekme Çubuğu */}
+              <div
+                role="group"
+                aria-label="Görünüm ve malzeme sekmeleri"
+                className="grid grid-cols-5 gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-[11px]"
+              >
+                {(
+                  [
+                    { id: 'materials', label: 'Yüzey' },
+                    { id: 'handles', label: 'Kulp' },
+                    { id: 'exterior', label: 'Gömme' },
+                    { id: 'led-studio', label: 'Işık' },
+                    { id: 'items', label: '3D Eşya' },
+                  ] as const
+                ).map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     aria-pressed={materialSubTab === tab.id}
-                    onClick={() =>
-                      setMaterialSubTab(
-                        tab.id as 'materials' | 'handles' | 'exterior' | 'led-studio' | 'items' | 'versions' | 'production'
-                      )
-                    }
-                    className={`rounded py-1.5 font-semibold transition ${
+                    onClick={() => setMaterialSubTab(tab.id)}
+                    className={`min-h-[32px] rounded px-1 py-1.5 font-semibold transition ${
                       materialSubTab === tab.id
                         ? 'bg-amber-500 text-slate-950 shadow-sm'
                         : 'text-slate-300 hover:text-white'
@@ -1485,40 +1979,9 @@ export function App() {
                 ))}
               </div>
 
-              {materialSubTab === 'versions' && <VersionPanel/>}
-              {materialSubTab === 'production' && <ProductionPanel onReviewAccess={() => setShowAccessReview(true)} />}
-
-              {/* SEKME 1: MALZEME SİSTEMİ VE KALINLIKLAR */}
+              {/* SEKME 1: MALZEME VE YÜZEY SİSTEMİ */}
               {materialSubTab === 'materials' && (
                 <div className="space-y-3">
-                  {/* Panel Kalınlıkları Hızlı Kartı */}
-                  <div className="studio-card space-y-2 text-[11px]">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="studio-section-title">
-                        Panel kalınlıkları (Gövde / Arkalık)
-                      </span>
-                      <span className="font-mono text-[11px] text-slate-300">
-                        {resolved.panelThicknessMm} / {resolved.backPanelThicknessMm} mm
-                      </span>
-                    </div>
-                    <div className="studio-form-grid grid grid-cols-2 gap-x-2">
-                      <NumberField
-                        label="Ana Panel (mm)"
-                        min={12}
-                        max={36}
-                        value={resolved.panelThicknessMm}
-                        onCommit={(next) => updateMaterialThicknesses(next, undefined)}
-                      />
-                      <NumberField
-                        label="Arkalık / Taban (mm)"
-                        min={3}
-                        max={18}
-                        value={resolved.backPanelThicknessMm}
-                        onCommit={(next) => updateMaterialThicknesses(undefined, next)}
-                      />
-                    </div>
-                  </div>
-
                   {/* Hedef Yüzey Slotu Seçici (Gövde / Kapak / Çekmece / Raf) */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -2292,111 +2755,46 @@ export function App() {
             </div>
           )}
 
-          {/* BÖLMELER LİSTESİ (Adım 1 ve Adım 2'de gösterilir) */}
-          {activeStep !== 'view-export' && (
-            <section aria-label="Bölmeler ve genişlikler" className="space-y-2.5 p-3.5">
-              <h2 className="studio-section-title">Bölmeler ve genişlikler</h2>
-              <div className="space-y-1.5">
-                {resolved.bays.map((bay) => {
-                  const isSelected = bay.id === selectedBayId;
-                  const ownerMeta = OWNER_LABELS[bay.owner];
-                  const runOfBay = design.runs.find((r) => r.id === bay.runId);
-                  const canDelete = (runOfBay?.bays.length ?? 1) > 1;
-
-                  return (
-                    <div
-                      key={bay.id}
-                      className={`rounded-lg border p-2 text-xs transition ${
-                        isSelected
-                          ? 'border-sky-500 bg-sky-500/10'
-                          : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          aria-pressed={isSelected}
-                          onClick={() => selectBay(bay.id)}
-                          className="min-w-0 flex-1 rounded text-left"
-                        >
-                          <div className="flex items-center justify-between gap-1.5">
-                            <span className="truncate font-semibold text-white">{bay.label}</span>
-                            <span
-                              className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${ownerMeta.badgeClass}`}
-                            >
-                              {ownerMeta.label}
-                            </span>
-                          </div>
-                          <div className="mt-1.5 flex items-center justify-between font-mono text-[11px]">
-                            <span className="text-slate-300">
-                              Dış: <strong className="text-slate-100">{bay.outerWidthMm} mm</strong>
-                            </span>
-                            <span className="text-sky-300">
-                              Net: <strong>{bay.netInnerWidthMm} mm</strong>
-                            </span>
-                            <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-200">
-                              {bay.sizeSpec.kind === 'fixed'
-                                ? 'Sabit'
-                                : `Esnek (${bay.sizeSpec.weight}x)`}
-                            </span>
-                          </div>
-                        </button>
-                      </div>
-
-                      <div className="mt-2 flex items-center justify-between border-t border-slate-800/80 pt-1.5">
-                        <button
-                          type="button"
-                          aria-pressed={bay.locked}
-                          aria-label={
-                            bay.locked
-                              ? `${bay.label} genişlik kilidini aç`
-                              : `${bay.label} genişliğini kilitle`
-                          }
-                          onClick={() => toggleBayLock(bay.runId, bay.id)}
-                          className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium transition ${
-                            bay.locked
-                              ? 'border-amber-500/50 bg-amber-500/20 text-amber-200'
-                              : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-white'
-                          }`}
-                          title={bay.locked ? 'Ölçü kilitli — açmak için tıklayın' : 'Ölçüyü kilitle'}
-                        >
-                          {bay.locked ? (
-                            <Lock className="h-3 w-3" aria-hidden="true" />
-                          ) : (
-                            <Unlock className="h-3 w-3" aria-hidden="true" />
-                          )}
-                          <span>{bay.locked ? 'Kilitli' : 'Serbest'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={!canDelete}
-                          aria-label={
-                            canDelete
-                              ? `${bay.label} bölmesini sil`
-                              : `${bay.label} silinemez, en az bir bölme gereklidir`
-                          }
-                          onClick={() => {
-                            if (!canDelete) return;
-                            removeBay(bay.runId, bay.id);
-                            setExportNotice(`${bay.label} bölmesi silindi. Geri Al (Ctrl+Z) ile geri getirebilirsiniz.`);
-                          }}
-                          className="inline-flex items-center gap-1 rounded border border-transparent px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-35"
-                          title={
-                            canDelete
-                              ? `${bay.label} bölmesini sil (Geri Al ile kurtarılabilir)`
-                              : 'Kolda en az bir bölme kalmalıdır'
-                          }
-                        >
-                          <Trash2 className="h-3 w-3" aria-hidden="true" />
-                          <span>Sil</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* ADIM 4 (4. ÇIKTI): ÜRETİM PAFTALARI VE SÜRÜMLER / AI (IA-07) */}
+          {activeStep === 'versions-production' && (
+            <div className="space-y-3 p-3">
+              <div
+                role="group"
+                aria-label="Çıktı ve sürüm sekmeleri"
+                className="grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs"
+              >
+                <button
+                  type="button"
+                  aria-pressed={outputSubTab === 'production'}
+                  onClick={() => setOutputSubTab('production')}
+                  className={`min-h-[36px] rounded px-2 py-1.5 font-semibold transition ${
+                    outputSubTab === 'production'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  Üretim & Paftalar
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={outputSubTab === 'versions'}
+                  onClick={() => setOutputSubTab('versions')}
+                  className={`min-h-[36px] rounded px-2 py-1.5 font-semibold transition ${
+                    outputSubTab === 'versions'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  Sürümler & AI
+                </button>
               </div>
-            </section>
+
+              {outputSubTab === 'production' ? (
+                <ProductionPanel onReviewAccess={() => setShowAccessReview(true)} />
+              ) : (
+                <VersionPanel />
+              )}
+            </div>
           )}
         </aside>
 
@@ -2405,14 +2803,43 @@ export function App() {
           <WardrobeCanvas />
         </main>
 
-        {/* SAĞ PANEL: BÖLME GENEL BAKIŞI, HÜCRE & ÇEKMECE GEZGİNİ, DOĞRULAMA VE KAPASİTE ÖZETİ */}
-        <aside id="studio-selection" aria-label="Seçim ve uyarılar" className={`studio-selection ${compactPanel === 'selection' ? 'absolute inset-y-0 right-0 z-60 flex' : 'hidden'} w-96 max-w-full shrink-0 flex-col overflow-y-auto border-l border-slate-800 bg-slate-900 xl:static xl:flex`}>
-          <button type="button" className="m-2 self-start rounded border border-slate-700 px-2 py-1 text-xs xl:hidden" onClick={() => setCompactPanel(null)}>Seçim panelini kapat</button>
-          {activeStep === 'view-export' && <button type="button" aria-expanded={materialInspector}
-            className="m-3 rounded-lg border border-slate-700 p-2 text-left text-xs text-sky-200"
-            onClick={() => setMaterialInspector(!materialInspector)}>{materialInspector ? 'Seçim denetçisini daralt' : 'Seçim denetçisini aç'}</button>}
+        {/* SAĞ PANEL: TEKİL KAPAK DENETÇİSİ, BÖLME GENEL BAKIŞI, HÜCRE & ÇEKMECE GEZGİNİ VE DOĞRULAMA */}
+        <aside
+          id="studio-selection"
+          aria-label="Seçim ve uyarılar"
+          className={`studio-selection ${
+            compactPanel === 'selection'
+              ? 'studio-mobile-drawer studio-mobile-drawer-right flex'
+              : 'hidden'
+          } w-96 max-w-full shrink-0 flex-col overflow-y-auto border-l border-slate-800 bg-slate-900 xl:static xl:z-auto xl:flex`}
+        >
+          <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-3 py-2 xl:hidden">
+            <span className="text-xs font-semibold text-slate-100">Seçim ve uyarılar</span>
+            <button
+              type="button"
+              aria-label="Seçim panelini kapat"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-100 hover:border-sky-400"
+              onClick={() => closeCompactPanel(true)}
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+              <span>Kapat</span>
+            </button>
+          </div>
+          {isPresentationOrOutputStep && !doorEditorMode && (
+            <button
+              type="button"
+              aria-expanded={materialInspector}
+              className="m-3 rounded-lg border border-slate-700 p-2 text-left text-xs text-sky-200 hover:border-sky-400"
+              onClick={() => setMaterialInspector(!materialInspector)}
+            >
+              {materialInspector ? 'Seçim denetçisini daralt' : 'Seçim denetçisini aç'}
+            </button>
+          )}
           {showInspector && <>
-          {/* SEÇİLİ BÖLME VE BAĞIMSIZ KAPAK ÖZETİ */}
+          {doorEditorMode && (
+            <DoorInspectorPanel onCloseEditor={() => setDoorEditorMode(false)} />
+          )}
+          {/* SEÇİLİ BÖLME VE CEPHE ÖZETİ */}
           {selectedBay && (
             <section aria-label="Seçili bölme ve kapak" className="studio-section space-y-2.5">
               <div className="flex items-center justify-between gap-2">
@@ -2492,106 +2919,86 @@ export function App() {
                 />
               )}
 
-              {/* Kapak Hızlı Ayarı & Kapak Düzenle Kısayolu */}
-              <div className="studio-card space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-slate-200">
-                    Kapak Düzeni ve Menteşe
-                  </span>
-                  <button
-                    type="button"
-                    aria-pressed={doorEditorMode}
-                    onClick={() => setDoorEditorMode(!doorEditorMode)}
-                    className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${
-                      doorEditorMode
-                        ? 'border-amber-400 bg-amber-500 text-slate-950'
-                        : 'border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
-                    }`}
-                  >
-                    {doorEditorMode ? 'Kapak Düzenle (Aktif)' : 'Kapak Düzenle'}
-                  </button>
-                </div>
-
-                {hasExplicitFront && (
-                  <p className="text-[11px] text-sky-200">
-                    Bağımsız kapak aralıkları kullanılıyor. Tür, yükseklik, kapsam ve ray ayarlarını “2. İç & Kapak” adımındaki Kapak Sistemleri panelinden düzenleyin.
-                  </p>
-                )}
-                <div className={hasExplicitFront ? 'hidden' : 'grid grid-cols-2 items-end gap-2 text-[11px]'}>
-                  <select
-                    aria-label="Bölme kapak düzeni"
-                    value={selectedBay.frontMode}
-                    onChange={(e) =>
-                      setBayFrontConfig(
-                        selectedBay.runId,
-                        selectedBay.id,
-                        e.target.value as BayFrontMode,
-                        selectedBay.hingeAngleDeg
-                      )
-                    }
-                    className="studio-input"
-                  >
-                    <option value="auto">Otomatik kanat</option>
-                    <option value="singleLeft">Tek Kapak — Sol Menteşe</option>
-                    <option value="singleRight">Tek Kapak — Sağ Menteşe</option>
-                    <option value="double">Çift Kapak (Sol + Sağ)</option>
-                    <option value="open">Açık (Kapaksız Gövde)</option>
-                  </select>
-
-                  <select
-                    aria-label="Menteşe açılma açısı"
-                    value={selectedBay.hingeAngleDeg}
-                    disabled={selectedBay.frontMode === 'open'}
-                    onChange={(e) =>
-                      setBayFrontConfig(
-                        selectedBay.runId,
-                        selectedBay.id,
-                        selectedBay.frontMode,
-                        Number(e.target.value) as 110 | 155 | 165
-                      )
-                    }
-                    className="studio-input disabled:opacity-40"
-                  >
-                    <option value={110}>110° Standart</option>
-                    <option value={155}>155° Sıfır Çıkıntılı</option>
-                    <option value={165}>165° Geniş Açılı</option>
-                  </select>
-                </div>
-
-                {shouldExplainExternalDrawers(selectedBay, bayDoors, bayDrawers, hasExplicitFront) && (
-                  <p role="status" className="text-[11px] text-amber-200">
-                    Dış çekmeceler bu bölmenin ön yüzünü dolduruyor. Bu düzende menteşeli kanat oluşmadı.
-                  </p>
-                )}
-
-                {bayDoors.length > 0 && (
-                  <div className="grid grid-cols-1 gap-1 pt-0.5">
-                    {bayDoors.map((d) => {
-                      const isOpen = Boolean(openDoorIds[d.id]);
-                      return (
-                        <button
-                          key={d.id}
-                          type="button"
-                          aria-pressed={isOpen}
-                          onClick={() => toggleDoor(d.id)}
-                          className={`flex items-center justify-between rounded border px-2 py-1 text-[11px] font-medium transition ${
-                            isOpen
-                              ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
-                              : 'border-slate-800 bg-slate-900 text-slate-200 hover:border-slate-700'
-                          }`}
-                        >
-                          <span className="truncate">
-                            {d.label} ({d.widthMm}×{d.heightMm} mm)
-                          </span>
-                          <span className="ml-2 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
-                            {isOpen ? 'Kapat' : 'Aç'}
-                          </span>
-                        </button>
-                      );
-                    })}
+              {/* Salt-Okunur Cephe Özeti ve Tek Tıkla Kapak Düzenle Kısayolu (CAD-06) */}
+              {!doorEditorMode && activeBayFrontSummary && (
+                <div className="studio-card space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="block text-[11px] font-semibold text-slate-200">
+                        Cephe: {activeBayFrontSummary.label}
+                      </span>
+                      <span className="block text-[11px] text-slate-400">
+                        {activeBayFrontSummary.detail}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-pressed={doorEditorMode}
+                      onClick={() => setDoorEditorMode(true)}
+                      className="shrink-0 rounded border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-500/25"
+                    >
+                      Kapak Düzenle
+                    </button>
                   </div>
-                )}
-              </div>
+
+                  {shouldExplainExternalDrawers(selectedBay, bayDoors, bayDrawers, hasExplicitFront) && (
+                    <p role="status" className="text-[11px] text-amber-200">
+                      Dış çekmeceler bu bölmenin ön yüzünü dolduruyor. Bu düzende menteşeli kanat oluşmadı.
+                    </p>
+                  )}
+
+                  {(bayDoors.length > 0 || baySlidingDoors.length > 0) && (
+                    <div className="grid grid-cols-1 gap-1 pt-0.5">
+                      {bayDoors.map((d) => {
+                        const isOpen = Boolean(openDoorIds[d.id]);
+                        return (
+                          <button
+                            key={d.id}
+                            type="button"
+                            aria-pressed={isOpen}
+                            onClick={() => toggleDoor(d.id)}
+                            className={`flex items-center justify-between rounded border px-2 py-1 text-[11px] font-medium transition ${
+                              isOpen
+                                ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
+                                : 'border-slate-800 bg-slate-900 text-slate-200 hover:border-slate-700'
+                            }`}
+                          >
+                            <span className="truncate">
+                              {d.label} ({d.widthMm}×{d.heightMm} mm)
+                            </span>
+                            <span className="ml-2 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
+                              {isOpen ? 'Kapat' : 'Aç'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {baySlidingDoors.map((leaf) => {
+                        const isOpen = Boolean(openDoorIds[leaf.id]);
+                        return (
+                          <button
+                            key={leaf.id}
+                            type="button"
+                            aria-pressed={isOpen}
+                            onClick={() => toggleDoor(leaf.id)}
+                            className={`flex items-center justify-between rounded border px-2 py-1 text-[11px] font-medium transition ${
+                              isOpen
+                                ? 'border-sky-500/60 bg-sky-500/20 text-sky-200'
+                                : 'border-slate-800 bg-slate-900 text-slate-200 hover:border-slate-700'
+                            }`}
+                          >
+                            <span className="truncate">
+                              Sürgü Kanat {leaf.leafIndex + 1} · Ray {leaf.trackIndex + 1} ({leaf.widthMm}×{leaf.heightMm} mm)
+                            </span>
+                            <span className="ml-2 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-sky-300">
+                              {isOpen ? 'Kapat' : 'Aç'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
           )}
 

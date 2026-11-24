@@ -41,156 +41,195 @@ export function CommandFeedback() {
   ) : null;
 }
 
-export function Phase4RoomPanel() {
+export function RoomCeilingPanel({ embedded = false }: { embedded?: boolean }) {
+  const design = useWardrobeStore(s => s.design);
+  const updateRoomHeight = useWardrobeStore(s => s.updateRoomHeight);
+  const content = (
+    <>
+      {!embedded && <h2 className={title}>Tavan ve montaj boşluğu</h2>}
+      <div className="studio-form-grid grid grid-cols-2 gap-x-2">
+        <NumberField
+          label="Oda tavan yüksekliği (mm)"
+          value={design.roomHeightMm}
+          min={1800}
+          max={4000}
+          onCommit={value => updateRoomHeight('roomHeightMm', value)}
+        />
+        <NumberField
+          label="Bilinen montaj boşluğu (mm)"
+          value={design.ceilingClearanceMm ?? 0}
+          max={300}
+          onCommit={value => updateRoomHeight('ceilingClearanceMm', value)}
+        />
+      </div>
+      <p className="studio-helper">Montaj boşluğunu yerinde ölçüm kesinleşince girin.</p>
+    </>
+  );
+
+  if (embedded) return <div className="space-y-2.5 text-xs">{content}</div>;
+  return (
+    <section className={section} aria-label="Tavan ve montaj boşluğu">
+      {content}
+    </section>
+  );
+}
+
+export function RoomErgonomicsPanel({ embedded = false }: { embedded?: boolean }) {
   const design = useWardrobeStore(s => s.design);
   const setProfile = useWardrobeStore(s => s.setPersonProfile);
-  const updateRoomHeight = useWardrobeStore(s => s.updateRoomHeight);
-  const setMode = useWardrobeStore(s => s.setRunConstructionMode);
   const setCornerOwner = useWardrobeStore(s => s.setCornerOwner);
   const setEye = useWardrobeStore(s => s.setEyeLevelCamera);
   const overlay = useWardrobeStore(s => s.analysisOverlay);
   const setOverlay = useWardrobeStore(s => s.setAnalysisOverlay);
   const profiles = design.ergonomics ?? DEFAULT_PROFILES;
 
+  const content = (
+    <>
+      {!embedded && <h2 className={title}>Kişiler ve erişim</h2>}
+      <p className="studio-helper">
+        Boyları mm olarak girin. Sayısal alanlar Enter veya odaktan çıkışla uygulanır; ölçüler tamsayı mm&apos;ye yuvarlanır.
+      </p>
+      <div className="grid grid-cols-2 items-start gap-2">
+        {(['anne', 'baba'] as const).map(owner => (
+          <div key={owner} className="studio-card space-y-2">
+            <NumberField
+              label={`${OWNER_NAMES[owner]} boyu (mm)`}
+              value={profiles[owner].heightMm}
+              min={1000}
+              max={2200}
+              onCommit={heightMm => setProfile(owner, { heightMm })}
+            />
+            <span className="block text-[11px] text-slate-400">
+              {profiles[owner].heightMm / 10} cm · göz {profileLimits(profiles[owner]).eyeHeightMm} mm
+            </span>
+            <button type="button" className={`${button} w-full`} onClick={() => setEye(owner)}>
+              {OWNER_NAMES[owner]} göz hizası
+            </button>
+            <details className="text-[11px]">
+              <summary className="cursor-pointer text-slate-300">Erişim varsayımları</summary>
+              <div className="mt-2 space-y-2">
+                <NumberField
+                  label={`${OWNER_NAMES[owner]} günlük erişim (mm)`}
+                  value={profileLimits(profiles[owner]).dailyReachMm}
+                  min={800}
+                  max={2600}
+                  onCommit={dailyReachMm => setProfile(owner, { dailyReachMm })}
+                />
+                <NumberField
+                  label={`${OWNER_NAMES[owner]} üst erişim (mm)`}
+                  value={profileLimits(profiles[owner]).upperReachMm}
+                  min={1000}
+                  max={3000}
+                  onCommit={upperReachMm => setProfile(owner, { upperReachMm })}
+                />
+                <button
+                  type="button"
+                  className={button}
+                  onClick={() => setProfile(owner, { dailyReachMm: undefined, upperReachMm: undefined })}
+                >
+                  Boydan hesapla
+                </button>
+              </div>
+            </details>
+          </div>
+        ))}
+      </div>
+      <p className="studio-helper">
+        Planlama varsayımı: göz boyun %93&apos;ü, günlük erişim %105&apos;i, üst erişim %125&apos;i; 450 mm altı eğilme bölgesi. Ortak alan kısa kişinin erişimine göre değerlendirilir. Özel sınırlar boy değişince sabit kalır.
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className={`${button} ${overlay === 'ergonomics' ? 'border-sky-400 bg-sky-500/20 text-sky-100' : ''}`}
+          aria-pressed={overlay === 'ergonomics'}
+          onClick={() => setOverlay(overlay === 'ergonomics' ? 'none' : 'ergonomics')}
+        >
+          Erişim haritası
+        </button>
+        <button
+          type="button"
+          className={`${button} ${overlay === 'ownership' ? 'border-sky-400 bg-sky-500/20 text-sky-100' : ''}`}
+          aria-pressed={overlay === 'ownership'}
+          onClick={() => setOverlay(overlay === 'ownership' ? 'none' : 'ownership')}
+        >
+          Sahiplik renkleri
+        </button>
+      </div>
+      {design.junctions.map(j => (
+        <label key={j.id} className="block space-y-1">
+          <span className="text-[11px] font-medium text-slate-300">Köşe sahibi</span>
+          <select
+            aria-label="Köşe sahibi"
+            className={control}
+            value={j.owner ?? 'ortak'}
+            onChange={e => setCornerOwner(j.id, e.target.value as OwnerType)}
+          >
+            {owners.map(o => (
+              <option key={o} value={o}>
+                {OWNER_NAMES[o]}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </>
+  );
+
+  if (embedded) return <div className="space-y-3 text-xs">{content}</div>;
+  return (
+    <section className={section} aria-label="Kişisel ergonomi">
+      {content}
+    </section>
+  );
+}
+
+export function CarcassConstructionPanel({ embedded = false }: { embedded?: boolean }) {
+  const design = useWardrobeStore(s => s.design);
+  const setMode = useWardrobeStore(s => s.setRunConstructionMode);
+
+  const content = (
+    <>
+      <h3 className={title}>Gövde konstrüksiyonu</h3>
+      {design.runs.map(r => (
+        <label key={r.id} className="block space-y-1">
+          <span className="text-[11px] font-medium text-slate-300">{r.label}</span>
+          <select
+            aria-label={`${r.wallAxis} kolu konstrüksiyonu`}
+            value={r.constructionMode ?? 'separate'}
+            className={control}
+            onChange={e => setMode(r.id, e.target.value as 'shared' | 'separate')}
+          >
+            <option value="shared">Paylaşımlı dikme · N+1 panel</option>
+            <option value="separate">Ayrı gövdeler · 2N panel</option>
+          </select>
+        </label>
+      ))}
+      <p className="studio-helper">
+        Eski JSON dosyaları ayrı gövde ölçüleriyle korunur. Seçim dış genişlikleri korur; net açıklıkları yeniden hesaplar ve Geri Al ile geri döner. Ortak dikmenin kalınlığı soldaki bölmenin brüt payına dahildir.
+      </p>
+    </>
+  );
+
+  if (embedded) return <div className="space-y-2.5 border-t border-slate-800 pt-2.5 text-xs">{content}</div>;
+  return (
+    <section className={section} aria-label="Gövde konstrüksiyonu">
+      {content}
+    </section>
+  );
+}
+
+export function Phase4RoomPanel() {
   return (
     <>
-      <section className={section} aria-label="Tavan ve montaj boşluğu">
-        <h2 className={title}>Tavan ve montaj boşluğu</h2>
-        <div className="studio-form-grid grid grid-cols-2 gap-x-2">
-          <NumberField
-            label="Oda tavan yüksekliği (mm)"
-            value={design.roomHeightMm}
-            min={1800}
-            max={4000}
-            onCommit={value => updateRoomHeight('roomHeightMm', value)}
-          />
-          <NumberField
-            label="Bilinen montaj boşluğu (mm)"
-            value={design.ceilingClearanceMm ?? 0}
-            max={300}
-            onCommit={value => updateRoomHeight('ceilingClearanceMm', value)}
-          />
-        </div>
-        <p className="studio-helper">Montaj boşluğunu yerinde ölçüm kesinleşince girin.</p>
-      </section>
-
-      <section className={section} aria-label="Kişisel ergonomi">
-        <h2 className={title}>Kişiler ve erişim</h2>
-        <p className="studio-helper">
-          Boyları mm olarak girin. Sayısal alanlar Enter veya odaktan çıkışla uygulanır; ölçüler tamsayı mm&apos;ye yuvarlanır.
-        </p>
-        <div className="grid grid-cols-2 items-start gap-2">
-          {(['anne', 'baba'] as const).map(owner => (
-            <div key={owner} className="studio-card space-y-2">
-              <NumberField
-                label={`${OWNER_NAMES[owner]} boyu (mm)`}
-                value={profiles[owner].heightMm}
-                min={1000}
-                max={2200}
-                onCommit={heightMm => setProfile(owner, { heightMm })}
-              />
-              <span className="block text-[11px] text-slate-400">
-                {profiles[owner].heightMm / 10} cm · göz {profileLimits(profiles[owner]).eyeHeightMm} mm
-              </span>
-              <button type="button" className={`${button} w-full`} onClick={() => setEye(owner)}>
-                {OWNER_NAMES[owner]} göz hizası
-              </button>
-              <details className="text-[11px]">
-                <summary className="cursor-pointer text-slate-300">Erişim varsayımları</summary>
-                <div className="mt-2 space-y-2">
-                  <NumberField
-                    label={`${OWNER_NAMES[owner]} günlük erişim (mm)`}
-                    value={profileLimits(profiles[owner]).dailyReachMm}
-                    min={800}
-                    max={2600}
-                    onCommit={dailyReachMm => setProfile(owner, { dailyReachMm })}
-                  />
-                  <NumberField
-                    label={`${OWNER_NAMES[owner]} üst erişim (mm)`}
-                    value={profileLimits(profiles[owner]).upperReachMm}
-                    min={1000}
-                    max={3000}
-                    onCommit={upperReachMm => setProfile(owner, { upperReachMm })}
-                  />
-                  <button
-                    type="button"
-                    className={button}
-                    onClick={() => setProfile(owner, { dailyReachMm: undefined, upperReachMm: undefined })}
-                  >
-                    Boydan hesapla
-                  </button>
-                </div>
-              </details>
-            </div>
-          ))}
-        </div>
-        <p className="studio-helper">
-          Planlama varsayımı: göz boyun %93&apos;ü, günlük erişim %105&apos;i, üst erişim %125&apos;i; 450 mm altı eğilme bölgesi. Ortak alan kısa kişinin erişimine göre değerlendirilir. Özel sınırlar boy değişince sabit kalır.
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className={`${button} ${overlay === 'ergonomics' ? 'border-sky-400 bg-sky-500/20 text-sky-100' : ''}`}
-            aria-pressed={overlay === 'ergonomics'}
-            onClick={() => setOverlay(overlay === 'ergonomics' ? 'none' : 'ergonomics')}
-          >
-            Erişim haritası
-          </button>
-          <button
-            type="button"
-            className={`${button} ${overlay === 'ownership' ? 'border-sky-400 bg-sky-500/20 text-sky-100' : ''}`}
-            aria-pressed={overlay === 'ownership'}
-            onClick={() => setOverlay(overlay === 'ownership' ? 'none' : 'ownership')}
-          >
-            Sahiplik renkleri
-          </button>
-        </div>
-        {design.junctions.map(j => (
-          <label key={j.id} className="block space-y-1">
-            <span className="text-[11px] font-medium text-slate-300">Köşe sahibi</span>
-            <select
-              aria-label="Köşe sahibi"
-              className={control}
-              value={j.owner ?? 'ortak'}
-              onChange={e => setCornerOwner(j.id, e.target.value as OwnerType)}
-            >
-              {owners.map(o => (
-                <option key={o} value={o}>
-                  {OWNER_NAMES[o]}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </section>
-
-      <section className={section} aria-label="Gövde konstrüksiyonu">
-        <h2 className={title}>Gövde konstrüksiyonu</h2>
-        {design.runs.map(r => (
-          <label key={r.id} className="block space-y-1">
-            <span className="text-[11px] font-medium text-slate-300">{r.label}</span>
-            <select
-              aria-label={`${r.wallAxis} kolu konstrüksiyonu`}
-              value={r.constructionMode ?? 'separate'}
-              className={control}
-              onChange={e => setMode(r.id, e.target.value as 'shared' | 'separate')}
-            >
-              <option value="shared">Paylaşımlı dikme · N+1 panel</option>
-              <option value="separate">Ayrı gövdeler · 2N panel</option>
-            </select>
-          </label>
-        ))}
-        <p className="studio-helper">
-          Eski JSON dosyaları ayrı gövde ölçüleriyle korunur. Seçim dış genişlikleri korur; net açıklıkları yeniden hesaplar ve Geri Al ile geri döner. Ortak dikmenin kalınlığı soldaki bölmenin brüt payına dahildir.
-        </p>
-      </section>
-
+      <RoomCeilingPanel />
+      <RoomErgonomicsPanel />
+      <CarcassConstructionPanel />
       <ObstaclePanel />
     </>
   );
 }
 
-function ObstaclePanel() {
+export function ObstaclePanel({ embedded = false }: { embedded?: boolean }) {
   const obstacles = useWardrobeStore(s => s.design.obstacles) ?? [];
   const selected = useWardrobeStore(s => s.selectedObstacleId);
   const select = useWardrobeStore(s => s.selectRoomObstacle);
@@ -201,9 +240,9 @@ function ObstaclePanel() {
   const [kind, setKind] = useState<RoomObstacleKind>('bed');
   const obstacle = obstacles.find(o => o.id === selected) ?? obstacles[0];
 
-  return (
-    <section className={section} aria-label="Oda engelleri">
-      <h2 className={title}>Oda engelleri</h2>
+  const content = (
+    <>
+      {!embedded && <h2 className={title}>Oda engelleri</h2>}
       <div className="flex gap-2">
         <select
           aria-label="Yeni engel türü"
@@ -327,6 +366,13 @@ function ObstaclePanel() {
       ) : (
         <p className="studio-helper">Yatak, kapı veya sabit engel ekleyerek gerçek yerleşimi kontrol edin.</p>
       )}
+    </>
+  );
+
+  if (embedded) return <div className="space-y-3 text-xs">{content}</div>;
+  return (
+    <section className={section} aria-label="Oda engelleri">
+      {content}
     </section>
   );
 }
@@ -340,7 +386,7 @@ export function Phase4InteriorPanel() {
   );
 }
 
-function InventoryPanel() {
+export function InventoryPanel({ embedded = false }: { embedded?: boolean }) {
   const targets = useWardrobeStore(s => s.design.inventory) ?? [];
   const analysis = useWardrobeStore(s => s.resolved.analysis);
   const upsert = useWardrobeStore(s => s.upsertInventoryTarget);
@@ -348,9 +394,9 @@ function InventoryPanel() {
   const [owner, setOwner] = useState<OwnerType>('anne');
   const [kind, setKind] = useState<InventoryItemKind>('shirts');
 
-  return (
-    <section className={section} aria-label="Envanter ve kapasite">
-      <h2 className={title}>Envanter ve gerçek kapasite</h2>
+  const content = (
+    <>
+      {!embedded && <h2 className={title}>Envanter ve gerçek kapasite</h2>}
       <table className="w-full table-fixed text-[11px]">
         <thead className="text-sky-200">
           <tr>
@@ -518,11 +564,18 @@ function InventoryPanel() {
           </div>
         );
       })}
+    </>
+  );
+
+  if (embedded) return <div className="space-y-3 text-xs">{content}</div>;
+  return (
+    <section className={section} aria-label="Envanter ve kapasite">
+      {content}
     </section>
   );
 }
 
-function StorageTemplatePanel() {
+export function StorageTemplatePanel({ embedded = false }: { embedded?: boolean }) {
   const design = useWardrobeStore(s => s.design);
   const bayId = useWardrobeStore(s => s.selectedBayId);
   const cellId = useWardrobeStore(s => s.selectedCellId);
@@ -537,9 +590,9 @@ function StorageTemplatePanel() {
   const bay = run?.bays.find(b => b.id === bayId);
   const effectiveRun = design.runs.some(r => r.id === targetRun) ? targetRun : design.runs[0].id;
 
-  return (
-    <section className={section} aria-label="Özel depolama ve kopyalama">
-      <h2 className={title}>Özel depolama ve bölme işlemleri</h2>
+  const content = (
+    <>
+      {!embedded && <h2 className={title}>Özel depolama ve bölme işlemleri</h2>}
       <p className="text-[11px] text-slate-300">
         {bay ? `Seçili: ${bay.label}` : 'Önce sahneden veya yapı ağacından bir gövde bölmesi seçin.'}
       </p>
@@ -626,6 +679,13 @@ function StorageTemplatePanel() {
           Kopya için kol uzunluğu bölmenin dış genişliği kadar artar. Yeni hücre kimlikleri üretilir. Çok bölmeli ortak kapaklar önce ayrılmalıdır.
         </p>
       </div>
+    </>
+  );
+
+  if (embedded) return <div className="space-y-3 text-xs">{content}</div>;
+  return (
+    <section className={section} aria-label="Özel depolama ve kopyalama">
+      {content}
     </section>
   );
 }

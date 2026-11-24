@@ -55,6 +55,48 @@
   border-color: #38bdf8;
 }
 
+/* Progressive-disclosure Workshop CAD accordions (IA-05) */
+.studio-accordion {
+  border-bottom: 1px solid rgba(30, 41, 59, 0.92);
+}
+.studio-accordion > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.studio-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+.studio-accordion > summary:hover {
+  background: rgba(30, 41, 59, 0.45);
+  color: #f8fafc;
+}
+.studio-accordion-chevron {
+  transition: transform 150ms ease;
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+.studio-accordion[open] > summary {
+  border-bottom: 1px solid rgba(30, 41, 59, 0.75);
+  background: rgba(15, 23, 42, 0.65);
+}
+.studio-accordion[open] > summary .studio-accordion-chevron {
+  transform: rotate(180deg);
+  color: #f59e0b;
+}
+.studio-accordion-body {
+  padding: 0.75rem 0.875rem;
+}
+
 /* Aligned multi-column form grids: labels bottom-align across columns while inline alerts grow downward without shifting sibling inputs */
 .studio-form-grid {
   align-items: start;
@@ -267,6 +309,36 @@
   }
 }
 
+.studio-compact-nav button {
+  min-height: 44px;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Full-height overlay drawers below xl (<1280px) so mobile/tablet panels use full viewport height (PE-05) */
+@media (max-width: 1279px) {
+  .studio-mobile-drawer {
+    position: fixed;
+    inset-block: 0;
+    z-index: 95;
+    height: 100dvh;
+    max-height: 100dvh;
+    width: min(92vw, 24rem);
+    max-width: 100vw;
+    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.85);
+  }
+  .studio-mobile-drawer-left {
+    left: 0;
+    right: auto;
+  }
+  .studio-mobile-drawer-right {
+    right: 0;
+    left: auto;
+  }
+}
+
 @media (max-width: 1000px) {
   .studio-header {
     grid-template-areas: "brand session" "views views" "fronts fronts";
@@ -280,16 +352,74 @@
   .studio-compact-nav { justify-content: space-between; }
 }
 
+@media (max-width: 640px) {
+  .studio-mobile-drawer {
+    width: 100vw;
+    max-width: 100vw;
+  }
+  .studio-first-use-banner,
+  .studio-access-banner {
+    flex-wrap: nowrap;
+    padding: 0.3rem 0.5rem;
+    gap: 0.4rem;
+  }
+  .studio-first-use-banner .studio-banner-detail,
+  .studio-first-use-banner .studio-banner-secondary-action {
+    display: none;
+  }
+  .studio-access-banner .studio-access-status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 520px) {
-  .studio-brand h1 { font-size: 0.72rem; }
+  .studio-header {
+    gap: 0.25rem;
+    padding: 0.3rem 0.4rem;
+  }
+  .studio-brand {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .studio-brand h1 {
+    font-size: 0.72rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .studio-brand-mark { display: none; }
-  .studio-header button { min-height: 36px; }
+  .studio-session { gap: 0.2rem; }
+  .studio-header button { min-height: 44px; }
+  .studio-session button {
+    padding-inline: 0.4rem;
+    font-size: 0.6875rem;
+  }
+  .studio-views,
+  .studio-visibility-group {
+    padding: 0;
+    min-height: 44px;
+  }
   .studio-views > button,
-  .studio-visibility-group > button { min-height: 30px; }
-  .studio-views > button { padding-inline: 0.25rem; font-size: 0.66rem; }
-  .studio-front-toolbar { gap: 0.25rem; }
-  .studio-front-toolbar button { padding-inline: 0.35rem; font-size: 0.66rem; }
+  .studio-visibility-group > button {
+    min-height: 44px;
+    padding-inline: 0.2rem;
+    font-size: 0.65rem;
+  }
+  .studio-views > button svg,
+  .studio-visibility-group > button svg {
+    display: none;
+  }
+  .studio-front-toolbar { gap: 0.2rem; }
+  .studio-front-toolbar > button {
+    padding-inline: 0.3rem;
+    font-size: 0.65rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .studio-front-toolbar > button svg { display: none; }
-  .studio-setup, .studio-selection { width: min(90%, 24rem); }
   .studio-footer { font-size: 11px; }
 }
