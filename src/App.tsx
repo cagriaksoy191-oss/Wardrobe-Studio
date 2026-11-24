@@ -103,12 +103,37 @@ function formatPresetSubtitle(preset: Design): string {
   const runB = preset.runs[1];
   const junc = preset.junctions[0];
   if (preset.layoutKind === 'straight' || !runB) {
-    return `Düz · ${runA.lengthMm}×${runA.heightMm}×${runA.depthMm} mm · Sorunsuz`;
+    return `Düz · ${runA.lengthMm}×${runA.heightMm}×${runA.depthMm} mm · Erişime açık`;
   }
   const kindLabel = junc?.type === 'blind' ? 'Kör Köşe L' : 'Beşgen L';
   const depthHint =
     runA.depthMm !== runB.depthMm ? ` · Asimetrik (${runA.depthMm}/${runB.depthMm} mm)` : '';
   return `${kindLabel} · ${runA.lengthMm}×${runB.lengthMm} mm${depthHint}`;
+}
+
+function formatDoorLeafBadge(door: ResolvedDoorLeaf): { badge: string; baseLabel: string } {
+  if (door.isCornerDoor) {
+    return { badge: 'Köşe Kapak', baseLabel: door.label };
+  }
+  if (/\bSol Kapak\b/i.test(door.label)) {
+    return {
+      badge: 'Sol Kapak',
+      baseLabel: door.label.replace(/\s*\bSol Kapak\b/i, '').trim() || door.label,
+    };
+  }
+  if (/\bSağ Kapak\b/i.test(door.label)) {
+    return {
+      badge: 'Sağ Kapak',
+      baseLabel: door.label.replace(/\s*\bSağ Kapak\b/i, '').trim() || door.label,
+    };
+  }
+  if (door.hingeSide === 'left') {
+    return { badge: 'Sol Kapak', baseLabel: door.label };
+  }
+  if (door.hingeSide === 'right') {
+    return { badge: 'Sağ Kapak', baseLabel: door.label };
+  }
+  return { badge: 'Kapak', baseLabel: door.label };
 }
 
 function summarizeBayFront(
@@ -247,12 +272,18 @@ export function App() {
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const historyButtonRef = useRef<HTMLButtonElement>(null);
   const historyMenuRef = useRef<HTMLDivElement>(null);
+  const historyCloseButtonRef = useRef<HTMLButtonElement>(null);
   const sceneViewButtonRef = useRef<HTMLButtonElement>(null);
   const setupToggleButtonRef = useRef<HTMLButtonElement>(null);
   const selectionToggleButtonRef = useRef<HTMLButtonElement>(null);
+  const setupDrawerRef = useRef<HTMLElement>(null);
+  const selectionDrawerRef = useRef<HTMLElement>(null);
+  const setupCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const selectionCloseButtonRef = useRef<HTMLButtonElement>(null);
   const blankBuilderRef = useRef<HTMLElement>(null);
   const examplesSummaryRef = useRef<HTMLElement>(null);
   const [firstUseDismissed, setFirstUseDismissed] = useState(false);
+  const [recoveryNoticeDismissed, setRecoveryNoticeDismissed] = useState(false);
   const [introDestination, setIntroDestination] = useState<'create' | 'examples' | null>(null);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [blankCreatedNotice, setBlankCreatedNotice] = useState<string | null>(null);
@@ -260,6 +291,22 @@ export function App() {
   const [importError, setImportError] = useState<string | null>(null);
   const [showHistoryMenu, setShowHistoryMenu] = useState<boolean>(false);
   const [showAdvancedRightInspector, setShowAdvancedRightInspector] = useState<boolean>(false);
+  const [presentationInspectorPinned, setPresentationInspectorPinned] = useState<boolean>(false);
+  const [isCompactViewport, setIsCompactViewport] = useState<boolean>(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 1279px)').matches
+      : false
+  );
+  const [step1Accordions, setStep1Accordions] = useState({
+    thickness: false,
+    ergonomics: false,
+    obstacles: false,
+  });
+  const [step2Accordions, setStep2Accordions] = useState({
+    templates: false,
+    inventory: false,
+  });
+  const [visitedOutputStep, setVisitedOutputStep] = useState(false);
 
   // Adım 3 ("3. Görünüm") ve Adım 4 ("4. Çıktı") alt sekme durumları (IA-07)
   const [materialSubTab, setMaterialSubTab] = useState<
@@ -286,6 +333,63 @@ export function App() {
   });
   const blankMeasurements = useMemo(() => readBlankMeasurements(blankMeasureDrafts, blankLayout), [blankMeasureDrafts, blankLayout]);
 
+  const handleSaveCheckpoint = () => {
+    const detail = { hadInvalid: false, firstInvalidEl: null as HTMLInputElement | null };
+    window.dispatchEvent(new CustomEvent('wardrobe:flush-drafts', { detail }));
+    if (detail.hadInvalid) {
+      detail.firstInvalidEl?.focus();
+      return;
+    }
+    const activeEl = document.activeElement;
+    if (
+      activeEl instanceof HTMLInputElement ||
+      activeEl instanceof HTMLTextAreaElement
+    ) {
+      if (activeEl.type !== 'number') {
+        activeEl.blur();
+      }
+    }
+    saveCheckpoint();
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia('(max-width: 1279px)');
+    const sync = () => setIsCompactViewport(mql.matches);
+    sync();
+    mql.addEventListener('change', sync);
+    return () => mql.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    if (activeStep === 'versions-production') {
+      setVisitedOutputStep(true);
+    } else if (visitedOutputStep) {
+      window.dispatchEvent(new CustomEvent('wardrobe:cancel-production-exports'));
+    }
+  }, [activeStep, visitedOutputStep]);
+
+  useEffect(() => {
+    if (visitedOutputStep && outputSubTab !== 'production') {
+      window.dispatchEvent(new CustomEvent('wardrobe:cancel-production-exports'));
+    }
+  }, [outputSubTab, visitedOutputStep]);
+
+  useEffect(() => {
+    if (renderQualityMode === 'presentation') {
+      setPresentationInspectorPinned(false);
+    }
+  }, [renderQualityMode]);
+
+  useEffect(() => {
+    if (activeStep !== 'view-export' || materialSubTab !== 'led-studio') {
+      useWardrobeStore.getState().endHistoryTransaction();
+    }
+    return () => {
+      useWardrobeStore.getState().endHistoryTransaction();
+    };
+  }, [activeStep, materialSubTab]);
+
   const closeCompactPanel = (restoreFocus = false) => {
     const previous = compactPanel;
     setCompactPanel(null);
@@ -307,6 +411,64 @@ export function App() {
     return () =>
       window.removeEventListener('wardrobe:open-selection-drawer', handleOpenSelectionDrawer);
   }, []);
+
+  // Accessible modal drawer focus entry & Tab/Shift+Tab trap below xl (<1280px) (VF-03)
+  useEffect(() => {
+    if (!isCompactViewport || !compactPanel) return;
+    const activeDrawer =
+      compactPanel === 'setup' ? setupDrawerRef.current : selectionDrawerRef.current;
+    const closeBtn =
+      compactPanel === 'setup' ? setupCloseButtonRef.current : selectionCloseButtonRef.current;
+
+    if (!introDestination) {
+      requestAnimationFrame(() => {
+        if (closeBtn && closeBtn.offsetParent !== null) {
+          closeBtn.focus();
+        } else {
+          activeDrawer?.focus();
+        }
+      });
+    }
+
+    const focusableSelector =
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+    const handleTrapKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || !activeDrawer) return;
+      if (document.querySelector('dialog[open]')) return;
+      const focusables = Array.from(
+        activeDrawer.querySelectorAll<HTMLElement>(focusableSelector)
+      ).filter((el) => el.offsetParent !== null);
+      if (focusables.length === 0) {
+        e.preventDefault();
+        activeDrawer.focus();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const current = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (!current || !activeDrawer.contains(current) || current === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (!current || !activeDrawer.contains(current) || current === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleTrapKeyDown);
+    return () => document.removeEventListener('keydown', handleTrapKeyDown);
+  }, [isCompactViewport, compactPanel, introDestination]);
+
+  // Move focus directly into İşlem Geçmişi menu on open so focus never drops to <body> (VF-06)
+  useEffect(() => {
+    if (!showHistoryMenu) return;
+    requestAnimationFrame(() => {
+      (historyCloseButtonRef.current ?? historyMenuRef.current)?.focus();
+    });
+  }, [showHistoryMenu]);
 
   const focusHistoryTrigger = () => {
     if (historyButtonRef.current && historyButtonRef.current.offsetParent !== null) {
@@ -353,28 +515,37 @@ export function App() {
   const openIntroDestination = (destination: 'create' | 'examples') => {
     setFirstUseDismissed(true);
     setActiveStep('room-carcass');
-    setCompactPanel('setup');
+    if (isCompactViewport) setCompactPanel('setup');
     setShowBlankBuilder(destination === 'create');
     if (destination === 'examples') setExamplesOpen(true);
     setIntroDestination(destination);
   };
 
-  // Klavye kısayolları (Ctrl+Z / Ctrl+Y / Ctrl+S / Escape)
+  // Klavye kısayolları (Ctrl+Z / Ctrl+Y / Ctrl+S / hiyerarşik Escape)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (e.defaultPrevented) return;
+        if (document.querySelector('dialog[open]')) return;
         if (showHistoryMenu) {
+          e.preventDefault();
+          e.stopPropagation();
           setShowHistoryMenu(false);
           focusHistoryTrigger();
-        }
-        if (showTools) {
+          return;
+        } else if (showTools) {
+          e.preventDefault();
+          e.stopPropagation();
           setShowTools(false);
           if (toolsButtonRef.current && toolsButtonRef.current.offsetParent !== null) {
             toolsButtonRef.current.focus();
           }
-        }
-        if (compactPanel) {
+          return;
+        } else if (compactPanel) {
+          e.preventDefault();
+          e.stopPropagation();
           closeCompactPanel(true);
+          return;
         }
       }
       const target = e.target as HTMLElement | null;
@@ -386,7 +557,7 @@ export function App() {
 
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        saveCheckpoint();
+        handleSaveCheckpoint();
         return;
       }
 
@@ -405,8 +576,8 @@ export function App() {
         redo();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo, saveCheckpoint, showHistoryMenu, showTools, compactPanel]);
 
   const handleExportJson = () => {
@@ -544,8 +715,10 @@ export function App() {
     });
   };
 
+  const isCorruptedRecoveryError =
+    persistenceStatus === 'error' && Boolean(recoveryJson) && !lastSavedAt && !hasUnsavedChanges;
   const checkpointText = persistenceStatus === 'saving' ? 'Yazılıyor…'
-    : persistenceStatus === 'error' ? 'Yeniden kaydet'
+    : persistenceStatus === 'error' ? (isCorruptedRecoveryError ? 'Kaydet' : 'Yeniden kaydet')
     : hasUnsavedChanges ? 'Kaydet *'
     : !lastCheckpointAt ? 'Kaydet'
     : persistenceStatus === 'partial' ? 'Tek depoda kayıt'
@@ -553,11 +726,38 @@ export function App() {
   const isPresentationOrOutputStep =
     activeStep === 'view-export' || activeStep === 'versions-production';
   const showInspector = doorEditorMode || !isPresentationOrOutputStep || materialInspector;
+  const showDesktopRightRail =
+    renderQualityMode !== 'presentation' || presentationInspectorPinned || doorEditorMode;
   const accessProblems = useMemo(() => accessWarnings(resolved.analysis?.functionalAccess ?? []), [resolved]);
   const accessBlocks = accessProblems.filter(entry => entry.status === 'blocked');
   const wideSpans = resolved.issues.filter(issue => issue.code === 'SHELF_SPAN_EXCEEDED');
   const otherIssues = resolved.issues.filter(issue => issue.code !== 'SHELF_SPAN_EXCEEDED')
     .sort((a, b) => Number(b.severity === 'error') - Number(a.severity === 'error'));
+
+  // CF-23: Auto-expand advanced service niche inspector whenever a serviceNiche cell is selected
+  useEffect(() => {
+    if (selectedCell?.insert?.type === 'serviceNiche') {
+      setShowAdvancedRightInspector(true);
+      setMaterialInspector(true);
+    }
+  }, [selectedCell?.id, selectedCell?.insert?.type]);
+
+  const cycleMobileViewMode = () => {
+    const order: Array<typeof viewMode> =
+      design.layoutKind === 'l-shape'
+        ? ['3d-perspective', '2d-front-A', '2d-front-B', '2d-plan-top']
+        : ['3d-perspective', '2d-front-A', '2d-plan-top'];
+    const idx = order.indexOf(viewMode);
+    setViewMode(order[(idx + 1) % order.length]);
+  };
+  const mobileViewLabel =
+    viewMode === '3d-perspective'
+      ? '3D'
+      : viewMode === '2d-front-A'
+        ? '2D A'
+        : viewMode === '2d-front-B'
+          ? '2D B'
+          : 'Plan';
 
   const renderBaysSection = () => (
     <section aria-label="Bölmeler ve genişlikler" className="studio-section space-y-2.5">
@@ -619,7 +819,7 @@ export function App() {
                       : `${bay.label} genişliğini kilitle`
                   }
                   onClick={() => toggleBayLock(bay.runId, bay.id)}
-                  className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium transition ${
+                  className={`inline-flex min-h-6 items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium transition ${
                     bay.locked
                       ? 'border-amber-500/50 bg-amber-500/20 text-amber-200'
                       : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500 hover:text-white'
@@ -647,7 +847,7 @@ export function App() {
                     removeBay(bay.runId, bay.id);
                     setExportNotice(`${bay.label} bölmesi silindi. Geri Al (Ctrl+Z) ile geri getirebilirsiniz.`);
                   }}
-                  className="inline-flex items-center gap-1 rounded border border-transparent px-2 py-0.5 text-[11px] text-slate-400 transition hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-35"
+                  className="inline-flex min-h-6 items-center gap-1 rounded border border-transparent px-2 py-0.5 text-[11px] text-slate-300 transition hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-55"
                   title={
                     canDelete
                       ? `${bay.label} bölmesini sil (Geri Al ile kurtarılabilir)`
@@ -667,17 +867,35 @@ export function App() {
 
   return (
     <div className="studio-app flex min-w-0 flex-col bg-slate-950 text-slate-100">
+      <a
+        href="#studio-setup"
+        onClick={(e) => {
+          if (isCompactViewport) {
+            e.preventDefault();
+            setCompactPanel('setup');
+          } else {
+            const target = setupDrawerRef.current;
+            if (target) {
+              e.preventDefault();
+              target.focus();
+            }
+          }
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[120] focus:rounded-md focus:border focus:border-cyan-300 focus:bg-slate-950 focus:px-3 focus:py-2 focus:text-xs focus:font-semibold focus:text-white focus:shadow-lg"
+      >
+        Tasarım paneline atla
+      </a>
       {/* ÜST ARAÇ ÇUBUĞU */}
       <header className="studio-header shrink-0 border-b border-slate-800 bg-slate-900/95">
         <div className="studio-brand flex min-w-0 items-center gap-2.5">
           <div className="studio-brand-mark flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/20 text-amber-400">
             <Box className="h-5 w-5" aria-hidden="true" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold tracking-wide text-white">WARDROBE STUDIO</h1>
+              <h1 className="truncate text-sm font-bold tracking-wide text-white">WARDROBE STUDIO</h1>
             </div>
-            <p className="truncate text-[11px] text-slate-300" title={design.name}>{design.name}</p>
+            <p className="studio-brand-subtitle truncate text-[11px] text-slate-300" title={design.name}>{design.name}</p>
           </div>
         </div>
 
@@ -832,7 +1050,7 @@ export function App() {
                   ? `Geri al (${historyPast.length} adım): ${historyPast[historyPast.length - 1].label}`
                   : 'Geri al (geçmiş boş)'
               }
-              className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-200 transition hover:bg-slate-800 disabled:opacity-40"
+              className="flex items-center justify-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-200 transition hover:bg-slate-800 disabled:opacity-55"
               title={
                 historyPast.length > 0
                   ? `Geri Al (${historyPast.length} adım): ${historyPast[historyPast.length - 1].label}`
@@ -848,13 +1066,13 @@ export function App() {
               disabled={historyFuture.length === 0}
               aria-label={
                 historyFuture.length > 0
-                  ? `Yinele (${historyFuture.length} adım): ${historyFuture[historyFuture.length - 1].label}`
+                  ? `Yinele (${historyFuture.length} adım): ${historyFuture[0].label}`
                   : 'Yinele (ileri adım yok)'
               }
-              className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-200 transition hover:bg-slate-800 disabled:opacity-40"
+              className="flex items-center justify-center gap-1 rounded-md border border-slate-800 bg-slate-900 px-2 py-1 text-xs text-slate-200 transition hover:bg-slate-800 disabled:opacity-55"
               title={
                 historyFuture.length > 0
-                  ? `Yinele (${historyFuture.length} adım): ${historyFuture[historyFuture.length - 1].label}`
+                  ? `Yinele (${historyFuture.length} adım): ${historyFuture[0].label}`
                   : 'Yinele (Ctrl+Y)'
               }
             >
@@ -868,8 +1086,9 @@ export function App() {
           {/* KAYIT NOKTASI BUTONU */}
           <button
             type="button"
-            onClick={saveCheckpoint}
-            className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
+            onClick={handleSaveCheckpoint}
+            aria-label={checkpointText}
+            className={`flex items-center justify-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
               hasUnsavedChanges || !lastCheckpointAt || persistenceStatus === 'error'
                 ? 'border-amber-400/70 bg-amber-500 text-slate-950 shadow-sm hover:bg-amber-400'
                 : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
@@ -877,7 +1096,7 @@ export function App() {
             title="Çalışma kopyasını kayıt noktası olarak kaydet (Ctrl+S)"
           >
             <Save className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{checkpointText}</span>
+            <span className="studio-save-label">{checkpointText}</span>
           </button>
 
           <button
@@ -900,6 +1119,155 @@ export function App() {
           </button>
 
           <div ref={toolsMenuRef} id="studio-more-tools" className="studio-more-tools" data-open={showTools}>
+            {/* MOBİL VE KISA YATAY EKRAN GÖRÜNÜM & KAPAK KONTROLLERİ */}
+            <div className="studio-mobile-tools-section">
+              <div className="space-y-1">
+                <span className="block px-1 text-[11px] font-semibold text-slate-300">Görünüm</span>
+                <div className="grid grid-cols-2 gap-1" role="group" aria-label="Mobil görünüm seçici">
+                  <button
+                    type="button"
+                    aria-pressed={viewMode === '3d-perspective'}
+                    onClick={() => {
+                      setViewMode('3d-perspective');
+                      setShowTools(false);
+                    }}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                      viewMode === '3d-perspective'
+                        ? 'border-amber-400 bg-amber-500 text-slate-950'
+                        : 'border-slate-800 bg-slate-900 text-slate-200'
+                    }`}
+                  >
+                    <Box className="h-3.5 w-3.5" aria-hidden="true" />
+                    3D Perspektif
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={viewMode === '2d-front-A'}
+                    onClick={() => {
+                      setViewMode('2d-front-A');
+                      setShowTools(false);
+                    }}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                      viewMode === '2d-front-A'
+                        ? 'border-amber-400 bg-amber-500 text-slate-950'
+                        : 'border-slate-800 bg-slate-900 text-slate-200'
+                    }`}
+                  >
+                    <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+                    2D Cephe (A)
+                  </button>
+                  {design.layoutKind === 'l-shape' && (
+                    <button
+                      type="button"
+                      aria-pressed={viewMode === '2d-front-B'}
+                      onClick={() => {
+                        setViewMode('2d-front-B');
+                        setShowTools(false);
+                      }}
+                      className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                        viewMode === '2d-front-B'
+                          ? 'border-amber-400 bg-amber-500 text-slate-950'
+                          : 'border-slate-800 bg-slate-900 text-slate-200'
+                      }`}
+                    >
+                      <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+                      2D Cephe (B)
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-pressed={viewMode === '2d-plan-top'}
+                    onClick={() => {
+                      setViewMode('2d-plan-top');
+                      setShowTools(false);
+                    }}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                      viewMode === '2d-plan-top'
+                        ? 'border-amber-400 bg-amber-500 text-slate-950'
+                        : 'border-slate-800 bg-slate-900 text-slate-200'
+                    }`}
+                  >
+                    <GridIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                    2D Üst Plan
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="block px-1 text-[11px] font-semibold text-slate-300">Kapak görünürlüğü</span>
+                <div className="grid grid-cols-3 gap-1" role="group" aria-label="Mobil kapak görünürlüğü">
+                  <button
+                    type="button"
+                    aria-pressed={doorVisibilityMode === 'normal'}
+                    onClick={() => setDoorVisibilityMode('normal')}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                      doorVisibilityMode === 'normal'
+                        ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                        : 'border-slate-800 bg-slate-900 text-slate-200'
+                    }`}
+                  >
+                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    Kapak
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={doorVisibilityMode === 'xray'}
+                    onClick={() => setDoorVisibilityMode('xray')}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                      doorVisibilityMode === 'xray'
+                        ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                        : 'border-slate-800 bg-slate-900 text-slate-200'
+                    }`}
+                  >
+                    <ScanEye className="h-3.5 w-3.5" aria-hidden="true" />
+                    X-Ray
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={doorVisibilityMode === 'hidden'}
+                    onClick={() => setDoorVisibilityMode('hidden')}
+                    className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                      doorVisibilityMode === 'hidden'
+                        ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                        : 'border-slate-800 bg-slate-900 text-slate-200'
+                    }`}
+                  >
+                    <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                    Gizle
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  aria-pressed={anyDoorOpen}
+                  onClick={() => setAllDoorsOpen(!anyDoorOpen)}
+                  className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                    anyDoorOpen
+                      ? 'border-amber-500/50 bg-amber-500/20 text-amber-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  <DoorOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{anyDoorOpen ? 'Kapakları Kapat' : 'Kapakları Aç'}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={anyDrawerOpen}
+                  onClick={() => setAllDrawersOpen(!anyDrawerOpen)}
+                  className={`flex items-center justify-center gap-1 rounded-md border px-2 text-xs font-medium transition ${
+                    anyDrawerOpen
+                      ? 'border-amber-500/50 bg-amber-500/20 text-amber-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{anyDrawerOpen ? 'Çekmeceleri Kapat' : 'Çekmeceleri Aç'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* ÖLÇÜLER BUTONU */}
             <button
               type="button"
@@ -994,6 +1362,7 @@ export function App() {
             <div
               ref={historyMenuRef}
               id="studio-history-menu"
+              tabIndex={-1}
               role="region"
               aria-label="İşlem geçmişi"
               className="absolute right-0 top-[calc(100%+0.5rem)] z-[85] w-72 space-y-2.5 rounded-xl border border-slate-700 bg-slate-950/95 p-3 text-xs text-slate-100 shadow-2xl backdrop-blur-md"
@@ -1003,12 +1372,13 @@ export function App() {
                   İşlem Geçmişi ({historyPast.length} Geri / {historyFuture.length} İleri)
                 </span>
                 <button
+                  ref={historyCloseButtonRef}
                   type="button"
                   onClick={() => {
                     setShowHistoryMenu(false);
                     focusHistoryTrigger();
                   }}
-                  className="text-[11px] text-slate-300 hover:text-white"
+                  className="min-h-6 rounded px-1.5 text-[11px] text-slate-300 hover:text-white"
                 >
                   Kapat
                 </button>
@@ -1023,7 +1393,7 @@ export function App() {
                     undoSteps(5);
                     setShowHistoryMenu(false);
                   }}
-                  className="rounded border border-slate-700 bg-slate-900 py-1 font-semibold text-slate-200 hover:border-amber-400/50 disabled:opacity-40"
+                  className="min-h-7 rounded border border-slate-700 bg-slate-900 py-1 font-semibold text-slate-200 hover:border-amber-400/50 disabled:opacity-55"
                 >
                   5 Adım Geri
                 </button>
@@ -1034,7 +1404,7 @@ export function App() {
                     undoSteps(10);
                     setShowHistoryMenu(false);
                   }}
-                  className="rounded border border-slate-700 bg-slate-900 py-1 font-semibold text-slate-200 hover:border-amber-400/50 disabled:opacity-40"
+                  className="min-h-7 rounded border border-slate-700 bg-slate-900 py-1 font-semibold text-slate-200 hover:border-amber-400/50 disabled:opacity-55"
                 >
                   10 Adım Geri
                 </button>
@@ -1045,7 +1415,7 @@ export function App() {
                     undoSteps(20);
                     setShowHistoryMenu(false);
                   }}
-                  className="rounded border border-slate-700 bg-slate-900 py-1 font-semibold text-slate-200 hover:border-amber-400/50 disabled:opacity-40"
+                  className="min-h-7 rounded border border-slate-700 bg-slate-900 py-1 font-semibold text-slate-200 hover:border-amber-400/50 disabled:opacity-55"
                 >
                   20 Adım Geri
                 </button>
@@ -1058,7 +1428,7 @@ export function App() {
                   revertToCheckpoint();
                   setShowHistoryMenu(false);
                 }}
-                className="flex w-full items-center justify-between gap-2 rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
+                className="flex min-h-8 w-full items-center justify-between gap-2 rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/30 disabled:opacity-55"
               >
                 <span>Son kayıt noktasına dön</span>
                 {hasUnsavedChanges && (
@@ -1107,8 +1477,34 @@ export function App() {
       <MotionNotice />
       {importError && <div role="alert" className="flex shrink-0 items-start justify-between gap-2 border-b border-rose-700 bg-rose-950 px-3 py-2 text-xs text-rose-100">
         <span>JSON açılamadı. Çalışma kopyası korundu. {importError}</span>
-        <button type="button" className="shrink-0 underline" onClick={() => setImportError(null)}>Kapat</button>
+        <button type="button" className="min-h-6 shrink-0 underline" onClick={() => setImportError(null)}>Kapat</button>
       </div>}
+      {recoveryJson && !recoveryNoticeDismissed && (
+        <div
+          role="alert"
+          className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-amber-600/80 bg-amber-950/90 px-3 py-1.5 text-xs text-amber-100"
+        >
+          <span className="min-w-0">
+            Önceki oturum kaydı okunamadı. Eski ham veriyi kurtarma dosyası olarak dışa aktarabilirsiniz.
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              className="min-h-6 rounded border border-amber-400/70 bg-amber-500/20 px-2.5 py-1 text-[11px] font-semibold text-amber-100 hover:bg-amber-500/30"
+              onClick={() => downloadFile('wardrobe-kurtarma.json', recoveryJson, 'application/json')}
+            >
+              Eski kaydı dışa aktar
+            </button>
+            <button
+              type="button"
+              className="min-h-6 rounded px-2 py-1 text-[11px] text-amber-200 underline hover:text-white"
+              onClick={() => setRecoveryNoticeDismissed(true)}
+            >
+              Kapat
+            </button>
+          </div>
+        </div>
+      )}
       {firstUse && (
         <section
           aria-label="İlk tasarım"
@@ -1212,10 +1608,24 @@ export function App() {
           type="button"
           aria-expanded={compactPanel === 'selection'}
           aria-controls="studio-selection"
-          className="rounded border border-slate-700 px-3 py-2 text-xs font-medium aria-expanded:border-sky-400"
+          className="gap-1.5 rounded border border-slate-700 px-3 py-2 text-xs font-medium aria-expanded:border-sky-400"
           onClick={() => setCompactPanel(compactPanel === 'selection' ? null : 'selection')}
         >
-          Seçim ve uyarılar
+          <span>Seçim ve uyarılar</span>
+          {resolved.issues.length > 0 && (
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-200">
+              {resolved.issues.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={cycleMobileViewMode}
+          aria-label={`Görünüm değiştir (aktif: ${mobileViewLabel})`}
+          className="studio-dock-mobile-only items-center justify-center gap-1 rounded border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-amber-200 hover:border-amber-400"
+        >
+          <Box className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>{mobileViewLabel}</span>
         </button>
       </nav>
       {compactPanel && (
@@ -1230,7 +1640,11 @@ export function App() {
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {/* SOL PANEL: 4 ADIMLI İŞ AKIŞI (1. ODA, 2. İÇ & KAPAK, 3. GÖRÜNÜM, 4. ÇIKTI) */}
         <aside
+          ref={setupDrawerRef}
           id="studio-setup"
+          tabIndex={-1}
+          role={isCompactViewport && compactPanel === 'setup' ? 'dialog' : undefined}
+          aria-modal={isCompactViewport && compactPanel === 'setup' ? true : undefined}
           aria-label="Tasarım paneli"
           className={`studio-setup ${
             compactPanel === 'setup'
@@ -1242,6 +1656,7 @@ export function App() {
             <div className="mb-1.5 flex items-center justify-between gap-2 xl:hidden">
               <span className="text-xs font-semibold text-slate-100">Tasarım paneli</span>
               <button
+                ref={setupCloseButtonRef}
                 type="button"
                 aria-label="Tasarım panelini kapat"
                 className="inline-flex min-h-[44px] items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-100 hover:border-sky-400"
@@ -1256,49 +1671,57 @@ export function App() {
                 type="button"
                 aria-current={activeStep === 'room-carcass' ? 'step' : undefined}
                 onClick={() => setActiveStep('room-carcass')}
-                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
+                className={`flex min-h-[42px] flex-col items-center justify-center rounded px-1 py-1 leading-tight transition ${
                   activeStep === 'room-carcass'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                    : 'font-medium text-slate-300 hover:text-white'
                 }`}
               >
-                1. Oda
+                <span className="sr-only">1. Oda</span>
+                <span aria-hidden="true" className="font-mono text-[10px] leading-none opacity-80">1</span>
+                <span aria-hidden="true" className="mt-0.5 whitespace-nowrap text-[10.5px] leading-tight">Oda</span>
               </button>
               <button
                 type="button"
                 aria-current={activeStep === 'interior-fronts' ? 'step' : undefined}
                 onClick={() => setActiveStep('interior-fronts')}
-                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
+                className={`flex min-h-[42px] flex-col items-center justify-center rounded px-1 py-1 leading-tight transition ${
                   activeStep === 'interior-fronts'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                    : 'font-medium text-slate-300 hover:text-white'
                 }`}
               >
-                2. İç & Kapak
+                <span className="sr-only">2. İç & Kapak</span>
+                <span aria-hidden="true" className="font-mono text-[10px] leading-none opacity-80">2</span>
+                <span aria-hidden="true" className="mt-0.5 whitespace-nowrap text-[10.5px] leading-tight">İç &amp; Kapak</span>
               </button>
               <button
                 type="button"
                 aria-current={activeStep === 'view-export' ? 'step' : undefined}
                 onClick={() => setActiveStep('view-export')}
-                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
+                className={`flex min-h-[42px] flex-col items-center justify-center rounded px-1 py-1 leading-tight transition ${
                   activeStep === 'view-export'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                    : 'font-medium text-slate-300 hover:text-white'
                 }`}
               >
-                3. Görünüm
+                <span className="sr-only">3. Görünüm</span>
+                <span aria-hidden="true" className="font-mono text-[10px] leading-none opacity-80">3</span>
+                <span aria-hidden="true" className="mt-0.5 whitespace-nowrap text-[10.5px] leading-tight">Görünüm</span>
               </button>
               <button
                 type="button"
                 aria-current={activeStep === 'versions-production' ? 'step' : undefined}
                 onClick={() => setActiveStep('versions-production')}
-                className={`min-h-[34px] rounded px-1 py-1.5 font-medium transition ${
+                className={`flex min-h-[42px] flex-col items-center justify-center rounded px-1 py-1 leading-tight transition ${
                   activeStep === 'versions-production'
                     ? 'bg-amber-500 font-semibold text-slate-950 shadow-sm'
-                    : 'text-slate-300 hover:text-white'
+                    : 'font-medium text-slate-300 hover:text-white'
                 }`}
               >
-                4. Çıktı
+                <span className="sr-only">4. Çıktı</span>
+                <span aria-hidden="true" className="font-mono text-[10px] leading-none opacity-80">4</span>
+                <span aria-hidden="true" className="mt-0.5 whitespace-nowrap text-[10.5px] leading-tight">Çıktı</span>
               </button>
             </nav>
           </div>
@@ -1441,7 +1864,7 @@ export function App() {
                 )}
 
                 <details className="space-y-1.5" open={examplesOpen} onToggle={event => setExamplesOpen(event.currentTarget.open)}>
-                  <summary ref={examplesSummaryRef} className="cursor-pointer py-1 text-xs font-medium text-slate-200">
+                  <summary ref={examplesSummaryRef} className="min-h-6 cursor-pointer py-1 text-xs font-medium text-slate-200">
                     Hazır örnekler
                   </summary>
                   {Object.values(SAMPLE_DESIGNS).map((preset) => {
@@ -1485,15 +1908,15 @@ export function App() {
                       className="studio-card space-y-2.5"
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-semibold text-amber-300">{run.label}</span>
+                        <span className="min-w-0 truncate text-xs font-semibold text-amber-300">{run.label}</span>
                         <button
                           type="button"
                           onClick={() => addBay(run.id)}
                           aria-label={`${run.label} için yeni bölme ekle`}
-                          className="flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 text-[11px] font-medium text-sky-200 hover:bg-sky-500/25"
+                          className="flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 text-[11px] font-medium text-sky-200 hover:bg-sky-500/25"
                           title="Bu kola yeni gövde bölmesi ekle"
                         >
-                          <Plus className="h-3 w-3" aria-hidden="true" />
+                          <Plus className="h-3 w-3 shrink-0" aria-hidden="true" />
                           Bölme Ekle
                         </button>
                       </div>
@@ -1563,12 +1986,13 @@ export function App() {
                   />
                   <NumberField
                     label="Bilinen montaj boşluğu (mm)"
+                    describedBy="ceiling-clearance-help"
                     value={design.ceilingClearanceMm ?? 0}
                     max={300}
                     onCommit={(value) => updateRoomHeight('ceilingClearanceMm', value)}
                   />
                 </div>
-                <p className="studio-helper">Montaj boşluğunu yerinde ölçüm kesinleşince girin.</p>
+                <p id="ceiling-clearance-help" className="studio-helper">Montaj boşluğunu yerinde ölçüm kesinleşince girin.</p>
               </section>
 
               {/* 3. L-KÖŞE BİRLEŞİMİ AYARLARI */}
@@ -1648,7 +2072,7 @@ export function App() {
                                 type="button"
                                 aria-pressed={(activeJunction.doorMode ?? 'left') === m}
                                 onClick={() => setCornerDoorMode(m)}
-                                className={`rounded border px-2 py-0.5 text-[11px] ${
+                                className={`min-h-6 rounded border px-2 py-0.5 text-[11px] ${
                                   (activeJunction.doorMode ?? 'left') === m
                                     ? 'border-amber-500 bg-amber-500/20 text-amber-200'
                                     : 'border-slate-800 bg-slate-950 text-slate-300'
@@ -1712,11 +2136,18 @@ export function App() {
               {renderBaysSection()}
 
               {/* 5. AŞAMALI AÇILIM (VARSAYILAN KAPALI UZMAN AKORDEONLARI) */}
-              <details className="studio-accordion">
+              <details
+                className="studio-accordion"
+                open={step1Accordions.thickness}
+                onToggle={(e) => {
+                  const open = e.currentTarget.open;
+                  setStep1Accordions((prev) => ({ ...prev, thickness: open }));
+                }}
+              >
                 <summary>
                   <span>Panel kalınlıkları ve gövde konstrüksiyonu</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-300">
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="shrink-0 whitespace-nowrap rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-300">
                       {resolved.panelThicknessMm} / {resolved.backPanelThicknessMm} mm
                     </span>
                     <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
@@ -1740,7 +2171,7 @@ export function App() {
                               aria-pressed={resolved.panelThicknessMm === presetT}
                               aria-label={`Ana panel kalınlığını ${presetT} mm yap`}
                               onClick={() => updateMaterialThicknesses(presetT, undefined)}
-                              className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
+                              className={`min-h-6 min-w-6 rounded border px-2 py-0.5 font-mono text-[11px] ${
                                 resolved.panelThicknessMm === presetT
                                   ? 'border-amber-400 bg-amber-500/25 font-bold text-amber-200'
                                   : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
@@ -1775,7 +2206,7 @@ export function App() {
                               aria-pressed={resolved.backPanelThicknessMm === presetTb}
                               aria-label={`Arkalık kalınlığını ${presetTb} mm yap`}
                               onClick={() => updateMaterialThicknesses(undefined, presetTb)}
-                              className={`rounded border px-2 py-0.5 font-mono text-[11px] ${
+                              className={`min-h-6 min-w-6 rounded border px-2 py-0.5 font-mono text-[11px] ${
                                 resolved.backPanelThicknessMm === presetTb
                                   ? 'border-emerald-400 bg-emerald-500/25 font-bold text-emerald-200'
                                   : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
@@ -1808,11 +2239,18 @@ export function App() {
                 </div>
               </details>
 
-              <details className="studio-accordion">
+              <details
+                className="studio-accordion"
+                open={step1Accordions.ergonomics}
+                onToggle={(e) => {
+                  const open = e.currentTarget.open;
+                  setStep1Accordions((prev) => ({ ...prev, ergonomics: open }));
+                }}
+              >
                 <summary>
                   <span>Kişiler ve ergonomi</span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-300">
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <span className="shrink-0 whitespace-nowrap rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[11px] font-medium text-slate-300">
                       {Math.round(profiles.anne.heightMm / 10)} / {Math.round(profiles.baba.heightMm / 10)} cm
                     </span>
                     <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
@@ -1823,12 +2261,19 @@ export function App() {
                 </div>
               </details>
 
-              <details className="studio-accordion">
+              <details
+                className="studio-accordion"
+                open={step1Accordions.obstacles}
+                onToggle={(e) => {
+                  const open = e.currentTarget.open;
+                  setStep1Accordions((prev) => ({ ...prev, obstacles: open }));
+                }}
+              >
                 <summary>
                   <span>Oda engelleri</span>
-                  <span className="flex items-center gap-1.5">
+                  <span className="flex shrink-0 items-center gap-1.5">
                     {obstacleCount > 0 && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
+                      <span className="shrink-0 whitespace-nowrap rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
                         {obstacleCount} engel
                       </span>
                     )}
@@ -1894,25 +2339,20 @@ export function App() {
                         {activeBayFrontSummary.detail}
                       </span>
                     </div>
-                    {!doorEditorMode && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDoorEditorMode(true);
-                          if (window.innerWidth < 1280) setCompactPanel('selection');
-                        }}
-                        className="shrink-0 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-medium text-amber-200 hover:border-amber-400"
-                      >
-                        Cepheyi düzenle
-                      </button>
-                    )}
                   </div>
                 )}
               </section>
 
               {renderBaysSection()}
 
-              <details className="studio-accordion">
+              <details
+                className="studio-accordion"
+                open={step2Accordions.templates}
+                onToggle={(e) => {
+                  const open = e.currentTarget.open;
+                  setStep2Accordions((prev) => ({ ...prev, templates: open }));
+                }}
+              >
                 <summary>
                   <span>Özel depolama ve bölme kopyalama</span>
                   <ChevronDown className="studio-accordion-chevron h-3.5 w-3.5" aria-hidden="true" />
@@ -1922,16 +2362,23 @@ export function App() {
                 </div>
               </details>
 
-              <details className="studio-accordion">
+              <details
+                className="studio-accordion"
+                open={step2Accordions.inventory}
+                onToggle={(e) => {
+                  const open = e.currentTarget.open;
+                  setStep2Accordions((prev) => ({ ...prev, inventory: open }));
+                }}
+              >
                 <summary>
                   <span>Envanter ve kapasite planı</span>
-                  <span className="flex items-center gap-1.5">
+                  <span className="flex shrink-0 items-center gap-1.5">
                     {inventoryShortfallCount > 0 ? (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
+                      <span className="shrink-0 whitespace-nowrap rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
                         {inventoryShortfallCount} eksik
                       </span>
                     ) : inventoryTargets.length > 0 ? (
-                      <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-200">
+                      <span className="shrink-0 whitespace-nowrap rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-200">
                         {inventoryTargets.length} hedef
                       </span>
                     ) : null}
@@ -1952,7 +2399,7 @@ export function App() {
               <div
                 role="group"
                 aria-label="Görünüm ve malzeme sekmeleri"
-                className="grid grid-cols-5 gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-[11px]"
+                className="grid grid-cols-5 gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-[10.5px]"
               >
                 {(
                   [
@@ -1968,7 +2415,7 @@ export function App() {
                     type="button"
                     aria-pressed={materialSubTab === tab.id}
                     onClick={() => setMaterialSubTab(tab.id)}
-                    className={`min-h-[32px] rounded px-1 py-1.5 font-semibold transition ${
+                    className={`min-h-[32px] whitespace-nowrap rounded px-1 py-1.5 font-semibold transition ${
                       materialSubTab === tab.id
                         ? 'bg-amber-500 text-slate-950 shadow-sm'
                         : 'text-slate-300 hover:text-white'
@@ -2065,7 +2512,7 @@ export function App() {
                         type="button"
                         aria-pressed={activeMaterialCategory === 'all'}
                         onClick={() => setActiveMaterialCategory('all')}
-                        className={`rounded border px-2 py-0.5 font-medium ${
+                        className={`min-h-6 rounded border px-2 py-0.5 font-medium ${
                           activeMaterialCategory === 'all'
                             ? 'border-sky-400 bg-sky-500/20 text-sky-200'
                             : 'border-slate-800 bg-slate-950 text-slate-300'
@@ -2079,7 +2526,7 @@ export function App() {
                           type="button"
                           aria-pressed={activeMaterialCategory === cat}
                           onClick={() => setActiveMaterialCategory(cat)}
-                          className={`rounded border px-2 py-0.5 font-medium ${
+                          className={`min-h-6 rounded border px-2 py-0.5 font-medium ${
                             activeMaterialCategory === cat
                               ? 'border-sky-400 bg-sky-500/20 text-sky-200'
                               : 'border-slate-800 bg-slate-950 text-slate-300'
@@ -2507,8 +2954,8 @@ export function App() {
                         onClick={() => setRenderQualityMode('presentation')}
                         className={`rounded border px-2.5 py-1.5 font-semibold transition ${
                           renderQualityMode === 'presentation'
-                            ? 'border-amber-400 bg-amber-500 text-slate-950'
-                            : 'border-slate-800 bg-slate-900 text-slate-200'
+                            ? 'border-violet-400 bg-violet-600 text-white'
+                            : 'border-slate-800 bg-slate-900 text-slate-200 hover:border-violet-400/60'
                         }`}
                       >
                         Sunum Modu (Stüdyo)
@@ -2530,7 +2977,7 @@ export function App() {
                             enabled: !(design.ledLighting?.enabled ?? true),
                           })
                         }
-                        className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${
+                        className={`min-h-6 rounded border px-2 py-0.5 text-[11px] font-semibold ${
                           (design.ledLighting?.enabled ?? true)
                             ? 'border-amber-400 bg-amber-500/25 text-amber-200'
                             : 'border-slate-700 bg-slate-900 text-slate-300'
@@ -2659,7 +3106,7 @@ export function App() {
                             enabled: !(design.interiorItems?.enabled ?? true),
                           })
                         }
-                        className={`rounded border px-2 py-0.5 text-[11px] font-semibold ${
+                        className={`min-h-6 rounded border px-2 py-0.5 text-[11px] font-semibold ${
                           (design.interiorItems?.enabled ?? true)
                             ? 'border-emerald-400 bg-emerald-500/25 text-emerald-200'
                             : 'border-slate-700 bg-slate-900 text-slate-300'
@@ -2684,7 +3131,7 @@ export function App() {
                             type="button"
                             aria-pressed={(design.interiorItems?.density ?? 'medium') === d.id}
                             onClick={() => setInteriorItemsConfig({ density: d.id })}
-                            className={`rounded border py-1 text-[11px] font-semibold ${
+                            className={`min-h-6 rounded border py-1 text-[11px] font-semibold ${
                               (design.interiorItems?.density ?? 'medium') === d.id
                                 ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200'
                                 : 'border-slate-800 bg-slate-900 text-slate-300'
@@ -2757,7 +3204,13 @@ export function App() {
 
           {/* ADIM 4 (4. ÇIKTI): ÜRETİM PAFTALARI VE SÜRÜMLER / AI (IA-07) */}
           {activeStep === 'versions-production' && (
-            <div className="space-y-3 p-3">
+            <div className="sr-only" aria-hidden="true" />
+          )}
+          {(visitedOutputStep || activeStep === 'versions-production') && (
+            <div
+              className={activeStep === 'versions-production' ? 'space-y-3 p-3' : 'hidden'}
+              aria-hidden={activeStep !== 'versions-production' || undefined}
+            >
               <div
                 role="group"
                 aria-label="Çıktı ve sürüm sekmeleri"
@@ -2789,11 +3242,12 @@ export function App() {
                 </button>
               </div>
 
-              {outputSubTab === 'production' ? (
+              <div className={outputSubTab === 'production' ? '' : 'hidden'}>
                 <ProductionPanel onReviewAccess={() => setShowAccessReview(true)} />
-              ) : (
+              </div>
+              <div className={outputSubTab === 'versions' ? '' : 'hidden'}>
                 <VersionPanel />
-              )}
+              </div>
             </div>
           )}
         </aside>
@@ -2801,21 +3255,38 @@ export function App() {
         {/* MERKEZ 3D / 2D SAHNE */}
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <WardrobeCanvas />
+          {!showDesktopRightRail && (
+            <button
+              type="button"
+              onClick={() => setPresentationInspectorPinned(true)}
+              className="hidden xl:inline-flex items-center gap-1.5 rounded-lg border border-violet-400/60 bg-slate-900/95 px-3 py-1.5 text-xs font-semibold text-violet-100 shadow-lg backdrop-blur-md transition hover:border-violet-300 hover:bg-slate-800 absolute right-3 bottom-3 z-40"
+            >
+              <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Denetçiyi göster</span>
+            </button>
+          )}
         </main>
 
         {/* SAĞ PANEL: TEKİL KAPAK DENETÇİSİ, BÖLME GENEL BAKIŞI, HÜCRE & ÇEKMECE GEZGİNİ VE DOĞRULAMA */}
         <aside
+          ref={selectionDrawerRef}
           id="studio-selection"
+          tabIndex={-1}
+          role={isCompactViewport && compactPanel === 'selection' ? 'dialog' : undefined}
+          aria-modal={isCompactViewport && compactPanel === 'selection' ? true : undefined}
           aria-label="Seçim ve uyarılar"
           className={`studio-selection ${
             compactPanel === 'selection'
               ? 'studio-mobile-drawer studio-mobile-drawer-right flex'
               : 'hidden'
-          } w-96 max-w-full shrink-0 flex-col overflow-y-auto border-l border-slate-800 bg-slate-900 xl:static xl:z-auto xl:flex`}
+          } w-96 max-w-full shrink-0 flex-col overflow-y-auto border-l border-slate-800 bg-slate-900 xl:static xl:z-auto ${
+            showDesktopRightRail ? 'xl:flex' : 'xl:hidden'
+          }`}
         >
           <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-3 py-2 xl:hidden">
             <span className="text-xs font-semibold text-slate-100">Seçim ve uyarılar</span>
             <button
+              ref={selectionCloseButtonRef}
               type="button"
               aria-label="Seçim panelini kapat"
               className="inline-flex min-h-[44px] items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 text-xs font-medium text-slate-100 hover:border-sky-400"
@@ -2825,6 +3296,18 @@ export function App() {
               <span>Kapat</span>
             </button>
           </div>
+          {renderQualityMode === 'presentation' && presentationInspectorPinned && !doorEditorMode && (
+            <div className="hidden xl:flex shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-3 py-2">
+              <span className="text-xs font-semibold text-violet-200">Sunum Modu Denetçisi</span>
+              <button
+                type="button"
+                onClick={() => setPresentationInspectorPinned(false)}
+                className="min-h-6 rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-slate-200 hover:border-violet-400"
+              >
+                Denetçiyi gizle
+              </button>
+            </div>
+          )}
           {isPresentationOrOutputStep && !doorEditorMode && (
             <button
               type="button"
@@ -2858,7 +3341,7 @@ export function App() {
                       type="button"
                       aria-pressed={selectedBay.owner === own}
                       onClick={() => setBayOwner(selectedBay.runId, selectedBay.id, own)}
-                      className={`rounded border px-2 py-0.5 text-[11px] font-semibold transition ${
+                      className={`min-h-6 rounded border px-2 py-0.5 text-[11px] font-semibold transition ${
                         selectedBay.owner === own
                           ? OWNER_LABELS[own].badgeClass
                           : 'border-slate-800 bg-slate-950 text-slate-300'
@@ -2931,14 +3414,16 @@ export function App() {
                         {activeBayFrontSummary.detail}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      aria-pressed={doorEditorMode}
-                      onClick={() => setDoorEditorMode(true)}
-                      className="shrink-0 rounded border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-500/25"
-                    >
-                      Kapak Düzenle
-                    </button>
+                    {activeStep !== 'interior-fronts' && (
+                      <button
+                        type="button"
+                        aria-pressed={doorEditorMode}
+                        onClick={() => setDoorEditorMode(true)}
+                        className="min-h-6 shrink-0 rounded border border-amber-500/50 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-500/25"
+                      >
+                        Kapak Düzenle
+                      </button>
+                    )}
                   </div>
 
                   {shouldExplainExternalDrawers(selectedBay, bayDoors, bayDrawers, hasExplicitFront) && (
@@ -2951,22 +3436,29 @@ export function App() {
                     <div className="grid grid-cols-1 gap-1 pt-0.5">
                       {bayDoors.map((d) => {
                         const isOpen = Boolean(openDoorIds[d.id]);
+                        const { badge, baseLabel } = formatDoorLeafBadge(d);
                         return (
                           <button
                             key={d.id}
                             type="button"
                             aria-pressed={isOpen}
                             onClick={() => toggleDoor(d.id)}
-                            className={`flex items-center justify-between rounded border px-2 py-1 text-[11px] font-medium transition ${
+                            className={`flex min-h-6 items-center justify-between gap-1.5 rounded border px-2 py-1 text-[11px] font-medium transition ${
                               isOpen
                                 ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
                                 : 'border-slate-800 bg-slate-900 text-slate-200 hover:border-slate-700'
                             }`}
                           >
-                            <span className="truncate">
-                              {d.label} ({d.widthMm}×{d.heightMm} mm)
+                            <span className="shrink-0 whitespace-nowrap rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                              {badge}
                             </span>
-                            <span className="ml-2 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
+                            <span className="min-w-0 flex-1 truncate text-left" title={`${d.label} (${d.widthMm}×${d.heightMm} mm)`}>
+                              {baseLabel}
+                            </span>
+                            <span className="shrink-0 font-mono text-[10px] text-slate-300">
+                              {d.widthMm}×{d.heightMm}
+                            </span>
+                            <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
                               {isOpen ? 'Kapat' : 'Aç'}
                             </span>
                           </button>
@@ -2980,7 +3472,7 @@ export function App() {
                             type="button"
                             aria-pressed={isOpen}
                             onClick={() => toggleDoor(leaf.id)}
-                            className={`flex items-center justify-between rounded border px-2 py-1 text-[11px] font-medium transition ${
+                            className={`flex min-h-6 items-center justify-between rounded border px-2 py-1 text-[11px] font-medium transition ${
                               isOpen
                                 ? 'border-sky-500/60 bg-sky-500/20 text-sky-200'
                                 : 'border-slate-800 bg-slate-900 text-slate-200 hover:border-slate-700'
@@ -3114,7 +3606,7 @@ export function App() {
                               Boolean(e.shiftKey || e.ctrlKey || e.metaKey)
                             )
                           }
-                          className="flex-1 truncate pr-2 text-left hover:text-amber-300"
+                          className="min-h-6 flex-1 truncate pr-2 text-left hover:text-amber-300"
                         >
                           Çekmece #{drw.drawerIndex + 1} ({drw.widthMm}×{drw.heightMm} mm)
                         </button>
@@ -3123,7 +3615,7 @@ export function App() {
                           aria-pressed={isOpen}
                           aria-label={`Çekmece ${drw.drawerIndex + 1} ${isOpen ? 'kapat' : 'aç'}`}
                           onClick={() => toggleDrawer(drw.id)}
-                          className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300 hover:bg-slate-700"
+                          className="min-h-6 rounded bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-amber-300 hover:bg-slate-700"
                         >
                           {isOpen ? 'Kapat' : 'Aç'}
                         </button>
@@ -3158,7 +3650,7 @@ export function App() {
                             type="button"
                             aria-pressed={active}
                             onClick={() => selectCell(cornerCell.id, cornerCell.bayId)}
-                            className={`flex w-full items-center justify-between rounded border px-2.5 py-1 text-left text-[11px] transition ${
+                            className={`flex min-h-6 w-full items-center justify-between rounded border px-2.5 py-1 text-left text-[11px] transition ${
                               active
                                 ? 'border-amber-500 bg-amber-500/15 font-semibold text-amber-200'
                                 : 'border-slate-800 bg-slate-950/60 text-slate-200 hover:border-slate-700'
@@ -3184,12 +3676,12 @@ export function App() {
                   onClick={() =>
                     setShowAdvancedRightInspector(!showAdvancedRightInspector)
                   }
-                  className="flex w-full items-center justify-between px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-emerald-200"
+                  className="flex min-h-8 w-full items-center justify-between px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-emerald-200"
                 >
                   <span>
                     Gelişmiş modül ve servis nişi ayarları ({selectedCell.label})
                   </span>
-                  {showAdvancedRightInspector ? (
+                  {showAdvancedRightInspector || selectedCell.insert?.type === 'serviceNiche' ? (
                     <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
                   ) : (
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -3379,7 +3871,7 @@ export function App() {
                   </div>
                 ))}
                 {wideSpans.length > 0 && <details className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs">
-                  <summary className="cursor-pointer font-semibold text-amber-200">Geniş raf ve modül açıklıkları · {wideSpans.length}</summary>
+                  <summary className="min-h-6 cursor-pointer font-semibold text-amber-200">Geniş raf ve modül açıklıkları · {wideSpans.length}</summary>
                   {wideSpans.map(issue => <div key={issue.id} className="mt-2 border-t border-amber-900/70 pt-2">
                     <strong className="text-amber-200">{issue.title}</strong>
                     <p className="text-slate-200">{issue.description}</p><IssueDetails issue={issue} />
@@ -3430,7 +3922,9 @@ export function App() {
       {/* ALT DURUM ŞERİDİ */}
       <footer className="studio-footer flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-300">
           <span>Kayıt noktası · <strong className="text-slate-100">
-            {persistenceStatus === 'error' ? 'son yazma başarısız' : persistenceStatus === 'saving' ? 'yazılıyor'
+            {isCorruptedRecoveryError ? 'eski kayıt okunamadı'
+              : persistenceStatus === 'error' ? 'son yazma başarısız'
+              : persistenceStatus === 'saving' ? 'yazılıyor'
               : hasUnsavedChanges ? 'değişiklik var' : lastCheckpointAt ?? 'henüz yok'}
           </strong></span>
           <span>Otomatik kayıt · <strong className={persistenceStatus === 'error' ? 'text-rose-300' : 'text-sky-300'}>
@@ -3439,7 +3933,7 @@ export function App() {
             {persistenceStatus === 'idle' && 'henüz yazılmadı'}
             {persistenceStatus === 'saving' && 'yazılıyor'}
             {persistenceStatus === 'partial' && 'tek depo'}
-            {persistenceStatus === 'error' && 'yazma başarısız'}
+            {persistenceStatus === 'error' && (isCorruptedRecoveryError ? 'eski kayıt okunamadı' : 'yazma başarısız')}
           </strong></span>
           {exportNotice && <span role="status" className="text-sky-200">{exportNotice}</span>}
           {recoveryJson && (
