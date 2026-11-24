@@ -1,4 +1,5 @@
 import type { Design } from '../schema/types';
+import { validationConfig } from '../solver/validationConfig';
 
 export const SAMPLE_DESIGNS: Record<string, Design> = {
   'l-diagonal-asymmetric': {
@@ -729,6 +730,45 @@ export interface BlankDesignOptions {
   depthBMm?: number;
   heightMm?: number;
   roomHeightMm?: number;
+  /** true olduğunda başlangıç bölme adedi raf açıklığı uyarısı (850 mm) üretmeyecek biçimde otomatik hesaplanır (IA-09). */
+  autoFitBayCount?: boolean;
+}
+
+function computeBlankBayCount(
+  usableSpanMm: number,
+  panelThicknessMm: number,
+  minBays: number,
+  maxBays: number
+): number {
+  const safeNetSpanMm = validationConfig.shelfSpanWarningMm - 10;
+  const neededForSpan = Math.ceil((usableSpanMm - panelThicknessMm) / (safeNetSpanMm + panelThicknessMm));
+  const maxByMinWidth = Math.max(1, Math.floor((usableSpanMm - panelThicknessMm) / (300 + panelThicknessMm)));
+  const floorBays = Math.min(minBays, maxByMinWidth);
+  return Math.max(floorBays, Math.min(maxBays, maxByMinWidth, neededForSpan));
+}
+
+function createBlankBays(axis: 'A' | 'B', count: number): Design['runs'][number]['bays'] {
+  const lower = axis.toLowerCase();
+  return Array.from({ length: count }, (_, idx) => {
+    const num = idx + 1;
+    return {
+      id: `bay-${axis}${num}`,
+      label: `${axis}${num}: Boş Gövde Bölmesi #${num}`,
+      width: { kind: 'flex' as const, weight: 1 },
+      locked: false,
+      owner: 'ortak' as const,
+      autoFront: true,
+      frontMode: 'open' as const,
+      hingeAngleDeg: 110 as const,
+      root: {
+        kind: 'leaf' as const,
+        id: `cell-blank-${lower}${num}`,
+        label: `${axis}${num} Boş İç Hacim`,
+        owner: 'ortak' as const,
+        insert: { type: 'empty' as const },
+      },
+    };
+  });
 }
 
 /**
@@ -742,6 +782,17 @@ export function createBlankDesign(options: BlankDesignOptions): Design {
   const lengthBMm = Math.max(1200, Math.min(6000, Math.round(options.lengthBMm ?? 2100)));
   const depthBMm = Math.max(350, Math.min(800, Math.round(options.depthBMm ?? 550)));
   const heightMm = Math.max(1800, Math.min(3000, Math.round(options.heightMm ?? 2400)));
+  const panelThicknessMm = 18;
+  const endFillerMm = 20;
+  const fillerWidthMm = 60;
+  const diagonalArmAMm = Math.max(900, depthBMm + 150);
+  const diagonalArmBMm = Math.max(900, depthAMm + 150);
+
+  const cornerConsumeA = layoutKind === 'l-shape' && cornerType === 'diagonal' ? diagonalArmAMm : 0;
+  const usableAMm = Math.max(200, lengthAMm - endFillerMm - cornerConsumeA);
+  const bayCountA = options.autoFitBayCount
+    ? computeBlankBayCount(usableAMm, panelThicknessMm, 2, 7)
+    : 2;
 
   const runs: Design['runs'] = [
     {
@@ -755,49 +806,19 @@ export function createBlankDesign(options: BlankDesignOptions): Design {
       plinthHeightMm: 80,
       topFillerHeightMm: 40,
       startFillerMm: 0,
-      endFillerMm: 20,
-      panelThicknessMm: 18,
+      endFillerMm,
+      panelThicknessMm,
       backPanelThicknessMm: 8,
-      bays: [
-        {
-          id: 'bay-A1',
-          label: 'A1: Boş Gövde Bölmesi #1',
-          width: { kind: 'flex', weight: 1 },
-          locked: false,
-          owner: 'ortak',
-          autoFront: true,
-          frontMode: 'open',
-          hingeAngleDeg: 110,
-          root: {
-            kind: 'leaf',
-            id: 'cell-blank-a1',
-            label: 'A1 Boş İç Hacim',
-            owner: 'ortak',
-            insert: { type: 'empty' },
-          },
-        },
-        {
-          id: 'bay-A2',
-          label: 'A2: Boş Gövde Bölmesi #2',
-          width: { kind: 'flex', weight: 1 },
-          locked: false,
-          owner: 'ortak',
-          autoFront: true,
-          frontMode: 'open',
-          hingeAngleDeg: 110,
-          root: {
-            kind: 'leaf',
-            id: 'cell-blank-a2',
-            label: 'A2 Boş İç Hacim',
-            owner: 'ortak',
-            insert: { type: 'empty' },
-          },
-        },
-      ],
+      bays: createBlankBays('A', bayCountA),
     },
   ];
 
   if (layoutKind === 'l-shape') {
+    const cornerConsumeB = cornerType === 'diagonal' ? diagonalArmBMm : depthAMm + fillerWidthMm;
+    const usableBMm = Math.max(200, lengthBMm - endFillerMm - cornerConsumeB);
+    const bayCountB = options.autoFitBayCount
+      ? computeBlankBayCount(usableBMm, panelThicknessMm, 1, 6)
+      : 1;
     runs.push({
       constructionMode: 'shared',
       id: 'run-B',
@@ -809,28 +830,10 @@ export function createBlankDesign(options: BlankDesignOptions): Design {
       plinthHeightMm: 80,
       topFillerHeightMm: 40,
       startFillerMm: 0,
-      endFillerMm: 20,
-      panelThicknessMm: 18,
+      endFillerMm,
+      panelThicknessMm,
       backPanelThicknessMm: 8,
-      bays: [
-        {
-          id: 'bay-B1',
-          label: 'B1: Boş Gövde Bölmesi #1',
-          width: { kind: 'flex', weight: 1 },
-          locked: false,
-          owner: 'ortak',
-          autoFront: true,
-          frontMode: 'open',
-          hingeAngleDeg: 110,
-          root: {
-            kind: 'leaf',
-            id: 'cell-blank-b1',
-            label: 'B1 Boş İç Hacim',
-            owner: 'ortak',
-            insert: { type: 'empty' },
-          },
-        },
-      ],
+      bays: createBlankBays('B', bayCountB),
     });
   }
 
@@ -858,9 +861,9 @@ export function createBlankDesign(options: BlankDesignOptions): Design {
               runBId: 'run-B',
               type: cornerType,
               priorityRunId: 'run-A',
-              fillerWidthMm: 60,
-              diagonalArmAMm: Math.max(900, depthBMm + 150),
-              diagonalArmBMm: Math.max(900, depthAMm + 150),
+              fillerWidthMm,
+              diagonalArmAMm,
+              diagonalArmBMm,
               shelvesCount: 2,
               hasHangingRod: false,
               doorMode: 'open',

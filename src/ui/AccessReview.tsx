@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ACCESS_STATUS_LABEL, accessMeasurement, accessSequence, accessWarnings } from '../core/analysis/functionalAccess';
 import { convexHull, drawerVolumes, hingedVolumes, polygonBounds, rectangle, slidingVolumes, type PhysicalVolume } from '../core/analysis/kinematics';
 import { evaluateAccessOptions } from '../core/fronts/accessRemedies';
+import { extractProduction } from '../core/production/productionModel';
 import type { Design, Point2DMm, ResolvedFunctionalAccess, ResolvedModel } from '../core/schema/types';
 import { useWardrobeStore } from '../store/useWardrobeStore';
 import { StudioDialog } from './StudioDialog';
@@ -58,7 +59,11 @@ function AccessPlan({ model, entry, label }: { model: ResolvedModel; entry?: Res
           fillOpacity={i === 0 ? '.8' : '.5'} stroke="#fcd34d" strokeWidth={stroke*.55}/>)}
       </g>)}
     </svg>
-    <p className="mt-1 text-[11px] text-slate-400">Kesik çizgi kapalı konum. Turuncu, denetlenen hareket ve parça zarfı.</p>
+    <p className="mt-1 text-[11px] text-slate-400">
+      {solids.length > 0
+        ? 'Kesik çizgi kapalı konum. Turuncu, denetlenen hareket ve parça zarfı.'
+        : 'Kapaksız açık erişim — bu görünümde kapak veya hareket zarfı bulunmaz.'}
+    </p>
   </figure>;
 }
 
@@ -75,6 +80,14 @@ export function AccessReview({ onClose, onApplied }: { onClose: () => void; onAp
   const issue = warnings.find(entry => entry.bayId === chosen);
   const representative = issue ?? moduleEntries[0];
   const options = useMemo(() => evaluateAccessOptions(design, model, chosen), [design, model, chosen]);
+  const partLabelByCode = useMemo(() => {
+    const pkg = extractProduction(design, model);
+    return new Map(pkg.parts.map(part => [part.code, part.label]));
+  }, [design, model]);
+  const formatPartRef = (code: string) => {
+    const label = partLabelByCode.get(code);
+    return label ? `${label} (${code})` : code;
+  };
   const option = preview?.design === design ? options[preview.index] : undefined;
   const nextEntry = option?.entries.find(entry => entry.id === representative?.id) ?? option?.entries[0];
   const door = model.doors.find(candidate => candidate.isCornerDoor && candidate.bayIds.includes(chosen));
@@ -131,7 +144,7 @@ export function AccessReview({ onClose, onApplied }: { onClose: () => void; onAp
           {optionDoor ? ` Güvenli sınır ${optionDoor.opening?.safeAngleDeg ?? '—'}°. Kulp ve taşıyıcı çözüldü, ürün onayı gerekir.`
             : ' Bu aralıkta kanat ve ona ait kulp / menteşe veya ray kalkar.'}</p>
         <p className="text-xs text-slate-300">Parça farkı {option.added.length} eklenen, {option.removed.length} çıkarılan, {option.resized.length} ölçüsü değişen.
-          {option.removed.length > 0 && ` Çıkarılan ${option.removed.join(', ')}.`} Donanım satırı farkı {option.hardwareDelta}.</p>
+          {option.removed.length > 0 && ` Çıkarılan: ${option.removed.map(formatPartRef).join(', ')}.`} Donanım satırı farkı {option.hardwareDelta}.</p>
         <p className="text-xs text-slate-300">Kalan erişim engeli {remaining}. Diğer parçalar başlangıç konumunda. Montaj ve sahada erişim kontrolü geçerlidir.</p>
       </section>}
       <p className="text-xs leading-relaxed text-slate-400">Ölçüler referans eşyanın düz çıkarma yolunu ve denenen kapak sırasını gösterir. Esnek eşyalar, eğerek çıkarma ve katalog donanımı yerinde doğrulanır.</p>

@@ -71,11 +71,12 @@ describe('Functional access and assisted layout review', () => {
     const store = useWardrobeStore.getState;
     expect(store().openNamedVersion(phase5Example('diagonal'), 'Erişim testi')).toBe(true);
     store().saveCheckpoint();
+    const historyBefore = store().historyPast.length;
     const original = store().design;
     const [option] = evaluateAccessOptions(original, store().resolved, original.junctions[0].id);
     expect(store().applyAccessRemedy(original, option.remedy)).toBe(true);
     expect(store().design.junctions[0].doorMode).toBe('open');
-    expect(store().historyPast).toHaveLength(1);
+    expect(store().historyPast).toHaveLength(historyBefore + 1);
     expect(store().checkpointDesign).toEqual(original);
     expect(store().applyAccessRemedy(original, option.remedy)).toBe(false);
     store().undo();

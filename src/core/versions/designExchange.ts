@@ -2,20 +2,142 @@ import { ZodError } from 'zod';
 import { parseDesignJson } from '../schema/designSchema';
 import type { Design, ResolvedModel } from '../schema/types';
 import { solveDesign } from '../solver/carcassSolver';
-import { closedEnvelope, extractProduction } from '../production/productionModel';
+import { closedEnvelope, extractProduction, MATERIAL_NAMES } from '../production/productionModel';
 
 export interface ImportPreview {design?:Design;resolved?:ResolvedModel;errors:string[];warnings:string[]}
 export const designSignature=(d:Design)=>JSON.stringify(d,(_k,v:unknown)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);
 
+const TYPE_LABELS_TR: Record<string, string> = {
+  string: 'metin',
+  number: 'sayı',
+  int: 'tam sayı',
+  integer: 'tam sayı',
+  boolean: 'mantıksal değer (true/false)',
+  object: 'nesne',
+  array: 'dizi',
+  undefined: 'boş/eksik değer',
+  null: 'null',
+  record: 'nesne',
+};
+
+function labelTypeTr(raw?: string): string {
+  if (!raw) return 'geçerli değer';
+  const normalized = raw.toLowerCase();
+  return TYPE_LABELS_TR[normalized] ?? raw;
+}
+
+function localizeZodIssue(issue: ZodError['issues'][number]): string {
+  const path = issue.path.join('.') || 'tasarım';
+  const raw = issue as unknown as Record<string, unknown>;
+  const code = String(issue.code ?? '');
+  const message = issue.message ?? '';
+
+  if (code === 'invalid_type') {
+    const expected = typeof raw.expected === 'string' ? raw.expected : undefined;
+    const received = typeof raw.received === 'string' ? raw.received : undefined;
+    if (received === 'undefined' || /received undefined/i.test(message)) {
+      return `${path}: zorunlu alan eksik${expected ? ` (beklenen: ${labelTypeTr(expected)})` : ''}.`;
+    }
+    return `${path}: geçersiz veri türü${expected ? ` (beklenen: ${labelTypeTr(expected)})` : ''}.`;
+  }
+
+  if (code === 'invalid_value' || code === 'invalid_literal' || code === 'invalid_enum_value') {
+    const values = Array.isArray(raw.values)
+      ? raw.values
+      : Array.isArray(raw.options)
+        ? raw.options
+        : raw.expected !== undefined
+          ? [raw.expected]
+          : [];
+    if (values.length === 1) {
+      return `${path}: geçersiz değer (beklenen: ${String(values[0])}).`;
+    }
+    if (values.length > 1) {
+      return `${path}: geçersiz seçenek (izin verilenler: ${values.map(String).join(', ')}).`;
+    }
+    return `${path}: geçersiz seçenek değeri.`;
+  }
+
+  if (code === 'too_small') {
+    const min = raw.minimum;
+    const origin = String(raw.origin ?? raw.type ?? 'number');
+    if (origin === 'string') return `${path}: en az ${String(min)} karakter olmalı.`;
+    if (origin === 'array') return `${path}: en az ${String(min)} öğe içermeli.`;
+    const inclusive = raw.inclusive !== false;
+    return `${path}: ${inclusive ? `en az ${String(min)}` : `${String(min)} değerinden büyük`} olmalı.`;
+  }
+
+  if (code === 'too_big') {
+    const max = raw.maximum;
+    const origin = String(raw.origin ?? raw.type ?? 'number');
+    if (origin === 'string') return `${path}: en fazla ${String(max)} karakter olabilir.`;
+    if (origin === 'array') return `${path}: en fazla ${String(max)} öğe içerebilir.`;
+    const inclusive = raw.inclusive !== false;
+    return `${path}: ${inclusive ? `en fazla ${String(max)}` : `${String(max)} değerinden küçük`} olabilir.`;
+  }
+
+  if (code === 'invalid_format' || code === 'invalid_string') {
+    const fmt = typeof raw.format === 'string' ? raw.format : '';
+    if (fmt === 'int' || fmt === 'safeint') return `${path}: tam sayı olmalı.`;
+    return `${path}: geçersiz biçim.`;
+  }
+
+  if (code === 'unrecognized_keys') {
+    const keys = Array.isArray(raw.keys) ? raw.keys.map(String).join(', ') : '';
+    return `${path}: tanınmayan alanlar (${keys}).`;
+  }
+
+  if (code === 'invalid_union') {
+    return `${path}: geçerli tasarım şeması seçeneklerinden hiçbiriyle eşleşmiyor.`;
+  }
+
+  if (code === 'not_multiple_of') {
+    return `${path}: ${String(raw.divisor ?? '')} katı olmalı.`;
+  }
+
+  if (/\b(invalid|expected|received|too small|too big|required|unrecognized)\b/i.test(message)) {
+    return `${path}: geçersiz veya eksik değer.`;
+  }
+
+  return `${path}: ${message || 'geçersiz değer.'}`;
+}
+
 /** JSON dışında kod çalıştırılmaz. Önizleme çalışma kopyasını hiçbir zaman değiştirmez. */
 export function previewDesignJson(text:string):ImportPreview {
+  if (new TextEncoder().encode(text).length > 2_000_000) {
+    return { errors: ['JSON en fazla 2 MB olabilir.'], warnings: [] };
+  }
+  if (/^\s*```/.test(text)) {
+    return {
+      errors: [
+        'Markdown kod bloğu (```json) kabul edilmez. Yapay zekâ yanıtından yalnızca { ... } ile başlayan ham JSON metnini yapıştırın.',
+      ],
+      warnings: [],
+    };
+  }
+  if (!text.trim()) {
+    return {
+      errors: ['JSON metni boş. Yapay zekâ yanıtından yalnızca { ... } ile başlayan ham JSON metnini yapıştırın.'],
+      warnings: [],
+    };
+  }
   try {
     const design = parseDesignJson(text);
     const resolved=solveDesign(design),production=extractProduction(design,resolved);
     return {design,resolved,errors:production.issues.filter(i=>i.severity==='error').map(i=>`${i.code}: ${i.description}`),warnings:production.issues.filter(i=>i.severity==='warning'||i.severity==='expert').map(i=>`${i.title}: ${i.description}`)};
   } catch(error) {
-    const errors=error instanceof ZodError?error.issues.map(i=>`${i.path.join('.')||'tasarım'}: ${i.message}`):[error instanceof Error?error.message:'Geçersiz JSON.'];
-    return {errors,warnings:[]};
+    if (error instanceof ZodError) {
+      return { errors: error.issues.map(localizeZodIssue), warnings: [] };
+    }
+    if (error instanceof SyntaxError) {
+      return {
+        errors: [
+          'JSON sözdizimi geçersiz. Eksik virgül, kapanmamış süslü parantez/tırnak işareti veya JSON dışı açıklama metni olmadığından emin olun.',
+        ],
+        warnings: [],
+      };
+    }
+    return { errors: [error instanceof Error ? error.message : 'Geçersiz JSON.'], warnings: [] };
   }
 }
 export function buildExternalAiPrompt(design:Design,request:string) {
@@ -49,13 +171,20 @@ export function designMetrics(design:Design,model=solveDesign(design)):DesignMet
 export function designDimensions(design: Design, model = solveDesign(design)) {
   const a = design.runs.find(run => run.wallAxis === 'A');
   const b = design.runs.find(run => run.wallAxis === 'B');
+  const height = Math.max(0, ...design.runs.map(run => run.heightMm));
+  const roomHeightMm = design.roomHeightMm ?? Math.max(height + 100, 2550);
+  const carcassMaterial = MATERIAL_NAMES[design.materials.carcassMaterialId] ?? design.materials.carcassMaterialId;
+  const frontMaterial = MATERIAL_NAMES[design.materials.frontMaterialId] ?? design.materials.frontMaterialId;
   return {
     layout: design.layoutKind === 'l-shape' ? 'L' : 'Düz',
     depthRelation: !b ? 'Tek kol' : a?.depthMm === b.depthMm ? 'Eşit derinlik' : 'Asimetrik derinlik',
     lengthA: a?.lengthMm, lengthB: b?.lengthMm,
     depthA: a?.depthMm, depthB: b?.depthMm,
     rearA: a ? a.rearOffsetMm ?? 0 : undefined, rearB: b ? b.rearOffsetMm ?? 0 : undefined,
-    height: Math.max(0, ...design.runs.map(run => run.heightMm)),
+    height,
+    roomHeightMm,
+    carcassMaterial,
+    frontMaterial,
     outer: closedEnvelope(model),
   };
 }

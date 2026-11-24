@@ -67,7 +67,8 @@ const designFingerprint = (value:Design) => JSON.stringify(value, (_key,v:unknow
 const sameDesign = (a: Design, b: Design) => a === b || designFingerprint(a) === designFingerprint(b);
 
 export type StudioViewMode = '3d-perspective' | '2d-front-A' | '2d-front-B' | '2d-plan-top';
-export type StudioWorkflowStep = 'room-carcass' | 'interior-fronts' | 'view-export';
+export type StudioWorkflowStep = 'room-carcass' | 'interior-fronts' | 'view-export' | 'versions-production';
+export type StudioStep = StudioWorkflowStep;
 export type DoorVisibilityMode = 'normal' | 'xray' | 'hidden';
 export type SurfaceMaterialSlot = 'carcass' | 'door' | 'drawerFront' | 'shelf';
 const SURFACE_MATERIAL_FIELDS = {
@@ -355,7 +356,7 @@ interface WardrobeState {
   hydrateFromIndexedDB: () => Promise<void>;
 }
 
-const defaultInitialDesign = structuredClone(SAMPLE_DESIGNS['l-diagonal-asymmetric']);
+const defaultInitialDesign = structuredClone(SAMPLE_DESIGNS['straight-wardrobe']);
 
 function formatNowTime(): string {
   return new Date().toLocaleTimeString('tr-TR', {
@@ -694,7 +695,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     setViewMode: (viewMode) => set({ viewMode }),
     triggerCameraReset: () => set((s) => ({ cameraResetTick: s.cameraResetTick + 1, eyeLevelOwner:null })),
-    setActiveStep: (activeStep) => set(activeStep === 'view-export'
+    setActiveStep: (activeStep) => set(activeStep === 'view-export' || activeStep === 'versions-production'
       ? { activeStep, doorEditorMode: false, selectedDoorId: null, selectedDoorIds: [],
         selectedCellId: null, selectedCellIds: [], selectedDrawerId: null, selectedDrawerIds: [], resizeDraft: null }
       : { activeStep }),
@@ -1050,7 +1051,10 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     startBlankDesign: (options) => {
-      const blank = createBlankDesign(options);
+      const blank = createBlankDesign({
+        ...options,
+        autoFitBayCount: options.autoFitBayCount ?? true,
+      });
       if (!applyCommand(`Sıfırdan Boş Tasarım: ${blank.name}`, () => blank)) return;
       const firstBay = get().resolved.bays[0]?.id ?? null;
       set({
@@ -1066,17 +1070,22 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     saveCheckpoint: () => {
-      const currentDesign = structuredClone(get().design);
+      const state = get();
+      const currentDesign = structuredClone(state.design);
       const now = formatNowTime();
       set({
         checkpointDesign: currentDesign,
-        historyPast: [],
-        historyFuture: [],
         hasUnsavedChanges: false,
         lastCheckpointAt: now,
       });
 
-      saveCurrentStateToStorage(currentDesign, currentDesign, [], [], now);
+      saveCurrentStateToStorage(
+        currentDesign,
+        currentDesign,
+        state.historyPast,
+        state.historyFuture,
+        now
+      );
     },
 
     updateRunDimension: (runId, field, valueMm) => {
@@ -2328,10 +2337,58 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     revertToCheckpoint: () => {
       const state = get();
       if (sameDesign(state.design, state.checkpointDesign)) return;
-      if (state.historyPast[0] && sameDesign(state.historyPast[0].snapshot, state.checkpointDesign)) {
-        get().undoSteps(state.historyPast.length);
-        return;
+
+      // 1) Checkpoint geçmişte (historyPast) ise en yeni eşleşmeye geri adım at
+      for (let idx = state.historyPast.length - 1; idx >= 0; idx--) {
+        if (sameDesign(state.historyPast[idx].snapshot, state.checkpointDesign)) {
+          get().undoSteps(state.historyPast.length - idx);
+          return;
+        }
       }
+
+      // 2) Kullanıcı kayıt noktasının gerisine geri aldıysa (historyFuture) en eski eşleşmeye ileri adım at
+      for (let idx = 0; idx < state.historyFuture.length; idx++) {
+        if (sameDesign(state.historyFuture[idx].snapshot, state.checkpointDesign)) {
+          const stepsForward = idx + 1;
+          let cursorDesign = state.design;
+          let cursorPast = [...state.historyPast];
+          let cursorFuture = [...state.historyFuture];
+          for (let step = 0; step < stepsForward; step++) {
+            const nextEntry = cursorFuture[0];
+            cursorFuture = cursorFuture.slice(1);
+            cursorPast = [
+              ...cursorPast.slice(-(MAX_HISTORY_STEPS - 1)),
+              { label: nextEntry.label, snapshot: cursorDesign, timestampMs: nextEntry.timestampMs },
+            ];
+            cursorDesign = nextEntry.snapshot;
+          }
+          const nextResolved = solveDesign(cursorDesign);
+          const validSelIds = state.selectedCellIds.filter((id) =>
+            nextResolved.cells.some((c) => c.id === id)
+          );
+          const fallbackCellId = validSelIds[0] ?? nextResolved.cells[0]?.id ?? null;
+          set({
+            design: cursorDesign,
+            resolved: nextResolved,
+            historyPast: cursorPast,
+            historyFuture: cursorFuture,
+            hasUnsavedChanges: false,
+            selectedCellIds: validSelIds.length > 0 ? validSelIds : fallbackCellId ? [fallbackCellId] : [],
+            selectedCellId: fallbackCellId,
+            resizeDraft: null,
+          });
+          saveCurrentStateToStorage(
+            cursorDesign,
+            state.checkpointDesign,
+            cursorPast,
+            cursorFuture,
+            state.lastCheckpointAt
+          );
+          return;
+        }
+      }
+
+      // 3) Kayıt noktası 50 adımlık geçmiş tamponunun dışına düştüyse doğrudan geri yükle ve Redo yolu bırak
       const restored = structuredClone(state.checkpointDesign);
       const future: HistoryEntry[] = [{ label:'Checkpoint öncesi çalışma durumunu geri getir', snapshot:state.design }, ...state.historyFuture];
       set({ design:restored, resolved:solveDesign(restored), historyPast:[], historyFuture:future,

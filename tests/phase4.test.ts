@@ -92,9 +92,9 @@ describe('Phase 4 — physical dimensions and durable design intent', () => {
     expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(true);
   });
   it('groups slider gestures in a single Undo step', () => {
-    const s=useWardrobeStore.getState(); s.saveCheckpoint(); s.beginHistoryTransaction();
+    const s=useWardrobeStore.getState(); s.saveCheckpoint(); const before=useWardrobeStore.getState().historyPast.length; s.beginHistoryTransaction();
     for(const intensity of [0.2,0.4,0.6,0.8]) s.setLedLighting({intensity});
-    s.endHistoryTransaction(); expect(useWardrobeStore.getState().historyPast).toHaveLength(1);
+    s.endHistoryTransaction(); expect(useWardrobeStore.getState().historyPast).toHaveLength(before+1);
     s.undo(); expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(false);
   });
   it.each([110,155,165] as const)('uses the same %i degree limit for rendering and sweep geometry', angle => {

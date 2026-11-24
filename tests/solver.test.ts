@@ -390,14 +390,28 @@ describe('Wardrobe Studio Phase 1 & Phase 2 — Parametric Solver, SplitNode Edi
     ).toBe(900);
     expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(true);
 
-    // Manuel Kaydet (saveCheckpoint) -> 900 mm yeni başlangıç/kayıt noktası olur ve Undo/Redo geçmişi sıfırlanır
+    // Manuel Kaydet (saveCheckpoint) -> 900 mm yeni kayıt noktası olur, Undo/Redo geçmişi korunur (PE-01)
     useWardrobeStore.getState().saveCheckpoint();
     expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(false);
-    expect(useWardrobeStore.getState().historyPast).toHaveLength(0);
+    expect(useWardrobeStore.getState().historyPast).toHaveLength(2);
     expect(useWardrobeStore.getState().historyFuture).toHaveLength(0);
     expect(
       useWardrobeStore.getState().resolved.bays.find((b) => b.id === 'bay-S1')?.outerWidthMm
     ).toBe(900);
+
+    // Kaydet sonrası Geri Al -> 850 mm ve hasUnsavedChanges tekrar true olur
+    useWardrobeStore.getState().undo();
+    expect(
+      useWardrobeStore.getState().resolved.bays.find((b) => b.id === 'bay-S1')?.outerWidthMm
+    ).toBe(850);
+    expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(true);
+
+    // İleri Al (Redo) -> kayıt noktasına (900 mm) dönünce hasUnsavedChanges tekrar false olur
+    useWardrobeStore.getState().redo();
+    expect(
+      useWardrobeStore.getState().resolved.bays.find((b) => b.id === 'bay-S1')?.outerWidthMm
+    ).toBe(900);
+    expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(false);
   });
 
   // ============================================================================

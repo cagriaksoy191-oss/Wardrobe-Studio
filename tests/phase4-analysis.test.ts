@@ -107,10 +107,11 @@ describe('Phase 4 — personal use, capacity, placement and commands',()=>{
   });
   it('applies a suggested obstacle move atomically, clears the collision, and supports Undo',()=>{
     const s=useWardrobeStore.getState();s.addRoomObstacle('bed');s.saveCheckpoint();
+    const historyBefore=useWardrobeStore.getState().historyPast.length;
     const before=useWardrobeStore.getState().exportJsonString();
     const issue=useWardrobeStore.getState().resolved.issues.find(i=>i.quickFixes?.some(f=>f.kind==='moveObstacle'))!;
     expect(issue).toBeDefined();expect(s.applyQuickFix(issue.quickFixes![0])).toBe(true);
-    expect(useWardrobeStore.getState().historyPast).toHaveLength(1);
+    expect(useWardrobeStore.getState().historyPast).toHaveLength(historyBefore+1);
     expect(useWardrobeStore.getState().resolved.analysis!.collidingObstacleIds).toHaveLength(0);
     s.undo();expect(useWardrobeStore.getState().exportJsonString()).toBe(before);
   });
@@ -125,10 +126,11 @@ describe('Phase 4 — personal use, capacity, placement and commands',()=>{
     const d=oneBay();d.ergonomics={anne:{heightMm:1200},baba:{heightMm:1800}};
     const root=d.runs[0].bays[0].root;if(root.kind==='leaf')root.insert!.rodHeightMm=2000;
     const s=useWardrobeStore.getState();expect(s.importJsonString(JSON.stringify(d)).ok).toBe(true);s.saveCheckpoint();
+    const historyBefore=useWardrobeStore.getState().historyPast.length;
     const fix=useWardrobeStore.getState().resolved.issues.find(i=>i.code==='ERGONOMIC_HANGING_HIGH')!.quickFixes![0];
     expect(s.applyQuickFix(fix)).toBe(true);
     expect(useWardrobeStore.getState().resolved.panels.find(p=>p.role==='hangingRod')!.worldPositionMm[1]).toBe(1260);
-    expect(useWardrobeStore.getState().historyPast).toHaveLength(1);s.undo();
+    expect(useWardrobeStore.getState().historyPast).toHaveLength(historyBefore+1);s.undo();
     expect(useWardrobeStore.getState().resolved.panels.find(p=>p.role==='hangingRod')!.worldPositionMm[1]).toBe(2098);
   });
   it.each(['deepYukluk','jewelryDrawer','trouserRack','laundryBasket'] as const)('builds %s from existing cell primitives and round-trips through JSON',template=>{
