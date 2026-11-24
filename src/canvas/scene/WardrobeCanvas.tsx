@@ -150,15 +150,91 @@ interface Saved3DCameraState {
   target: [number, number, number];
 }
 
+export interface StudioOrbitConfig {
+  enabled: boolean;
+  enableRotate: boolean;
+  enableZoom: boolean;
+  enablePan: boolean;
+  mouseButtons: {
+    LEFT: THREE.MOUSE | undefined;
+    MIDDLE: THREE.MOUSE;
+    RIGHT: THREE.MOUSE;
+  };
+}
+
+export function resolveStudioOrbitConfig(params: {
+  viewMode: StudioViewMode;
+  multiSelectToolActive: boolean;
+  cleanPresentation: boolean;
+  orbitPausedForMarquee: boolean;
+  isPartDragging: boolean;
+  modifierMarqueeHeld?: boolean;
+}): StudioOrbitConfig {
+  const is2D = params.viewMode !== '3d-perspective';
+  const marqueeMode = !params.cleanPresentation && params.multiSelectToolActive;
+  const suppressLeftDrag =
+    marqueeMode || (!params.cleanPresentation && Boolean(params.modifierMarqueeHeld));
+  return {
+    enabled: !params.orbitPausedForMarquee && !params.isPartDragging,
+    enableRotate: !is2D && !marqueeMode,
+    enableZoom: true,
+    enablePan: true,
+    mouseButtons: {
+      LEFT: suppressLeftDrag ? undefined : is2D ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN,
+    },
+  };
+}
+
+export function getCanvasGestureHint(params: {
+  viewMode: StudioViewMode;
+  doorEditorMode: boolean;
+  multiSelectToolActive: boolean;
+  hasResizeDraft: boolean;
+}): string {
+  if (params.hasResizeDraft) {
+    return 'Boyutlandırma taslağı aktif · Onayla: Uygula · İptal: Esc';
+  }
+  if (params.doorEditorMode) {
+    return 'Kapak Düzenle · Kapağa tıkla: Seç · Çoklu: Shift+Tık · Çık: Esc';
+  }
+  if (params.multiSelectToolActive) {
+    return 'Çoklu Seçim · Sol sürükle: Kutu seç · Tekerlek: Yakınlaştır · Sağ sürükle: Kaydır · Çık: Esc';
+  }
+  if (params.viewMode !== '3d-perspective') {
+    return '2D Görünüm · Sol sürükle: Kaydır · Tekerlek: Yakınlaştır · Kutu seç: Shift+Sürükle';
+  }
+  return 'Hücreye tıkla: Seç · Kapak/Çekmece: Aç/Kapat (Seç: Shift+Tık) · Sürgü: Sürükle';
+}
+
+export function computeTotalSelectedCount(selection: {
+  selectedCellIds: string[];
+  selectedCellId: string | null;
+  selectedDrawerIds: string[];
+  selectedDrawerId: string | null;
+  selectedDoorIds: string[];
+  selectedDoorId: string | null;
+}): number {
+  return (
+    selection.selectedCellIds.length ||
+    selection.selectedDrawerIds.length ||
+    selection.selectedDoorIds.length ||
+    (selection.selectedCellId ? 1 : 0) ||
+    (selection.selectedDrawerId ? 1 : 0) ||
+    (selection.selectedDoorId ? 1 : 0)
+  );
+}
+
 type OrthographicMode = Exclude<StudioViewMode, '3d-perspective'>;
 type OrthographicPose = Saved3DCameraState & { zoom: number; fitted?: boolean };
 
-function OrthographicStudioView({ mode, defaults, bounds, poses, enabled }: {
+function OrthographicStudioView({ mode, defaults, bounds, poses, orbitConfig }: {
   mode: OrthographicMode;
   defaults: OrthographicPose;
   bounds: SceneBounds | null;
   poses: React.RefObject<Partial<Record<OrthographicMode, OrthographicPose>>>;
-  enabled: boolean;
+  orbitConfig: StudioOrbitConfig;
 }) {
   const camera = useRef<THREE.OrthographicCamera>(null);
   const controls = useRef<OrbitControlsImpl>(null);
@@ -208,8 +284,9 @@ function OrthographicStudioView({ mode, defaults, bounds, poses, enabled }: {
   return <>
     <OrthographicCamera ref={camera} makeDefault position={initial.current.position} zoom={initial.current.zoom}
       up={mode === '2d-plan-top' ? [0, 0, -1] : [0, 1, 0]} near={0.1} far={30} />
-    <OrbitControls ref={controls} makeDefault enabled={enabled} target={initial.current.target}
-      enableRotate={false} enableDamping />
+    <OrbitControls ref={controls} makeDefault enabled={orbitConfig.enabled} target={initial.current.target}
+      enableRotate={orbitConfig.enableRotate} enableZoom={orbitConfig.enableZoom} enablePan={orbitConfig.enablePan}
+      mouseButtons={orbitConfig.mouseButtons} enableDamping />
   </>;
 }
 
@@ -566,11 +643,32 @@ export function WardrobeCanvas() {
     height: number;
   } | null>(null);
   const [orbitPausedForMarquee, setOrbitPausedForMarquee] = useState<boolean>(false);
+  const [modifierMarqueeHeld, setModifierMarqueeHeld] = useState<boolean>(false);
   const [selectionScreenBounds, setSelectionScreenBounds] =
     useState<SelectionScreenBounds | null>(null);
   const [presentationGuides, setPresentationGuides] = useState(false);
   const presentation = renderQualityMode === 'presentation';
   const cleanPresentation = presentation && !presentationGuides;
+
+  useEffect(() => {
+    if (cleanPresentation) {
+      setModifierMarqueeHeld(false);
+      return;
+    }
+    const syncModifier = (event: KeyboardEvent) => {
+      const held = Boolean(event.shiftKey || event.ctrlKey || event.metaKey);
+      setModifierMarqueeHeld((prev) => (prev === held ? prev : held));
+    };
+    const clearModifier = () => setModifierMarqueeHeld(false);
+    window.addEventListener('keydown', syncModifier);
+    window.addEventListener('keyup', syncModifier);
+    window.addEventListener('blur', clearModifier);
+    return () => {
+      window.removeEventListener('keydown', syncModifier);
+      window.removeEventListener('keyup', syncModifier);
+      window.removeEventListener('blur', clearModifier);
+    };
+  }, [cleanPresentation]);
 
   const runA = design.runs.find((r) => r.wallAxis === 'A') ?? design.runs[0];
   const runB = design.runs.find((r) => r.wallAxis === 'B');
@@ -645,7 +743,8 @@ export function WardrobeCanvas() {
       if (e.button !== 0 || marqueeRef.current) return;
       const isAlreadySelected =
         selectedCellIds.includes(cellId) || selectedCellId === cellId;
-      if (!isAlreadySelected && !multiSelectToolActive && !e.shiftKey) {
+      const hasModifier = Boolean(e.shiftKey || e.ctrlKey || e.metaKey);
+      if (!isAlreadySelected && !multiSelectToolActive && !hasModifier) {
         return;
       }
 
@@ -662,9 +761,11 @@ export function WardrobeCanvas() {
         currentX: localX,
         currentY: localY,
         isDragging: false,
-        additive: Boolean(e.shiftKey || e.ctrlKey || e.metaKey),
+        additive: hasModifier,
       };
-      setOrbitPausedForMarquee(true);
+      if (!multiSelectToolActive) {
+        setOrbitPausedForMarquee(true);
+      }
     },
     [selectedCellIds, selectedCellId, multiSelectToolActive]
   );
@@ -672,7 +773,8 @@ export function WardrobeCanvas() {
   const handleContainerPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (cleanPresentation) return;
     if (e.button !== 0 || marqueeRef.current || !(e.target instanceof HTMLCanvasElement)) return;
-    if (!multiSelectToolActive && !e.shiftKey) return;
+    const hasModifier = Boolean(e.shiftKey || e.ctrlKey || e.metaKey);
+    if (!multiSelectToolActive && !hasModifier) return;
 
     const container = containerRef.current;
     if (!container) return;
@@ -687,9 +789,11 @@ export function WardrobeCanvas() {
       currentX: localX,
       currentY: localY,
       isDragging: false,
-      additive: Boolean(e.shiftKey || e.ctrlKey || e.metaKey),
+      additive: hasModifier,
     };
-    setOrbitPausedForMarquee(true);
+    if (!multiSelectToolActive) {
+      setOrbitPausedForMarquee(true);
+    }
   };
 
   useEffect(() => {
@@ -724,6 +828,7 @@ export function WardrobeCanvas() {
       if (!m.isDragging && dist > 6) {
         m.isDragging = true;
         suppressNextClickRef.current = true;
+        setOrbitPausedForMarquee(true);
       }
 
       if (m.isDragging) {
@@ -798,7 +903,14 @@ export function WardrobeCanvas() {
 
   const frameSampleOutput = useRef<HTMLOutputElement>(null);
   const showFrameSample = import.meta.env.DEV && new URLSearchParams(window.location.search).has('qa-performance');
-  const controlsEnabled = !orbitPausedForMarquee && (cleanPresentation || !multiSelectToolActive) && !isPartDragging;
+  const orbitConfig = resolveStudioOrbitConfig({
+    viewMode,
+    multiSelectToolActive,
+    cleanPresentation,
+    orbitPausedForMarquee,
+    isPartDragging,
+    modifierMarqueeHeld,
+  });
   const handleSelectCell = useCallback((cellId: string, bayId: string, additive?: boolean) => {
     if (!suppressNextClickRef.current && !cleanPresentation) selectCell(cellId, bayId, additive);
   }, [cleanPresentation, selectCell]);
@@ -808,11 +920,20 @@ export function WardrobeCanvas() {
   const handleSelectDoor = useCallback((doorId: string | null, bayId: string, additive?: boolean) => {
     if (!suppressNextClickRef.current && !cleanPresentation) selectDoor(doorId, bayId, additive);
   }, [cleanPresentation, selectDoor]);
-  const totalSelectedCount =
-    selectedCellIds.length ||
-    selectedDrawerIds.length ||
-    (selectedCellId ? 1 : 0) ||
-    (selectedDrawerId ? 1 : 0);
+  const totalSelectedCount = computeTotalSelectedCount({
+    selectedCellIds,
+    selectedCellId,
+    selectedDrawerIds,
+    selectedDrawerId,
+    selectedDoorIds,
+    selectedDoorId,
+  });
+  const gestureHint = getCanvasGestureHint({
+    viewMode,
+    doorEditorMode,
+    multiSelectToolActive,
+    hasResizeDraft: Boolean(resizeDraft),
+  });
 
   return (
     <div
@@ -870,7 +991,11 @@ export function WardrobeCanvas() {
             <OrbitControls
               ref={orbitControls3DRef}
               makeDefault
-              enabled={controlsEnabled}
+              enabled={orbitConfig.enabled}
+              enableRotate={orbitConfig.enableRotate}
+              enableZoom={orbitConfig.enableZoom}
+              enablePan={orbitConfig.enablePan}
+              mouseButtons={orbitConfig.mouseButtons}
               target={initial3DCameraTarget}
               enableDamping
               dampingFactor={0.08}
@@ -883,7 +1008,7 @@ export function WardrobeCanvas() {
 
         {viewMode !== '3d-perspective' && (
           <OrthographicStudioView key={viewMode} mode={viewMode} defaults={orthographicDefaults[viewMode]} bounds={closedFurnitureBounds}
-            poses={orthographicPoses} enabled={controlsEnabled} />
+            poses={orthographicPoses} orbitConfig={orbitConfig} />
         )}
 
         {/* STÜDYO AYDINLATMASI (Düzenleme Modu vs Profesyonel Sunum Modu) */}
@@ -981,6 +1106,7 @@ export function WardrobeCanvas() {
           onlyWhenOpenOrGlass={design.ledLighting?.onlyWhenOpenOrGlass}
           interiorItemsConfig={design.interiorItems}
           renderQualityMode={renderQualityMode}
+          cleanPresentation={cleanPresentation}
           materials={design.materials}
           wireframeMode={wireframeMode}
           doorVisibilityMode={doorVisibilityMode}
@@ -1058,7 +1184,7 @@ export function WardrobeCanvas() {
 
       {/* SEÇİMİN YANINDA AÇILAN YÜZEN BAĞLAMSAL DÜZENLEME PANELİ */}
       {!cleanPresentation && <ContextualCellPopover screenBounds={selectionScreenBounds} />}
-      {!cleanPresentation && <AnalysisToolbar />}
+      {!cleanPresentation && <AnalysisToolbar gestureHint={gestureHint} />}
 
       {/* SAHNE ÜSTÜ SOL: AKTİF GÖRÜNÜM ROZETİ + GÖRÜNÜMÜ SIFIRLA */}
       <div ref={toolbarRef} className="studio-scene-toolbar flex flex-wrap items-start gap-1.5">
@@ -1144,6 +1270,7 @@ export function WardrobeCanvas() {
 
         {!cleanPresentation && <><button
           type="button"
+          aria-pressed={doorEditorMode}
           onClick={() => setDoorEditorMode(!doorEditorMode)}
           className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-md transition ${
             doorEditorMode
@@ -1158,6 +1285,7 @@ export function WardrobeCanvas() {
 
         <button
           type="button"
+          aria-pressed={multiSelectToolActive}
           onClick={() => setMultiSelectToolActive(!multiSelectToolActive)}
           className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur-md transition ${
             multiSelectToolActive

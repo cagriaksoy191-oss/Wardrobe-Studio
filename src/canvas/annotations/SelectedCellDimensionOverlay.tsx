@@ -2,11 +2,90 @@ import { Line } from '@react-three/drei';
 import { SceneHtml as Html } from './SceneHtml';
 import { AlertTriangle, Check, Pencil, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { ResizeAxis, ResizeDirection } from '../../core/schema/types';
+import type * as THREE from 'three';
+import type { ResizeAxis, ResizeDirection, ResolvedSlidingLeaf } from '../../core/schema/types';
 import { analyzeSelectedCellsGroup } from '../../core/solver/treeMutator';
 import { useWardrobeStore } from '../../store/useWardrobeStore';
+import { motionRuntime } from '../scene/MotionController';
 
 const MM_TO_M = 0.001;
+const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => null;
+
+export interface SlidingLeafDimensionOverlaySpec {
+  widthMm: number;
+  heightMm: number;
+  thicknessMm: number;
+  trackNumber: number;
+  widthLabel: string;
+  heightLabel: string;
+  trackLabel: string;
+  xStartMm: [number, number, number];
+  xEndMm: [number, number, number];
+  yStartMm: [number, number, number];
+  yEndMm: [number, number, number];
+  trackBadgeMm: [number, number, number];
+}
+
+export function computeSlidingLeafDimensionOverlay(
+  leaf: ResolvedSlidingLeaf,
+  slideOffsetMm: number = leaf.initialOffsetMm
+): SlidingLeafDimensionOverlaySpec {
+  const cx = leaf.closedWorldPositionMm[0] + leaf.slideDirectionWorld[0] * slideOffsetMm;
+  const cy = leaf.closedWorldPositionMm[1];
+  const cz = leaf.closedWorldPositionMm[2] + leaf.slideDirectionWorld[2] * slideOffsetMm;
+  const wMm = leaf.widthMm;
+  const hMm = leaf.heightMm;
+  const tMm = leaf.thicknessMm;
+  const yBottom = cy - hMm / 2;
+  const yTop = cy + hMm / 2;
+  const isRunA = leaf.wallAxis === 'A';
+  const frontOffsetMm = tMm / 2 + 22;
+
+  const xStartMm: [number, number, number] = isRunA
+    ? [cx - wMm / 2, yBottom + 18, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, yBottom + 18, cz - wMm / 2];
+  const xEndMm: [number, number, number] = isRunA
+    ? [cx + wMm / 2, yBottom + 18, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, yBottom + 18, cz + wMm / 2];
+
+  const yStartMm: [number, number, number] = isRunA
+    ? [cx + wMm / 2 - 14, yBottom, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, yBottom, cz + wMm / 2 - 14];
+  const yEndMm: [number, number, number] = isRunA
+    ? [cx + wMm / 2 - 14, yTop, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, yTop, cz + wMm / 2 - 14];
+
+  const trackBadgeMm: [number, number, number] = isRunA
+    ? [cx, yTop - 36, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, yTop - 36, cz];
+
+  const trackNumber = leaf.trackIndex + 1;
+  return {
+    widthMm: wMm,
+    heightMm: hMm,
+    thicknessMm: tMm,
+    trackNumber,
+    widthLabel: `Kanat X: ${wMm} mm · Kalınlık: ${tMm} mm`,
+    heightLabel: `Kanat Y: ${hMm} mm`,
+    trackLabel: `Ray ${trackNumber}`,
+    xStartMm,
+    xEndMm,
+    yStartMm,
+    yEndMm,
+    trackBadgeMm,
+  };
+}
+
+export function shouldShowCellDimensionOverlay(
+  group: ReturnType<typeof analyzeSelectedCellsGroup>
+): boolean {
+  if (group.cells.length === 0) return false;
+  if (group.isSingle) return true;
+  if (group.isMultiShelfGroupSelection) {
+    return group.canMergeShelfGroups && group.isContiguousVertical;
+  }
+  return group.isContiguousVertical || group.isContiguousHorizontal;
+}
 
 interface AxisLineSpec {
   axis: ResizeAxis;
@@ -80,11 +159,82 @@ export function SelectedCellDimensionOverlay() {
   }, [activeCellIds.join(','), activeDrawerIds.join(','), activeDoorIds.join(','), doorEditorMode]);
 
   // ---------------------------------------------------------------------------
-  // 1. KAPAK DÜZENLEME MODUNDA SEÇİLİ KAPAK ÖLÇÜ ÇİZGİLERİ
+  // 1. KAPAK DÜZENLEME MODUNDA SEÇİLİ KAPAK ÖLÇÜ ÇİZGİLERİ (MENTEŞELİ & SÜRGÜLÜ)
   // ---------------------------------------------------------------------------
   if (doorEditorMode && activeDoorIds.length > 0) {
     const selectedDoor = resolved.doors.find((d) => d.id === activeDoorIds[0]);
-    if (!selectedDoor) return null;
+    if (!selectedDoor) {
+      const selectedSliding = resolved.slidingDoors?.find((d) => d.id === activeDoorIds[0]);
+      if (!selectedSliding) return null;
+
+      const slideOffsetMm =
+        motionRuntime.positions[selectedSliding.id] ?? selectedSliding.initialOffsetMm;
+      const spec = computeSlidingLeafDimensionOverlay(selectedSliding, slideOffsetMm);
+
+      return (
+        <group userData={{ studioHelper: true }}>
+          <Line
+            points={[
+              [spec.xStartMm[0] * MM_TO_M, spec.xStartMm[1] * MM_TO_M, spec.xStartMm[2] * MM_TO_M],
+              [spec.xEndMm[0] * MM_TO_M, spec.xEndMm[1] * MM_TO_M, spec.xEndMm[2] * MM_TO_M],
+            ]}
+            color="#f59e0b"
+            lineWidth={2.5}
+            raycast={NOOP_RAYCAST}
+          />
+          <Html
+            position={[
+              ((spec.xStartMm[0] + spec.xEndMm[0]) / 2) * MM_TO_M,
+              ((spec.xStartMm[1] + spec.xEndMm[1]) / 2) * MM_TO_M,
+              ((spec.xStartMm[2] + spec.xEndMm[2]) / 2) * MM_TO_M,
+            ]}
+            center
+            zIndexRange={[30, 10]}
+          >
+            <div className="pointer-events-none whitespace-nowrap rounded border border-amber-300 bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950 shadow">
+              {spec.widthLabel}
+            </div>
+          </Html>
+
+          <Line
+            points={[
+              [spec.yStartMm[0] * MM_TO_M, spec.yStartMm[1] * MM_TO_M, spec.yStartMm[2] * MM_TO_M],
+              [spec.yEndMm[0] * MM_TO_M, spec.yEndMm[1] * MM_TO_M, spec.yEndMm[2] * MM_TO_M],
+            ]}
+            color="#38bdf8"
+            lineWidth={2.5}
+            raycast={NOOP_RAYCAST}
+          />
+          <Html
+            position={[
+              ((spec.yStartMm[0] + spec.yEndMm[0]) / 2) * MM_TO_M,
+              ((spec.yStartMm[1] + spec.yEndMm[1]) / 2) * MM_TO_M,
+              ((spec.yStartMm[2] + spec.yEndMm[2]) / 2) * MM_TO_M,
+            ]}
+            center
+            zIndexRange={[30, 10]}
+          >
+            <div className="pointer-events-none whitespace-nowrap rounded border border-sky-300 bg-sky-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950 shadow">
+              {spec.heightLabel}
+            </div>
+          </Html>
+
+          <Html
+            position={[
+              spec.trackBadgeMm[0] * MM_TO_M,
+              spec.trackBadgeMm[1] * MM_TO_M,
+              spec.trackBadgeMm[2] * MM_TO_M,
+            ]}
+            center
+            zIndexRange={[30, 10]}
+          >
+            <div className="pointer-events-none whitespace-nowrap rounded border border-violet-300 bg-violet-600/95 px-2 py-0.5 font-mono text-[10px] font-bold text-white shadow">
+              {spec.trackLabel}
+            </div>
+          </Html>
+        </group>
+      );
+    }
 
     const [hx, hy, hz] = selectedDoor.pivotWorldMm;
     const wMm = selectedDoor.widthMm;
@@ -113,7 +263,7 @@ export function SelectedCellDimensionOverlay() {
       : [centerX, yTop, centerZ + wMm / 2 - 14];
 
     return (
-      <group>
+      <group userData={{ studioHelper: true }}>
         <Line
           points={[
             [xStart[0] * MM_TO_M, xStart[1] * MM_TO_M, xStart[2] * MM_TO_M],
@@ -121,6 +271,7 @@ export function SelectedCellDimensionOverlay() {
           ]}
           color="#f59e0b"
           lineWidth={2.5}
+          raycast={NOOP_RAYCAST}
         />
         <Html
           position={[
@@ -143,6 +294,7 @@ export function SelectedCellDimensionOverlay() {
           ]}
           color="#38bdf8"
           lineWidth={2.5}
+          raycast={NOOP_RAYCAST}
         />
         <Html
           position={[
@@ -283,7 +435,7 @@ export function SelectedCellDimensionOverlay() {
 
           return (
             <group key={`drw-dim-${spec.axis}`}>
-              <Line points={[startM, endM]} color={spec.color} lineWidth={2.6} />
+              <Line points={[startM, endM]} color={spec.color} lineWidth={2.6} raycast={NOOP_RAYCAST} />
               <Html
                 position={midM}
                 center
@@ -385,7 +537,7 @@ export function SelectedCellDimensionOverlay() {
   // 3. SEÇİLİ HÜCRE / RAF GRUBU / BEŞGEN KÖŞE ÖLÇÜ ÇİZGİLERİ
   // ---------------------------------------------------------------------------
   const group = analyzeSelectedCellsGroup(activeCellIds, resolved);
-  if (group.cells.length === 0) return null;
+  if (!shouldShowCellDimensionOverlay(group)) return null;
 
   const first = group.cells[0];
   const [cx, cy, cz] = group.groupWorldCenterMm;
@@ -574,7 +726,7 @@ export function SelectedCellDimensionOverlay() {
 
         return (
           <group key={`sel-dim-${spec.axis}`}>
-            <Line points={[startM, endM]} color={spec.color} lineWidth={2.6} />
+            <Line points={[startM, endM]} color={spec.color} lineWidth={2.6} raycast={NOOP_RAYCAST} />
             <Html
               position={midM}
               center

@@ -121,6 +121,8 @@ interface WardrobeState {
   setSurfaceMaterial: (slot: SurfaceMaterialSlot, materialId: MaterialId) => void;
   updateRoomHeight: (field: 'roomHeightMm' | 'ceilingClearanceMm', valueMm: number) => void;
   isPartDragging: boolean;
+  hasOpenSlidingLeaf: boolean;
+  setHasOpenSlidingLeaf: (open: boolean) => void;
   motionRevision: number;
   motionNotice: {id:string;reason:string;blockerId?:string}|null;
   setPartDragging: (active:boolean)=>void;
@@ -547,6 +549,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       selectedDoorId: validDoorIds[0] ?? null,
       openDoorIds: Object.fromEntries(Object.entries(get().openDoorIds).filter(([id]) => doorIds.has(id))),
       openDrawerIds: Object.fromEntries(Object.entries(get().openDrawerIds).filter(([id]) => drawerIds.has(id))),
+      ...(nextResolved.slidingDoors?.length ? {} : { hasOpenSlidingLeaf: false }),
       resizeDraft: null,
     });
 
@@ -567,13 +570,14 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
     openNamedVersion:(design,name)=>{
       if (!applyCommand(`Sürüm açıldı: ${name}`,()=>structuredClone(design),false)) return false;
-      set({selectedBayId:design.runs[0]?.bays[0]?.id??null,selectedCellId:null,selectedCellIds:[],selectedDrawerId:null,selectedDrawerIds:[],selectedDoorId:null,selectedDoorIds:[],openDoorIds:{},openDrawerIds:{},motionNotice:null});
+      set({selectedBayId:design.runs[0]?.bays[0]?.id??null,selectedCellId:null,selectedCellIds:[],selectedDrawerId:null,selectedDrawerIds:[],selectedDoorId:null,selectedDoorIds:[],openDoorIds:{},openDrawerIds:{},hasOpenSlidingLeaf:false,motionNotice:null});
       return true;
     },
     updateRoomHeight: (field, valueMm) => {
       applyCommand('Oda tavanı ve montaj boşluğu güncellendi', draft => { draft[field] = Math.round(valueMm); });
     },
-    isPartDragging:false,motionRevision:0,motionNotice:null,
+    isPartDragging:false,hasOpenSlidingLeaf:false,motionRevision:0,motionNotice:null,
+    setHasOpenSlidingLeaf:(open)=>set((s)=>(s.hasOpenSlidingLeaf===open?s:{hasOpenSlidingLeaf:open})),
     setPartDragging:isPartDragging=>set({isPartDragging}),
     refreshMotion:()=>set(s=>({motionRevision:s.motionRevision+1})),
     motionCommand: { revision: 0, ids: [] },
@@ -838,7 +842,14 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           };
         }
         const firstDoorInBay =
-          s.resolved.doors.find((d) => d.bayId === s.selectedBayId) ?? s.resolved.doors[0];
+          s.resolved.doors.find((d) => d.bayId === s.selectedBayId) ??
+          s.resolved.slidingDoors?.find(
+            (d) =>
+              d.bayId === s.selectedBayId ||
+              (s.selectedBayId ? d.bayIds.includes(s.selectedBayId) : false)
+          ) ??
+          s.resolved.doors[0] ??
+          s.resolved.slidingDoors?.[0];
         return {
           doorEditorMode: true,
           multiSelectToolActive: false,
@@ -1028,6 +1039,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         resizeDraft: null,
         openDoorIds: {},
         openDrawerIds: {},
+        hasOpenSlidingLeaf: false,
         historyPast: [],
         historyFuture: [],
         hasUnsavedChanges: false,
@@ -1049,6 +1061,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         resizeDraft: null,
         openDoorIds: {},
         openDrawerIds: {},
+        hasOpenSlidingLeaf: false,
       });
     },
 
@@ -2323,7 +2336,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       const future: HistoryEntry[] = [{ label:'Checkpoint öncesi çalışma durumunu geri getir', snapshot:state.design }, ...state.historyFuture];
       set({ design:restored, resolved:solveDesign(restored), historyPast:[], historyFuture:future,
         hasUnsavedChanges:false, resizeDraft:null, selectedCellId:null, selectedCellIds:[], selectedDrawerId:null,
-        selectedDrawerIds:[], selectedDoorId:null, selectedDoorIds:[], openDoorIds:{}, openDrawerIds:{} });
+        selectedDrawerIds:[], selectedDoorId:null, selectedDoorIds:[], openDoorIds:{}, openDrawerIds:{}, hasOpenSlidingLeaf:false });
       saveCurrentStateToStorage(restored, state.checkpointDesign, [], future, state.lastCheckpointAt);
     },
 
@@ -2389,6 +2402,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           resizeDraft: null,
           openDoorIds: {},
           openDrawerIds: {},
+          hasOpenSlidingLeaf: false,
         });
 
         saveCurrentStateToStorage(
@@ -2475,7 +2489,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         selectedCellIds: firstCell ? [firstCell] : [],
         selectedDoorId: null, selectedDoorIds: [],
         selectedDrawerId: null, selectedDrawerIds: [],
-        openDoorIds: {}, openDrawerIds: {}, resizeDraft: null,
+        openDoorIds: {}, openDrawerIds: {}, hasOpenSlidingLeaf: false, resizeDraft: null,
       });
     },
   };

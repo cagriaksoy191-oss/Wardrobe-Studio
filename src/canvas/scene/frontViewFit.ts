@@ -37,7 +37,7 @@ export function fitFrontView(bounds: SceneBounds, axis: 'A' | 'B', width: number
   const depth = axis === 'A' ? 2 : 0;
   const xMargin = Math.min(88, width * 0.16);
   const top = Math.min(145, height * 0.25);
-  const bottom = Math.min(86, height * 0.16);
+  const bottom = Math.min(132, height * 0.22);
   const zoom = Math.min(
     Math.max(1, width - 2 * xMargin) / Math.max(0.01, bounds.max[side] - bounds.min[side]),
     Math.max(1, height - top - bottom) / Math.max(0.01, bounds.max[1] - bounds.min[1]),

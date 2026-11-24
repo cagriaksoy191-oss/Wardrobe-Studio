@@ -2,10 +2,57 @@ import { Line } from '@react-three/drei';
 import { SceneHtml as Html } from './SceneHtml';
 import { Check, Pencil, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import type { DimensionAnnotation } from '../../core/schema/types';
+import type * as THREE from 'three';
+import type { DimensionAnnotation, Run } from '../../core/schema/types';
 import { type StudioViewMode, useWardrobeStore } from '../../store/useWardrobeStore';
 
 const MM_TO_M = 0.001;
+const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => null;
+
+export function buildMergedInnerByOuterMap(
+  visibleDimensions: DimensionAnnotation[],
+  viewMode: StudioViewMode,
+  selectedBayId: string | null
+): { mergedInnerByOuterId: Map<string, DimensionAnnotation>; suppressedInnerIds: Set<string> } {
+  const mergedInnerByOuterId = new Map<string, DimensionAnnotation>();
+  const suppressedInnerIds = new Set<string>();
+  const isFront2D = viewMode === '2d-front-A' || viewMode === '2d-front-B';
+  const outerByBayId = new Map<string, DimensionAnnotation>();
+  for (const dim of visibleDimensions) {
+    if (dim.kind === 'bayOuter' && dim.bayId) {
+      outerByBayId.set(dim.bayId, dim);
+    }
+  }
+  for (const dim of visibleDimensions) {
+    if (dim.kind !== 'bayInner' || !dim.bayId) continue;
+    const shouldMerge = isFront2D || (viewMode === '3d-perspective' && dim.bayId === selectedBayId);
+    if (!shouldMerge) continue;
+    const outer = outerByBayId.get(dim.bayId);
+    if (outer) {
+      mergedInnerByOuterId.set(outer.id, dim);
+      suppressedInnerIds.add(dim.id);
+    }
+  }
+  return { mergedInnerByOuterId, suppressedInnerIds };
+}
+
+export function resolveDimensionRenderEndpoints(
+  dim: DimensionAnnotation,
+  viewMode: StudioViewMode,
+  runs: Run[]
+): { startMm: [number, number, number]; endMm: [number, number, number] } {
+  if (dim.kind === 'depth' && viewMode === '3d-perspective') {
+    const run = runs.find((r) => r.id === dim.runId);
+    if (run) {
+      const topY = run.heightMm + 35;
+      return {
+        startMm: [dim.startMm[0], topY, dim.startMm[2]],
+        endMm: [dim.endMm[0], topY, dim.endMm[2]],
+      };
+    }
+  }
+  return { startMm: dim.startMm, endMm: dim.endMm };
+}
 
 interface DimensionOverlayProps {
   dimensions: DimensionAnnotation[];
@@ -40,10 +87,10 @@ export function DimensionOverlay({
     if (viewMode === '3d-perspective' && editingDimId !== d.id &&
         (d.kind === 'cornerArm' || (d.kind === 'bayInner' && d.bayId !== selectedBayId))) return false;
     if (viewMode === '2d-front-A') {
-      return !d.runId || runs.some(run => run.id === d.runId && run.wallAxis === 'A');
+      return d.kind !== 'depth' && (!d.runId || runs.some(run => run.id === d.runId && run.wallAxis === 'A'));
     }
     if (viewMode === '2d-front-B') {
-      return runs.some(run => run.id === d.runId && run.wallAxis === 'B');
+      return d.kind !== 'depth' && runs.some(run => run.id === d.runId && run.wallAxis === 'B');
     }
     if (viewMode === '2d-plan-top') {
       return (
@@ -55,12 +102,11 @@ export function DimensionOverlay({
     }
     return true;
   });
-  const selectedNet = viewMode === '3d-perspective' ? visibleDimensions.find(
-    d => d.kind === 'bayInner' && d.bayId === selectedBayId,
-  ) : undefined;
-  const selectedOuter = selectedNet ? visibleDimensions.find(
-    d => d.kind === 'bayOuter' && d.bayId === selectedBayId,
-  ) : undefined;
+  const { mergedInnerByOuterId, suppressedInnerIds } = buildMergedInnerByOuterMap(
+    visibleDimensions,
+    viewMode,
+    selectedBayId
+  );
 
   const startEditing = (dim: DimensionAnnotation, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -140,15 +186,16 @@ export function DimensionOverlay({
   return (
     <group>
       {visibleDimensions.map((dim) => {
+        const endpoints = resolveDimensionRenderEndpoints(dim, viewMode, runs);
         const startM: [number, number, number] = [
-          dim.startMm[0] * MM_TO_M,
-          dim.startMm[1] * MM_TO_M,
-          dim.startMm[2] * MM_TO_M,
+          endpoints.startMm[0] * MM_TO_M,
+          endpoints.startMm[1] * MM_TO_M,
+          endpoints.startMm[2] * MM_TO_M,
         ];
         const endM: [number, number, number] = [
-          dim.endMm[0] * MM_TO_M,
-          dim.endMm[1] * MM_TO_M,
-          dim.endMm[2] * MM_TO_M,
+          endpoints.endMm[0] * MM_TO_M,
+          endpoints.endMm[1] * MM_TO_M,
+          endpoints.endMm[2] * MM_TO_M,
         ];
         const midM: [number, number, number] = [
           (startM[0] + endM[0]) / 2,
@@ -159,6 +206,9 @@ export function DimensionOverlay({
         const isSelectedBayDim = dim.bayId !== undefined && dim.bayId === selectedBayId;
         const isInner = dim.kind === 'bayInner';
         const isEditingThis = editingDimId === dim.id;
+        const mergedInner = mergedInnerByOuterId.get(dim.id);
+        const isSuppressedInner = suppressedInnerIds.has(dim.id);
+        const isFront2D = viewMode === '2d-front-A' || viewMode === '2d-front-B';
         const lineColor = isEditingThis
           ? '#10b981'
           : isSelectedBayDim
@@ -177,8 +227,9 @@ export function DimensionOverlay({
               dashScale={40}
               dashSize={1}
               gapSize={0.5}
+              raycast={NOOP_RAYCAST}
             />
-            {(!selectedOuter || dim.id !== selectedNet?.id || isEditingThis) && <Html
+            {(!isSuppressedInner || isEditingThis) && <Html
               position={midM}
               center
               distanceFactor={viewMode === '3d-perspective' ? 5.5 : undefined}
@@ -203,8 +254,8 @@ export function DimensionOverlay({
                       {dim.minMm ?? 200}–{dim.maxMm ?? 6000}
                     </span>
                   </div>
-                  {selectedNet && selectedOuter && dim.id === selectedOuter.id && (
-                    <span className="text-[9px] text-sky-300">{selectedNet.label}</span>
+                  {mergedInner && (
+                    <span className="text-[9px] text-sky-300">{mergedInner.label}</span>
                   )}
                   <div className="flex items-center gap-1">
                     <input
@@ -269,7 +320,7 @@ export function DimensionOverlay({
                       ? `${dim.label} — Kaynak dış genişliği (${dim.sourceValueMm} mm) düzenlemek için tıklayın`
                       : `${dim.label} — Doğrudan ölçü girmek için tıklayın`
                   }
-                  className={`pointer-events-auto group flex items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-mono font-medium shadow-sm border backdrop-blur-sm transition hover:scale-105 ${
+                  className={`pointer-events-auto group flex ${isFront2D && mergedInner ? 'flex-col items-center leading-tight py-0.5' : 'items-center gap-1 py-0.5'} whitespace-nowrap rounded px-1.5 text-[10px] font-mono font-medium shadow-sm border backdrop-blur-sm transition hover:scale-105 ${
                     isSelectedBayDim
                       ? 'bg-amber-500/95 text-slate-950 border-amber-300 font-bold hover:bg-amber-400'
                       : isInner
@@ -277,11 +328,18 @@ export function DimensionOverlay({
                         : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:border-amber-400/70 hover:text-white'
                   }`}
                 >
-                  <span>{dim.kind === 'runTotal' ? `${runs.find(run=>run.id===dim.runId)?.wallAxis ?? 'A'} kolu · ${dim.valueMm} mm` : dim.label}</span>
-                  {selectedNet && selectedOuter && dim.id === selectedOuter.id && (
-                    <span className="border-l border-amber-800/50 pl-1">{selectedNet.label}</span>
+                  <span className="flex items-center gap-1">
+                    <span>{dim.kind === 'runTotal' ? `${runs.find(run=>run.id===dim.runId)?.wallAxis ?? 'A'} kolu · ${dim.valueMm} mm` : dim.label}</span>
+                    {!isFront2D && mergedInner && (
+                      <span className="border-l border-amber-800/50 pl-1">{mergedInner.label}</span>
+                    )}
+                    <Pencil className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </span>
+                  {isFront2D && mergedInner && (
+                    <span className={`text-[9px] ${isSelectedBayDim ? 'text-slate-900/85 font-semibold' : 'text-sky-300'}`}>
+                      {mergedInner.label}
+                    </span>
                   )}
-                  <Pencil className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                 </button>
               )}
             </Html>}

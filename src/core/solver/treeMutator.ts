@@ -704,7 +704,7 @@ export function analyzeSelectedCellsGroup(
   if (isMultiShelfGroupSelection) {
     if (!sameBay) {
       cannotMergeReason =
-        'Seçili raf grupları farklı dikey bölmelerde (Bay) yer aldığı için tek bir hacimde birleştirilemez; ancak her grubu kendi içinde toplu eşitleyebilirsiniz.';
+        'Seçili raf grupları farklı dikey bölmelerde yer aldığı için tek bir hacimde birleştirilemez; ancak her grubu kendi içinde toplu eşitleyebilirsiniz.';
     } else if (!isContiguousVertical) {
       cannotMergeReason =
         'Seçili raf grupları arasında seçilmemiş bir ara bölme var veya genişlikleri farklı. Tek hacimde birleştirmek için aynı sütundaki bitişik grupların tüm raflarını seçin.';

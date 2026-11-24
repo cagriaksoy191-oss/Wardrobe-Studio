@@ -1,7 +1,8 @@
 import { SceneHtml as Html } from './SceneHtml';
 import { Check, Plus, X } from 'lucide-react';
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { type NewBayStarterPreset, useWardrobeStore } from '../../store/useWardrobeStore';
+import type { Design, Run } from '../../core/schema/types';
+import { type NewBayStarterPreset, type StudioViewMode, useWardrobeStore } from '../../store/useWardrobeStore';
 import { StudioDialog } from '../../ui/StudioDialog';
 import { NumberField } from '../../ui/Phase4Panels';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -9,6 +10,44 @@ import { Vector3 } from 'three';
 import { runEndControlsFit } from './runEndControlFit';
 
 const MM_TO_M = 0.001;
+
+export function filterRunsForRunEndOverlay(
+  runs: Run[],
+  layoutKind: Design['layoutKind'],
+  viewMode: StudioViewMode
+): Run[] {
+  const activeRuns = runs.filter((run) => layoutKind === 'l-shape' || run.wallAxis === 'A');
+  if (viewMode === '2d-front-A') return activeRuns.filter((run) => run.wallAxis === 'A');
+  if (viewMode === '2d-front-B') return activeRuns.filter((run) => run.wallAxis === 'B');
+  return activeRuns;
+}
+
+export function computeRunEndAnchorY(heightMm: number): number {
+  return Math.round(heightMm * 0.78);
+}
+
+export function computeRunEndAnchorPositionMm(
+  run: Pick<Run, 'wallAxis' | 'lengthMm' | 'heightMm' | 'depthMm' | 'rearOffsetMm'>,
+  lastBayEndMm: number,
+  viewMode: StudioViewMode
+): [number, number, number] {
+  const endMm = lastBayEndMm + 72;
+  const yMm = computeRunEndAnchorY(run.heightMm);
+  const rearMm = run.rearOffsetMm ?? 0;
+
+  if (viewMode === '2d-plan-top') {
+    if (run.wallAxis === 'A') {
+      // Clear above the Run A Derinlik pill (centered at z = depth/2) in top-down plan.
+      return [endMm + 40, yMm, rearMm - 110];
+    }
+    // Clear to the right of the Run B Derinlik pill (centered at x = depth/2) while staying above AnalysisToolbar.
+    const clearX = rearMm + Math.max(run.depthMm + 320, Math.round(run.depthMm / 2) + 540);
+    return [clearX, yMm, endMm - 20];
+  }
+
+  const depthMm = rearMm + Math.round(run.depthMm * 0.55);
+  return run.wallAxis === 'A' ? [endMm, yMm, depthMm] : [depthMm, yMm, endMm];
+}
 
 const STARTER_OPTIONS: { id: NewBayStarterPreset; label: string; desc: string }[] = [
   { id: 'shelves', label: 'Raflı Bölme', desc: '4 raf · 5 kullanılabilir aralık' },
@@ -24,6 +63,7 @@ export const RunEndAddBayOverlay = memo(function RunEndAddBayOverlay({ dock, edi
   const width = useThree(state => state.size.width);
   const design = useWardrobeStore((s) => s.design);
   const resolved = useWardrobeStore((s) => s.resolved);
+  const viewMode = useWardrobeStore((s) => s.viewMode);
   const addBayAtRunEnd = useWardrobeStore((s) => s.addBayAtRunEnd);
 
   const [openRun, setOpenRun] = useState<{ id: string; docked: boolean } | null>(null);
@@ -34,16 +74,18 @@ export const RunEndAddBayOverlay = memo(function RunEndAddBayOverlay({ dock, edi
   const [addError, setAddError] = useState('');
   const [outsideCanvas, setOutsideCanvas] = useState(false);
   const toolbarBottom = useRef(0);
-  const placements = useMemo(() => design.runs
-    .filter(run => design.layoutKind === 'l-shape' || run.wallAxis === 'A')
+  const placements = useMemo(() => filterRunsForRunEndOverlay(design.runs, design.layoutKind, viewMode)
     .map(run => {
       const lastBay = resolved.bays.filter(bay => bay.runId === run.id).at(-1);
-      const end = ((lastBay ? lastBay.startOffsetMm + lastBay.outerWidthMm : run.lengthMm) + 72) * MM_TO_M;
-      const y = Math.round(run.heightMm * 0.52) * MM_TO_M;
-      const depth = ((run.rearOffsetMm ?? 0) + Math.round(run.depthMm * 0.55)) * MM_TO_M;
-      const position: [number, number, number] = run.wallAxis === 'A' ? [end, y, depth] : [depth, y, end];
+      const lastBayEndMm = lastBay ? lastBay.startOffsetMm + lastBay.outerWidthMm : run.lengthMm;
+      const anchorMm = computeRunEndAnchorPositionMm(run, lastBayEndMm, viewMode);
+      const position: [number, number, number] = [
+        anchorMm[0] * MM_TO_M,
+        anchorMm[1] * MM_TO_M,
+        anchorMm[2] * MM_TO_M,
+      ];
       return { run, position, projected: new Vector3() };
-    }), [design.layoutKind, design.runs, resolved.bays]);
+    }), [design.layoutKind, design.runs, resolved.bays, viewMode]);
   const projected = useMemo(() => placements.map(p => p.projected), [placements]);
   const useDock = openRun?.docked ?? (editorOpen || width <= 500 || outsideCanvas);
   const dockTarget = useDock ? dock : null;
@@ -105,10 +147,18 @@ export const RunEndAddBayOverlay = memo(function RunEndAddBayOverlay({ dock, edi
                     setAddError('');
                   }}
                   title={`${run.label} sonuna yeni gardırop bölmesi ekle`}
-                  className={`pointer-events-auto flex items-center justify-center rounded-full border-2 border-emerald-400/90 bg-slate-950/90 text-emerald-300 shadow-xl backdrop-blur-md transition-all duration-150 hover:scale-105 hover:border-emerald-300 hover:bg-emerald-500 hover:text-slate-950 ${dockTarget ? 'h-11 w-11 gap-0.5' : 'h-9 w-9'}`}
+                  className={`pointer-events-auto flex items-center justify-center rounded-full border-2 border-emerald-400/90 bg-slate-950/90 text-emerald-300 shadow-xl backdrop-blur-md transition-all duration-150 hover:scale-105 hover:border-emerald-300 hover:bg-emerald-500 hover:text-slate-950 ${
+                    dockTarget
+                      ? 'h-11 w-11 gap-0.5'
+                      : design.layoutKind === 'l-shape'
+                        ? 'h-9 min-w-[2.5rem] px-1.5 gap-0.5'
+                        : 'h-9 w-9'
+                  }`}
                 >
-                  <Plus className="h-5 w-5 stroke-[2.75]" />
-                  {dockTarget && <span aria-hidden="true" className="text-[10px] font-bold">{run.wallAxis}</span>}
+                  <Plus className={design.layoutKind === 'l-shape' && !dockTarget ? 'h-4 w-4 stroke-[2.75]' : 'h-5 w-5 stroke-[2.75]'} />
+                  {(dockTarget || design.layoutKind === 'l-shape') && (
+                    <span aria-hidden="true" className="text-[10px] font-bold">{run.wallAxis}</span>
+                  )}
                 </button>
                 <div className={`pointer-events-none absolute ${dockTarget ? 'top-full right-0' : '-top-8 left-1/2 -translate-x-1/2'} whitespace-nowrap rounded-md border border-emerald-500/40 bg-slate-950/95 px-2 py-0.5 text-[10px] font-medium text-emerald-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100`}>
                   {run.label} sonuna bölme ekle

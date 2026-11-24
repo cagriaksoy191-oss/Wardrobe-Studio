@@ -67,6 +67,7 @@ interface WardrobeMeshGroupProps {
   onlyWhenOpenOrGlass?: boolean;
   interiorItemsConfig?: InteriorItemsConfig;
   renderQualityMode?: 'edit' | 'presentation';
+  cleanPresentation?: boolean;
   materials: MaterialPalette;
   wireframeMode: boolean;
   doorVisibilityMode: DoorVisibilityMode;
@@ -101,6 +102,7 @@ export function WardrobeMeshGroup({
   onlyWhenOpenOrGlass = true,
   interiorItemsConfig,
   renderQualityMode = 'edit',
+  cleanPresentation = false,
   materials,
   wireframeMode,
   doorVisibilityMode,
@@ -230,7 +232,7 @@ export function WardrobeMeshGroup({
             onSelectDoor={onSelectDoor}
           />
         ))}
-      {(doorVisibilityMode !== 'hidden' || doorEditorMode) && slidingDoors.map(leaf=><SlidingLeafInteraction key={leaf.id} leaf={leaf} doorEditorMode={doorEditorMode} multiSelectToolActive={multiSelectToolActive} onToggleDoor={onToggleDoor}>
+      {(doorVisibilityMode !== 'hidden' || doorEditorMode) && slidingDoors.map(leaf=><SlidingLeafInteraction key={leaf.id} leaf={leaf} doorEditorMode={doorEditorMode} multiSelectToolActive={multiSelectToolActive} cleanPresentation={cleanPresentation} onToggleDoor={onToggleDoor}>
         {toggle=><AnimatedHingedDoorLeaf door={slidingAsDoor(leaf)} slidingLeaf={leaf} drawers={drawers} materials={materials} renderQualityMode={renderQualityMode} wireframeMode={wireframeMode} isXray={doorVisibilityMode==='xray'&&!doorEditorMode} doorEditorMode={doorEditorMode} isSelectedDoor={selectedDoorIds.includes(leaf.id)} isDesiredOpen={Boolean(openDoorIds[leaf.id])} doorSpringMapRef={doorSpringMapRef} drawerSpringMapRef={drawerSpringMapRef} onToggleDoor={toggle} onSelectDoor={onSelectDoor}/>} 
       </SlidingLeafInteraction>)}
 

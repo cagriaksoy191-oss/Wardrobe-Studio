@@ -1136,6 +1136,10 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 Brüt X: <strong className="text-amber-300">{group.grossWidthMm}mm</strong> (Net:{' '}
                 {group.netWidthSumMm} + {group.cells.length - 1}×{resolved.panelThicknessMm}mm Dikme)
               </span>
+            ) : group.isMultiShelfGroupSelection || group.cells.length > 1 ? (
+              <span>
+                {group.shelfGroups.length} grup · {group.cells.length} aralık
+              </span>
             ) : (
               <span>
                 X: <strong className="text-amber-300">{group.grossWidthMm}</strong> · Y:{' '}
@@ -1339,14 +1343,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 <div className="font-semibold text-sky-200">
                   Seçili Raf Grupları ({group.shelfGroups.length} grup):
                 </div>
-                {group.shelfGroups.map((sg) => (
-                  <div key={sg.groupKey} className="flex items-center justify-between text-slate-300">
-                    <span className="truncate">{sg.groupLabel}</span>
-                    <span className="font-mono text-amber-300">
-                      {sg.cells.length} aralık ({sg.grossHeightMm}mm)
-                    </span>
-                  </div>
-                ))}
+                <div className="max-h-36 space-y-1 overflow-y-auto pr-1">
+                  {group.shelfGroups.map((sg) => (
+                    <div key={sg.groupKey} className="flex items-center justify-between gap-2 text-slate-300">
+                      <span className="truncate">{sg.groupLabel}</span>
+                      <span className="shrink-0 font-mono text-amber-300">
+                        {sg.cells.length} aralık ({sg.grossHeightMm}mm)
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* 1. Ayrı Ayrı Eşit Dağıt */}
@@ -1551,8 +1557,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               <SlidersHorizontal className="h-3 w-3" />
               <span>
                 {group.isCornerSelection
-                  ? 'Köşe Raf Yüksekliği (`Y`) Boyutlandırma'
-                  : 'Yönlü Boyutlandırma (`X / Y / Z`)'}
+                  ? 'Köşe Raf Yüksekliği (Y) Boyutlandırma'
+                  : 'Yönlü Boyutlandırma (X / Y / Z)'}
               </span>
             </span>
             <span className="text-[9px] text-slate-400">Komşu Korumalı</span>
@@ -1862,7 +1868,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   onClick={() => isolateSubInterval(firstCell.id)}
                   className="w-full rounded border border-amber-400/60 bg-amber-500/20 px-2 py-1 font-semibold text-amber-100 hover:bg-amber-500/30"
                 >
-                  Bu Aralığı Bağımsız Alt Hücreye Ayır (`SplitNode`)
+                  Bu Aralığı Bağımsız Alt Hücreye Ayır
                 </button>
               )}
 

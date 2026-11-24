@@ -8,6 +8,11 @@ import type {Object3D} from 'three';
 const NOOP_RAYCAST:Object3D['raycast']=()=>null;
 
 export const motionRuntime=new MotionSimulator();
+export function hasOpenSlidingLeaf(sim: MotionSimulator = motionRuntime): boolean {
+  return sim.scene.parts.some(
+    (part) => part.kind === 'sliding' && Math.abs((sim.positions[part.id] ?? part.home) - part.home) > 1
+  );
+}
 export function publishMotionNotice() {
   const state = useWardrobeStore.getState();
   const notice = motionRuntime.motionNotice();
@@ -16,6 +21,10 @@ export function publishMotionNotice() {
   state.notifyRecovery(motionRuntime.recovery, offer ? {
     available: Boolean(offer.plan), description: offer.plan?.description ?? offer.reason,
   } : null);
+  const nextOpenSliding = hasOpenSlidingLeaf(motionRuntime);
+  if (state.hasOpenSlidingLeaf !== nextOpenSliding) {
+    state.setHasOpenSlidingLeaf(nextOpenSliding);
+  }
 }
 export function MotionController({ showContact = true }: { showContact?: boolean }) {
   useEffect(() => () => {
