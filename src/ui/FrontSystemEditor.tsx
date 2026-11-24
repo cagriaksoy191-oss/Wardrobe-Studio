@@ -8,6 +8,8 @@ import type {
   MaterialId,
   ResolvedDoorLeaf,
   ResolvedSlidingLeaf,
+  Run,
+  SlidingFrontConfig,
 } from '../core/schema/types';
 import { defaultSlidingConfig, frontSpanFromResolved } from '../core/solver/slidingSolver';
 import { frontVerticalRange } from '../core/fronts/frontGeometry';
@@ -22,7 +24,72 @@ import { NumberField } from './NumberField';
 
 const control = 'studio-input';
 const button =
-  'rounded-md border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-100 transition hover:border-sky-400 hover:bg-slate-700/80 disabled:opacity-40';
+  'min-h-7 rounded-md border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-100 transition hover:border-sky-400 hover:bg-slate-700/80 disabled:opacity-55';
+
+/** Defensively converts raw Zod JSON or internal front-* IDs into clean Turkish messages (CF-07). */
+export function formatFrontEditorError(raw: string): string {
+  const trimmed = raw.trim();
+  if (
+    trimmed.startsWith('[') ||
+    trimmed.includes('"code":"too_small"') ||
+    trimmed.includes('expected array to have >=1')
+  ) {
+    return 'En az 1 bölme seçili kalmalıdır.';
+  }
+  if (trimmed.includes('bitişik bölmeleri')) {
+    return 'Ortak cephe yalnızca aynı koldaki bitişik bölmeleri kapsayabilir.';
+  }
+  return trimmed.replace(/:\s*front-[a-zA-Z0-9_-]+/g, '').trim() || 'Kapak kapsamı güncellenemedi.';
+}
+
+/** Validates bay selection contiguity before patching a front span (CF-07). */
+export function validateFrontBaySpanSelection(
+  run: Pick<Run, 'bays'>,
+  nextBayIds: readonly string[]
+): { ok: true; orderedBayIds: string[] } | { ok: false; error: string } {
+  if (nextBayIds.length === 0) {
+    return { ok: false, error: 'En az 1 bölme seçili kalmalıdır.' };
+  }
+  const indices: number[] = [];
+  const orderedBayIds: string[] = [];
+  run.bays.forEach((b, idx) => {
+    if (nextBayIds.includes(b.id)) {
+      indices.push(idx);
+      orderedBayIds.push(b.id);
+    }
+  });
+  if (orderedBayIds.length !== nextBayIds.length) {
+    return { ok: false, error: 'Seçilen bölmeler aynı duvarda bulunmalıdır.' };
+  }
+  for (let i = 1; i < indices.length; i++) {
+    if (indices[i] !== indices[i - 1] + 1) {
+      return { ok: false, error: 'Ortak cephe yalnızca aynı koldaki bitişik bölmeleri kapsayabilir.' };
+    }
+  }
+  return { ok: true, orderedBayIds };
+}
+
+/** Updates sliding track count (2 <-> 3) while preserving custom leafCount, overlap, clearances & widths (CF-19). */
+export function updateSlidingTrackCount(
+  current: SlidingFrontConfig,
+  panelThicknessMm: number,
+  nextTrackCount: 2 | 3
+): SlidingFrontConfig {
+  const defaults = defaultSlidingConfig(panelThicknessMm, nextTrackCount);
+  const remappedTrackIndices = current.trackIndices
+    ? (current.trackIndices.map((idx) => (idx % nextTrackCount) as 0 | 1 | 2) as (0 | 1 | 2)[])
+    : undefined;
+  return {
+    ...current,
+    trackCount: nextTrackCount,
+    trackSpacingMm: Math.max(panelThicknessMm + 2, current.trackSpacingMm || defaults.trackSpacingMm),
+    trackDepthMm: Math.max(
+      defaults.trackDepthMm,
+      18 + panelThicknessMm + (nextTrackCount - 1) * Math.max(panelThicknessMm + 2, current.trackSpacingMm || defaults.trackSpacingMm)
+    ),
+    trackIndices: remappedTrackIndices,
+  };
+}
 
 export function HingedOpeningCard({
   door,
@@ -186,6 +253,9 @@ export function FrontSystemEditor({
   const model = useWardrobeStore((s) => s.resolved);
   const bayId = useWardrobeStore((s) => s.selectedBayId);
   const selectedDoorId = useWardrobeStore((s) => s.selectedDoorId);
+  const storeSelectedFrontId = useWardrobeStore((s) => s.selectedFrontId);
+  const setSelectedFrontId = useWardrobeStore((s) => s.setSelectedFrontId);
+  const commandError = useWardrobeStore((s) => s.commandError);
   const configure = useWardrobeStore((s) => s.configureFrontSystem);
   const patch = useWardrobeStore((s) => s.patchFrontSystem);
   const split = useWardrobeStore((s) => s.splitFrontSystem);
@@ -193,25 +263,79 @@ export function FrontSystemEditor({
   const toggle = useWardrobeStore((s) => s.toggleDoor);
   const selectDoor = useWardrobeStore((s) => s.selectDoor);
 
-  const [chosen, setChosen] = useState('');
+  const [scopeError, setScopeError] = useState<string | null>(null);
   const selectedFrontId =
     model.slidingDoors?.find((d) => d.id === selectedDoorId)?.frontId ??
     model.doors.find((d) => d.id === selectedDoorId)?.frontId;
-
-  useEffect(() => setChosen(selectedFrontId ?? ''), [selectedFrontId, bayId]);
 
   const run = design.runs.find((r) => r.bays.some((b) => b.id === bayId));
   const bay = run?.bays.find((b) => b.id === bayId);
   const fronts = design.fronts.filter((f) => f.bayIds.includes(bayId ?? ''));
   const front =
     (activeFrontId ? fronts.find((f) => f.id === activeFrontId) : undefined) ??
-    fronts.find((f) => f.id === chosen) ??
+    (storeSelectedFrontId ? fronts.find((f) => f.id === storeSelectedFrontId) : undefined) ??
     fronts.find((f) => f.id === selectedFrontId) ??
     fronts[0];
+
+  useEffect(() => {
+    setScopeError(null);
+  }, [bayId, front?.id, front?.bayIds.join(',')]);
 
   if (!run || !bay) {
     return <p className="p-3.5 text-xs text-slate-400">Kapak sistemi için bir gövde seçin.</p>;
   }
+
+  const handleToggleBayInFront = (targetFront: Front, targetBayId: string, checked: boolean) => {
+    const nextBayIds = checked
+      ? Array.from(new Set([...targetFront.bayIds, targetBayId]))
+      : targetFront.bayIds.filter((id) => id !== targetBayId);
+    const validation = validateFrontBaySpanSelection(run, nextBayIds);
+    if (!validation.ok) {
+      setScopeError(validation.error);
+      return;
+    }
+    setScopeError(null);
+    patch(targetFront.id, { bayIds: validation.orderedBayIds });
+    const latestErr = useWardrobeStore.getState().commandError;
+    if (latestErr) {
+      setScopeError(formatFrontEditorError(latestErr));
+    }
+  };
+
+  const renderBaySpanCheckboxes = (targetFront: Front) => (
+    <div className="space-y-1">
+      {run.bays.map((b) => {
+        const isChecked = targetFront.bayIds.includes(b.id);
+        const isLastChecked = isChecked && targetFront.bayIds.length <= 1;
+        return (
+          <label
+            key={b.id}
+            title={isLastChecked ? 'En az 1 bölme seçili kalmalıdır' : undefined}
+            className={`flex min-h-6 items-center gap-2 text-[11px] ${
+              isLastChecked ? 'cursor-not-allowed text-slate-300 opacity-75' : 'cursor-pointer text-slate-200'
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={isChecked}
+              disabled={isLastChecked}
+              title={isLastChecked ? 'En az 1 bölme seçili kalmalıdır' : undefined}
+              onChange={(e) => handleToggleBayInFront(targetFront, b.id, e.target.checked)}
+            />
+            <span className="truncate">{b.label}</span>
+          </label>
+        );
+      })}
+      {(scopeError || (commandError && commandError.includes('bitişik'))) && (
+        <p
+          role="alert"
+          className="mt-1 rounded border border-rose-500/50 bg-rose-950/70 px-2 py-1 text-[11px] leading-snug text-rose-200"
+        >
+          {scopeError ?? formatFrontEditorError(commandError ?? '')}
+        </p>
+      )}
+    </div>
+  );
 
   const type: FrontType =
     front?.type ??
@@ -268,7 +392,13 @@ export function FrontSystemEditor({
           <button
             type="button"
             className={`${button} w-full`}
-            onClick={() => configure(bay.id, undefined, type)}
+            onClick={() => {
+              configure(bay.id, undefined, type);
+              const nextFront = useWardrobeStore
+                .getState()
+                .design.fronts.find((f) => f.bayIds.includes(bay.id));
+              if (nextFront) setSelectedFrontId?.(nextFront.id);
+            }}
           >
             Özel kapsam ve kot ayarlarını aç
           </button>
@@ -320,24 +450,7 @@ export function FrontSystemEditor({
 
         <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/60 p-2.5">
           <div className="text-[11px] font-medium text-slate-200">Kapsanan bitişik bölmeler</div>
-          <div className="space-y-1">
-            {run.bays.map((b) => (
-              <label key={b.id} className="flex items-center gap-2 text-[11px] text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={front.bayIds.includes(b.id)}
-                  onChange={(e) =>
-                    patch(front.id, {
-                      bayIds: e.target.checked
-                        ? [...front.bayIds, b.id]
-                        : front.bayIds.filter((id) => id !== b.id),
-                    })
-                  }
-                />
-                {b.label}
-              </label>
-            ))}
-          </div>
+          {renderBaySpanCheckboxes(front)}
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -381,7 +494,8 @@ export function FrontSystemEditor({
                 value={cfg.trackCount}
                 onChange={(e) =>
                   patch(front.id, {
-                    sliding: defaultSlidingConfig(
+                    sliding: updateSlidingTrackCount(
+                      cfg,
                       run.panelThicknessMm,
                       Number(e.target.value) as 2 | 3
                     ),
@@ -422,32 +536,15 @@ export function FrontSystemEditor({
 
         {/* Kapsanan bitişik bölmeler */}
         <details className="rounded-lg border border-slate-700/80 bg-slate-950/60 p-2.5">
-          <summary className="cursor-pointer text-[11px] font-medium text-slate-200">
+          <summary className="flex min-h-6 cursor-pointer items-center text-[11px] font-medium text-slate-200">
             Kapsanan bitişik bölmeler ({front.bayIds.length} bölme)
           </summary>
-          <div className="mt-2 space-y-1">
-            {run.bays.map((b) => (
-              <label key={b.id} className="flex items-center gap-2 text-[11px] text-slate-200">
-                <input
-                  type="checkbox"
-                  checked={front.bayIds.includes(b.id)}
-                  onChange={(e) =>
-                    patch(front.id, {
-                      bayIds: e.target.checked
-                        ? [...front.bayIds, b.id]
-                        : front.bayIds.filter((id) => id !== b.id),
-                    })
-                  }
-                />
-                {b.label}
-              </label>
-            ))}
-          </div>
+          <div className="mt-2">{renderBaySpanCheckboxes(front)}</div>
         </details>
 
         {/* Gelişmiş ray ve kanat ayarları */}
         <details className="rounded-lg border border-slate-700/80 bg-slate-950/60 p-2.5">
-          <summary className="cursor-pointer text-[11px] font-medium text-slate-200">
+          <summary className="flex min-h-6 cursor-pointer items-center text-[11px] font-medium text-slate-200">
             Gelişmiş ray, bindirme ve kanat genişlikleri
           </summary>
           <div className="mt-2 space-y-2.5">
@@ -612,9 +709,16 @@ export function FrontSystemEditor({
               <select
                 aria-label="Sistem kapak malzemesi"
                 className={control}
-                value={front.materialId ?? bay.doorMaterialId ?? design.materials.frontMaterialId}
-                onChange={(e) => patch(front.id, { materialId: e.target.value as MaterialId })}
+                value={front.materialId ?? ''}
+                onChange={(e) =>
+                  patch(front.id, {
+                    materialId: (e.target.value || undefined) as MaterialId | undefined,
+                  })
+                }
               >
+                <option value="">
+                  Genel kapak malzemesi ({MATERIAL_CATALOG[design.materials.frontMaterialId].name})
+                </option>
                 {Object.entries(MATERIAL_CATALOG).map(([id, m]) => (
                   <option key={id} value={id}>
                     {m.name}
@@ -712,7 +816,7 @@ export function FrontSystemEditor({
             aria-label="Düzenlenen kapak aralığı"
             className={control}
             value={front?.id ?? ''}
-            onChange={(e) => setChosen(e.target.value)}
+            onChange={(e) => setSelectedFrontId?.(e.target.value || null)}
           >
             {fronts.map((f) => {
               const { start, end } = frontVerticalRange(run, f);

@@ -19,7 +19,7 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
-import { type CSSProperties, useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   HANDLE_FINISH_CATALOG,
   HANDLE_STYLE_CATALOG,
@@ -46,6 +46,7 @@ import {
 } from '../../ui/DoorInspectorPanel';
 import {
   defaultShelfIntervalDraft,
+  readNumberDraft,
   readShelfIntervalDraft,
   shelfIntervalLimit,
 } from '../../ui/editorFeedback';
@@ -60,6 +61,8 @@ export interface SelectionScreenBounds {
   centerY: number;
   canvasWidth: number;
   canvasHeight: number;
+  conflictCenterX?: number;
+  conflictCenterY?: number;
 }
 
 export interface PopoverPlacement {
@@ -68,13 +71,27 @@ export interface PopoverPlacement {
   widthPx: number;
 }
 
+export interface PopoverPlacementOptions {
+  conflictActive?: boolean;
+}
+
 const PILL_CLEARANCE_PX = 84;
 const EDGE_MARGIN_PX = 14;
 const TOP_ANCHOR_PX = 104;
 
+export function computePopoverMaxHeightPx(
+  sceneHeightPx: number,
+  topAnchorPx: number,
+  analysisToolbarReservedPx: number,
+  minHeightPx = 180
+): number {
+  return Math.max(minHeightPx, Math.floor(sceneHeightPx - topAnchorPx - analysisToolbarReservedPx - 12));
+}
+
 export function computePopoverPlacement(
   screenBounds: SelectionScreenBounds | null,
-  mode: 'door-quick-bar' | 'cell-or-drawer'
+  mode: 'door-quick-bar' | 'cell-or-drawer',
+  options: PopoverPlacementOptions = {}
 ): PopoverPlacement {
   const canvasWidth = screenBounds?.canvasWidth ?? 900;
   const maxWidth = mode === 'door-quick-bar' ? 312 : 320;
@@ -86,6 +103,16 @@ export function computePopoverPlacement(
       return { leftPx: EDGE_MARGIN_PX, topPx: TOP_ANCHOR_PX, widthPx };
     }
     return { leftPx: rightAlignedLeft, topPx: TOP_ANCHOR_PX, widthPx };
+  }
+
+  // CF-05: When a resize conflict badge is visible, flip opposite the conflict badge / cell
+  if (options.conflictActive && screenBounds && screenBounds.canvasWidth > 0) {
+    const focusX = screenBounds.conflictCenterX ?? screenBounds.centerX;
+    return {
+      leftPx: focusX >= canvasWidth * 0.48 ? EDGE_MARGIN_PX : rightAlignedLeft,
+      topPx: TOP_ANCHOR_PX,
+      widthPx,
+    };
   }
 
   if (screenBounds && screenBounds.canvasWidth > 0) {
@@ -124,6 +151,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const doorEditorMode = useWardrobeStore((s) => s.doorEditorMode);
   const selectedDoorId = useWardrobeStore((s) => s.selectedDoorId);
   const selectedDoorIds = useWardrobeStore((s) => s.selectedDoorIds);
+  const selectedFrontId = useWardrobeStore((s) => s.selectedFrontId);
   const openDoorIds = useWardrobeStore((s) => s.openDoorIds);
   const openDrawerIds = useWardrobeStore((s) => s.openDrawerIds);
   const resizeDraft = useWardrobeStore((s) => s.resizeDraft);
@@ -198,12 +226,21 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const [activeAxis, setActiveAxis] = useState<ResizeAxis>('Y');
   const [activeDirection, setActiveDirection] = useState<ResizeDirection>('up');
   const [targetMmInput, setTargetMmInput] = useState<string>('');
-  const [neighborMmInput, setNeighborMmInput] = useState<string>('');
+  const [targetMmError, setTargetMmError] = useState<string | null>(null);
   const [drawerHeightInput, setDrawerHeightInput] = useState<string>('');
+  const [drawerHeightError, setDrawerHeightError] = useState<string | null>(null);
+  const [dynamicMaxHeightPx, setDynamicMaxHeightPx] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const drawerHeightInputRef = useRef<HTMLInputElement | null>(null);
+  const targetMmInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectionSignature = `${activeCellIds.join(',')}|${activeDrawerIds.join(',')}|${activeDoorIds.join(',')}|${doorEditorMode}`;
 
-  useEffect(() => setGroupIntervalDraft(groupIntervalDefault), [selectionSignature, groupIntervalDefault]);
+  useEffect(() => {
+    setGroupIntervalDraft(groupIntervalDefault);
+    setTargetMmError(null);
+    setDrawerHeightError(null);
+  }, [selectionSignature, groupIntervalDefault]);
 
   useEffect(() => {
     if (group.cells.length > 0) {
@@ -215,6 +252,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
             ? group.grossWidthMm
             : group.netDepthMm;
       setTargetMmInput(String(defaultMm));
+      setTargetMmError(null);
     }
   }, [
     selectionSignature,
@@ -230,6 +268,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       const firstDrw = resolved.drawers.find((d) => d.id === activeDrawerIds[0]);
       if (firstDrw) {
         setDrawerHeightInput(String(firstDrw.heightMm));
+        setDrawerHeightError(null);
       }
     }
   }, [activeDrawerIds.join(','), resolved.drawers]);
@@ -242,21 +281,60 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
 
   useEffect(() => {
     if (resizeDraft) {
-      setNeighborMmInput(String(resizeDraft.neighborDraftMm));
       setTargetMmInput(String(resizeDraft.requestedTotalMm));
+      setTargetMmError(null);
       setActiveAxis(resizeDraft.axis);
       setActiveDirection(resizeDraft.direction);
     }
   }, [resizeDraft]);
 
+  const conflictActive = Boolean(
+    resizeDraft && (resizeDraft.conflictOverlapMm > 0 || resizeDraft.exceedsBoundary)
+  );
   const placement = computePopoverPlacement(
     screenBounds,
-    doorEditorMode ? 'door-quick-bar' : 'cell-or-drawer'
+    doorEditorMode ? 'door-quick-bar' : 'cell-or-drawer',
+    { conflictActive }
   );
+
+  // CF-05: Dynamically measure .studio-scene height minus top toolbar and AnalysisToolbar so popovers never collide
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const scene = panel?.closest('.studio-scene') as HTMLElement | null;
+    if (!scene) return;
+    const measure = () => {
+      const sceneRect = scene.getBoundingClientRect();
+      if (sceneRect.height <= 0) return;
+      const toolbar = scene.querySelector('.studio-scene-toolbar') as HTMLElement | null;
+      const toolbarBottom =
+        toolbar && toolbar.offsetHeight > 0
+          ? toolbar.getBoundingClientRect().bottom - sceneRect.top + 8
+          : placement.topPx;
+      const effectiveTop = Math.max(placement.topPx, toolbarBottom);
+      const analysisBar = scene.querySelector('[data-testid="analysis-toolbar"]') as HTMLElement | null;
+      const analysisReserved =
+        analysisBar && analysisBar.offsetHeight > 0
+          ? Math.max(0, sceneRect.bottom - analysisBar.getBoundingClientRect().top)
+          : 16;
+      setDynamicMaxHeightPx(
+        computePopoverMaxHeightPx(sceneRect.height, effectiveTop, analysisReserved)
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(scene);
+    const toolbar = scene.querySelector('.studio-scene-toolbar');
+    const analysisBar = scene.querySelector('[data-testid="analysis-toolbar"]');
+    if (toolbar) observer.observe(toolbar);
+    if (analysisBar) observer.observe(analysisBar);
+    return () => observer.disconnect();
+  }, [placement.topPx, selectionSignature, Boolean(resizeDraft)]);
+
   const panelStyle = {
     '--context-left': `${placement.leftPx}px`,
     '--context-top': `${placement.topPx}px`,
     '--context-width': `${placement.widthPx}px`,
+    ...(dynamicMaxHeightPx !== null ? { maxHeight: `${dynamicMaxHeightPx}px` } : {}),
   } as CSSProperties;
 
   const panelClass =
@@ -266,14 +344,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
 
   // ===========================================================================
   // MOD 1: KOMPAKT YÜZEN KAPAK HIZLI EYLEM ÇUBUĞU (doorEditorMode, <= 165px)
-  // Tüm ayrıntılı menteşe/ray/malzeme ayarları sağ paneldeki DoorInspectorPanel'dedir.
+  // Masaüstünde (>= 1280px / xl) sağdaki DoorInspectorPanel tek yetkili paneldir;
+  // yüzen hızlı çubuk yalnızca dar/tablet/mobil ekranlarda (xl:hidden) gösterilir (VF-11, CF-14).
   // ===========================================================================
   if (doorEditorMode) {
     const ctx = resolveActiveDoorInspectorContext(
       design,
       resolved,
       selectedBayId,
-      activeDoorIds
+      activeDoorIds,
+      selectedFrontId
     );
     if (!ctx.isCornerDoor && !ctx.targetBay) return null;
 
@@ -324,7 +404,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         onPointerUp={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
-        className="context-panel pointer-events-auto absolute z-50 flex flex-col gap-1.5 rounded-xl border border-slate-600/90 bg-slate-900/96 p-2.5 text-xs text-slate-100 shadow-2xl"
+        className="context-panel pointer-events-auto absolute z-50 flex flex-col gap-1.5 rounded-xl border border-slate-600/90 bg-slate-900/96 p-2.5 text-xs text-slate-100 shadow-2xl xl:hidden"
       >
         {/* Satır 1: Başlık + kesim ölçüsü + Kapat (Esc) */}
         <div className="flex items-center justify-between gap-2">
@@ -332,6 +412,11 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
             <div className="flex items-center gap-1.5">
               <DoorOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
               <span className="truncate text-[11px] font-semibold text-amber-200">{titleText}</span>
+              {activeDoorIds.length > 1 && (
+                <span className="shrink-0 rounded border border-amber-400/60 bg-amber-500/20 px-1 py-0.25 text-[10px] font-semibold text-amber-200">
+                  {activeDoorIds.length} kapak
+                </span>
+              )}
             </div>
             <div className="truncate font-mono text-[10px] text-slate-300">{cutSummary}</div>
           </div>
@@ -469,14 +554,33 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
     const bankDrawers = resolved.drawers.filter((d) => d.cellId === firstDrw.cellId);
     const totalSelectedHeightMm = selectedDrawers.reduce((s, d) => s + d.heightMm, 0);
 
+    const maxDrawerH = Math.max(120, firstDrw.parentBankHeightMm - 80);
+
     const handleApplyDrawerHeight = (customMm?: number) => {
-      const val = customMm !== undefined ? customMm : Number(drawerHeightInput.trim());
-      if (!Number.isFinite(val) || val < 80) return;
-      updateSelectedDrawerHeight(firstDrw.id, Math.round(val));
+      if (customMm !== undefined) {
+        const clamped = Math.max(80, Math.min(maxDrawerH, Math.round(customMm)));
+        setDrawerHeightError(null);
+        updateSelectedDrawerHeight(firstDrw.id, clamped);
+        return;
+      }
+      const parsed = readNumberDraft(
+        drawerHeightInput,
+        Boolean(drawerHeightInputRef.current?.validity?.badInput),
+        80,
+        maxDrawerH
+      );
+      if (parsed.kind !== 'value') {
+        const msg = '80 ile ' + maxDrawerH + ' mm arasında bir yükseklik girin.';
+        setDrawerHeightError(msg);
+        return;
+      }
+      setDrawerHeightError(null);
+      updateSelectedDrawerHeight(firstDrw.id, parsed.value);
     };
 
     return (
       <div
+        ref={panelRef}
         style={panelStyle}
         role="region"
         aria-label="Çekmece düzenleyicisi"
@@ -560,9 +664,9 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         {/* 1. SEÇİLİ ÇEKMECE ÖN YÜKSEKLİĞİ (Y) DÜZENLEME */}
         {selectedDrawers.length === 1 && (
           <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
-            <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sky-300">
-              <span>Çekmece #{firstDrw.drawerIndex + 1} Yüksekliği (Y)</span>
-              <span className="font-mono text-[10px] text-slate-400">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-200">
+              <span>Çekmece #{firstDrw.drawerIndex + 1} yüksekliği (Y)</span>
+              <span className="font-mono text-[10px] font-normal text-slate-400">
                 Grup: {firstDrw.parentBankHeightMm} mm
               </span>
             </div>
@@ -571,44 +675,59 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 type="button"
                 aria-label="Çekmece yüksekliğini 20 mm azalt"
                 onClick={() => handleApplyDrawerHeight(firstDrw.heightMm - 20)}
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-200 hover:bg-slate-800"
+                className="min-h-7 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-200 hover:bg-slate-800"
               >
                 -20
               </button>
               <input
+                ref={drawerHeightInputRef}
                 type="number"
                 aria-label="Çekmece ön yüksekliği (mm)"
+                aria-invalid={drawerHeightError ? true : undefined}
                 step={10}
                 min={80}
-                max={Math.max(120, firstDrw.parentBankHeightMm - 80)}
+                max={maxDrawerH}
                 value={drawerHeightInput}
-                onChange={(e) => setDrawerHeightInput(e.target.value)}
+                onChange={(e) => {
+                  setDrawerHeightInput(e.target.value);
+                  if (drawerHeightError) setDrawerHeightError(null);
+                }}
                 onKeyDown={(e) => {
                   e.stopPropagation();
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     handleApplyDrawerHeight();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setDrawerHeightInput(String(firstDrw.heightMm));
+                    setDrawerHeightError(null);
+                    e.currentTarget.blur();
                   }
                 }}
-                className="w-18 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
+                className="w-18 rounded border border-slate-500 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
               />
               <span className="font-mono text-[10px] text-slate-400">mm</span>
               <button
                 type="button"
                 aria-label="Çekmece yüksekliğini 20 mm artır"
                 onClick={() => handleApplyDrawerHeight(firstDrw.heightMm + 20)}
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-200 hover:bg-slate-800"
+                className="min-h-7 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-200 hover:bg-slate-800"
               >
                 +20
               </button>
               <button
                 type="button"
                 onClick={() => handleApplyDrawerHeight()}
-                className="flex-1 rounded bg-sky-500 px-2 py-1 text-[11px] font-bold text-slate-950 hover:bg-sky-400"
+                className="min-h-7 flex-1 rounded border border-sky-400/60 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-100 hover:bg-sky-500/30"
               >
                 Uygula
               </button>
             </div>
+            {drawerHeightError && (
+              <p role="alert" className="text-[10px] leading-snug text-rose-200">
+                {drawerHeightError}
+              </p>
+            )}
           </div>
         )}
 
@@ -617,7 +736,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
           <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
             <div className="flex items-center justify-between gap-2 text-[11px]">
               <span className="text-slate-300">Adet:</span>
-              <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+              <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1 py-0.5">
                 <button
                   type="button"
                   aria-label="Çekmece adedini azalt"
@@ -628,7 +747,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                       drawerFrontHeightsMm: undefined,
                     })
                   }
-                  className="p-0.5 text-slate-300 hover:text-white"
+                  className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
                 >
                   <Minus className="h-3 w-3" aria-hidden="true" />
                 </button>
@@ -645,7 +764,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                       drawerFrontHeightsMm: undefined,
                     })
                   }
-                  className="p-0.5 text-slate-300 hover:text-white"
+                  className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
                 >
                   <Plus className="h-3 w-3" aria-hidden="true" />
                 </button>
@@ -875,13 +994,14 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const applyIntervalTarget = () => {
     if (groupIntervalTarget !== null) setContiguousGroupIntervalCount(groupIntervalTarget);
   };
+  const groupIntervalInvalid = groupIntervalDraft !== '' && groupIntervalTarget === null;
   const intervalInput = (
-    <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+    <div className="flex items-center gap-1 rounded border border-slate-600 bg-slate-900 px-1 py-0.5">
       <button
         type="button"
         aria-label="Aralık hedefini azalt"
         onClick={() => changeIntervalTarget(-1)}
-        className="p-0.5 text-slate-300 hover:text-white"
+        className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
       >
         <Minus className="h-3 w-3" aria-hidden="true" />
       </button>
@@ -892,17 +1012,28 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         max={groupIntervalMax}
         step={1}
         aria-label={group.isMultiShelfGroupSelection ? 'Grup başına aralık' : 'Hedef aralık'}
-        aria-invalid={groupIntervalDraft !== '' && groupIntervalTarget === null ? true : undefined}
+        aria-invalid={groupIntervalInvalid ? true : undefined}
         placeholder="—"
         value={groupIntervalDraft}
         onChange={(e) => setGroupIntervalDraft(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            applyIntervalTarget();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setGroupIntervalDraft(groupIntervalDefault);
+            e.currentTarget.blur();
+          }
+        }}
         className="w-11 bg-transparent text-center font-mono text-xs font-bold text-amber-300 focus:outline-none"
       />
       <button
         type="button"
         aria-label="Aralık hedefini artır"
         onClick={() => changeIntervalTarget(1)}
-        className="p-0.5 text-slate-300 hover:text-white"
+        className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
       >
         <Plus className="h-3 w-3" aria-hidden="true" />
       </button>
@@ -918,13 +1049,29 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
     group.cells.every((cell) => cell.sourceLeafId === firstCell.sourceLeafId);
 
   const handleTriggerResizePreview = (customValMm?: number, customDir?: ResizeDirection) => {
-    const val = customValMm !== undefined ? customValMm : Number(targetMmInput.trim());
-    if (!Number.isFinite(val) || Number.isNaN(val) || val < 60) return;
-    startOrUpdateResizeDraft(activeAxis, customDir ?? activeDirection, Math.round(val));
+    if (customValMm !== undefined) {
+      if (!Number.isFinite(customValMm) || customValMm < 60) return;
+      setTargetMmError(null);
+      startOrUpdateResizeDraft(activeAxis, customDir ?? activeDirection, Math.round(customValMm));
+      return;
+    }
+    const parsed = readNumberDraft(
+      targetMmInput,
+      Boolean(targetMmInputRef.current?.validity?.badInput),
+      60,
+      3000
+    );
+    if (parsed.kind !== 'value') {
+      setTargetMmError('60 ile 3000 mm arasında geçerli bir ölçü girin.');
+      return;
+    }
+    setTargetMmError(null);
+    startOrUpdateResizeDraft(activeAxis, customDir ?? activeDirection, parsed.value);
   };
 
   return (
     <div
+      ref={panelRef}
       style={panelStyle}
       role="region"
       aria-label={group.isSingle ? 'Raf hücresi düzenleyicisi' : 'Çoklu hücre düzenleyicisi'}
@@ -1015,9 +1162,9 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       {/* BEŞGEN KÖŞE ÖZEL KONTROL KARTI */}
       {group.isCornerSelection && activeJunction && (
         <div className="space-y-2 rounded-lg border border-amber-500/40 bg-slate-950/90 p-2">
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-            <span>Beşgen Köşe Modülü</span>
-            <span className="font-mono text-[10px] text-slate-300">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-amber-200">
+            <span>Beşgen köşe modülü</span>
+            <span className="font-mono text-[10px] font-normal text-slate-300">
               {activeJunction.shelvesCount} raf · {activeJunction.shelvesCount + 1} aralık
             </span>
           </div>
@@ -1065,16 +1212,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       {/* 2. BÖLME & ÇOKLU RAF GRUBU KONTROLLERİ */}
       {!group.isCornerSelection && (!resizeDraft || !group.isSingle) && (
         <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+          <div className="flex items-center justify-between text-[11px] font-semibold text-slate-200">
             <span>
               {group.isSingle
-                ? 'Hızlı Bölme'
+                ? 'Hızlı bölme'
                 : group.isMultiShelfGroupSelection
-                  ? 'Çoklu Raf Grubu Toplu Düzenleme'
-                  : 'Toplu Aralık & Bölme İşlemleri'}
+                  ? 'Çoklu raf grubu toplu düzenleme'
+                  : 'Toplu aralık ve bölme işlemleri'}
             </span>
-            <span className="font-mono text-[10px] text-amber-300">
-              {resolved.panelThicknessMm} mm Bölücü
+            <span className="font-mono text-[10px] font-normal text-slate-300">
+              {resolved.panelThicknessMm} mm bölücü
             </span>
           </div>
 
@@ -1135,13 +1282,18 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   type="button"
                   disabled={groupIntervalTarget === null}
                   onClick={applyIntervalTarget}
-                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
+                  className="min-h-7 rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-55"
                 >
                   {groupIntervalTarget === null
                     ? 'Her Gruba Uygula'
                     : `Her Grubu ${groupIntervalTarget} Aralık Yap`}
                 </button>
               </div>
+              {groupIntervalInvalid && (
+                <p role="alert" className="text-[10px] text-rose-200">
+                  1 ile {groupIntervalMax} arasında tam sayı girin.
+                </p>
+              )}
 
               {group.canMergeShelfGroups ? (
                 <div className="space-y-1.5 rounded border border-emerald-500/40 bg-emerald-950/30 p-2">
@@ -1149,12 +1301,12 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     Grupları Tek Hacimde Birleştir ve Yeniden Böl:
                   </div>
                   <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+                    <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1 py-0.5">
                       <button
                         type="button"
                         aria-label="Birleştirme aralık hedefini azalt"
                         onClick={() => setMergeTargetIntervals((v) => Math.max(1, v - 1))}
-                        className="p-0.5 text-slate-300 hover:text-white"
+                        className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
                       >
                         <Minus className="h-3 w-3" aria-hidden="true" />
                       </button>
@@ -1165,7 +1317,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                         type="button"
                         aria-label="Birleştirme aralık hedefini artır"
                         onClick={() => setMergeTargetIntervals((v) => Math.min(14, v + 1))}
-                        className="p-0.5 text-slate-300 hover:text-white"
+                        className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
                       >
                         <Plus className="h-3 w-3" aria-hidden="true" />
                       </button>
@@ -1221,11 +1373,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   type="button"
                   disabled={groupIntervalTarget === null}
                   onClick={applyIntervalTarget}
-                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
+                  className="min-h-7 rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-55"
                 >
                   {groupIntervalTarget === null ? 'Uygula' : `${groupIntervalTarget} Aralık Yap`}
                 </button>
               </div>
+              {groupIntervalInvalid && (
+                <p role="alert" className="text-[10px] text-rose-200">
+                  1 ile {groupIntervalMax} arasında tam sayı girin.
+                </p>
+              )}
 
               <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                 <button
@@ -1274,8 +1431,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       {/* 3. HIZLI MODÜL ATAMA */}
       {!group.isCornerSelection && !resizeDraft && (
         <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-            {group.isSingle ? 'Hızlı Modül Ata' : `Toplu Modül Ata (${group.cells.length} Bölme)`}
+          <div className="text-[11px] font-semibold text-slate-200">
+            {group.isSingle ? 'Hızlı modül ata' : `Toplu modül ata (${group.cells.length} bölme)`}
           </div>
           <select
             aria-label={group.isSingle ? 'Hızlı modül seçimi' : 'Toplu modül seçimi'}
@@ -1284,7 +1441,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               const nextType = e.target.value as InsertType;
               batchSetSelectedCellsInsert(INSERT_REGISTRY[nextType].createDefaultConfig());
             }}
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-medium text-white"
+            className="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1 text-[11px] font-medium text-white"
           >
             {Object.values(INSERT_REGISTRY).map((meta) => (
               <option key={meta.type} value={meta.type}>
@@ -1299,15 +1456,15 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       {(group.isSingle || isContiguousGroup) && (
         <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
           <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-sky-400">
-              <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-200">
+              <SlidersHorizontal className="h-3 w-3 text-slate-300" aria-hidden="true" />
               <span>
                 {group.isCornerSelection
-                  ? 'Köşe Raf Yüksekliği (Y)'
-                  : 'Yönlü Boyutlandırma (X / Y / Z)'}
+                  ? 'Köşe raf yüksekliği (Y)'
+                  : 'Yönlü boyutlandırma (X / Y / Z)'}
               </span>
             </span>
-            <span className="text-[10px] text-slate-400">Komşu Korumalı</span>
+            <span className="text-[10px] text-slate-400">Komşu korumalı</span>
           </div>
 
           {!group.isCornerSelection && (
@@ -1470,13 +1627,18 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
           {/* Yeni Hedef Ölçü Girişi */}
           <div className="flex items-center gap-1.5">
             <input
+              ref={targetMmInputRef}
               type="number"
               aria-label={`Hedef ${activeAxis} ölçüsü (mm)`}
+              aria-invalid={targetMmError ? true : undefined}
               step={10}
               min={60}
               max={3000}
               value={targetMmInput}
-              onChange={(e) => setTargetMmInput(e.target.value)}
+              onChange={(e) => {
+                setTargetMmInput(e.target.value);
+                if (targetMmError) setTargetMmError(null);
+              }}
               onKeyDown={(e) => {
                 e.stopPropagation();
                 if (e.key === 'Enter') {
@@ -1484,20 +1646,26 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   handleTriggerResizePreview();
                 } else if (e.key === 'Escape') {
                   e.preventDefault();
+                  setTargetMmError(null);
                   cancelResizeDraft();
                 }
               }}
-              className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
+              className="w-24 rounded border border-slate-500 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
             />
             <span className="font-mono text-[10px] text-slate-400">mm</span>
             <button
               type="button"
               onClick={() => handleTriggerResizePreview()}
-              className="flex-1 rounded bg-sky-500 px-2 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-sky-400"
+              className="min-h-7 flex-1 rounded border border-sky-400/60 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/30"
             >
               Önizle / Hesapla
             </button>
           </div>
+          {targetMmError && (
+            <p role="alert" className="text-[10px] leading-snug text-rose-200">
+              {targetMmError}
+            </p>
+          )}
 
           {/* AKTİF TASLAK VE KOMŞU ÇAKIŞMA ÇÖZÜM KARTI */}
           {resizeDraft && (
@@ -1537,24 +1705,24 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-1.5">
-                    <span className="truncate text-[10px] text-rose-200">
-                      Komşu Yeni Ölçü (mm):
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="pt-1 text-[10px] text-rose-200">
+                      Komşu yeni ölçü (mm):
                     </span>
-                    <input
-                      type="number"
-                      aria-label="Komşu yeni ölçü (mm)"
-                      step={10}
-                      value={neighborMmInput}
-                      onChange={(e) => {
-                        setNeighborMmInput(e.target.value);
-                        const num = Number(e.target.value);
-                        if (Number.isFinite(num) && num > 0) {
-                          updateResizeDraftNeighborMm(Math.round(num));
-                        }
-                      }}
-                      className="w-20 rounded border border-rose-400/60 bg-slate-900 px-2 py-0.5 font-mono text-xs font-bold text-white"
-                    />
+                    <div className="w-28 shrink-0">
+                      <NumberField
+                        compact
+                        hideLabel
+                        label="Komşu yeni ölçü (mm)"
+                        ariaLabel="Komşu yeni ölçü (mm)"
+                        value={resizeDraft.neighborDraftMm}
+                        min={60}
+                        max={3000}
+                        step={10}
+                        onCommit={(val) => updateResizeDraftNeighborMm(val)}
+                        inputClassName="border-rose-400/70"
+                      />
+                    </div>
                   </div>
 
                   <button
@@ -1601,18 +1769,18 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       {/* 5. KATLANABİLİR GELİŞMİŞ SEÇENEKLER (N-BÖLME, 32 MM RAF, 3D EŞYA, ŞABLONLAR, UNSPLIT) */}
       {group.isSingle && !group.isCornerSelection && !resizeDraft && (
         <details className="rounded-lg border border-slate-800 bg-slate-950/75 p-2 text-[11px]">
-          <summary className="cursor-pointer font-medium text-slate-200">
+          <summary className="flex min-h-6 cursor-pointer items-center font-medium text-slate-200">
             Gelişmiş bölme, 32 mm adım ve 3D eşya
           </summary>
           <div className="mt-2 space-y-2 text-[10px]">
             {/* N Eşit Bölme */}
             <div className="flex items-center justify-between gap-1.5">
-              <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+              <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1 py-0.5">
                 <button
                   type="button"
                   aria-label="Bölme adedini azalt"
                   onClick={() => setSplitCountInput((v) => Math.max(2, v - 1))}
-                  className="p-0.5 text-slate-300 hover:text-white"
+                  className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
                 >
                   <Minus className="h-3 w-3" aria-hidden="true" />
                 </button>
@@ -1623,7 +1791,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   type="button"
                   aria-label="Bölme adedini artır"
                   onClick={() => setSplitCountInput((v) => Math.min(8, v + 1))}
-                  className="p-0.5 text-slate-300 hover:text-white"
+                  className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-300 hover:bg-slate-800 hover:text-white"
                 >
                   <Plus className="h-3 w-3" aria-hidden="true" />
                 </button>
@@ -1631,14 +1799,14 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               <button
                 type="button"
                 onClick={() => divideCellIntoN(firstCell.id, 'vertical', splitCountInput)}
-                className="flex-1 rounded border border-amber-500/40 bg-amber-500/15 px-2 py-1 font-semibold text-amber-200 hover:bg-amber-500/25"
+                className="min-h-6 flex-1 rounded border border-amber-500/40 bg-amber-500/15 px-2 py-1 font-semibold text-amber-200 hover:bg-amber-500/25"
               >
                 {splitCountInput} Dikey Böl
               </button>
               <button
                 type="button"
                 onClick={() => divideCellIntoN(firstCell.id, 'horizontal', splitCountInput)}
-                className="flex-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 font-semibold text-sky-200 hover:bg-sky-500/25"
+                className="min-h-6 flex-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 font-semibold text-sky-200 hover:bg-sky-500/25"
               >
                 {splitCountInput} Yatay Böl
               </button>
@@ -1655,14 +1823,14 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                       <span>Aralığın üst rafı</span>
                       <button
                         type="button"
-                        className="rounded border border-slate-600 px-2 py-0.5 text-slate-100 hover:border-sky-400"
+                        className="min-h-6 rounded border border-slate-600 px-2 py-0.5 text-slate-100 hover:border-sky-400"
                         onClick={() => adjustShelfGrid(firstCell.id, -1)}
                       >
                         −32 mm
                       </button>
                       <button
                         type="button"
-                        className="rounded border border-slate-600 px-2 py-0.5 text-slate-100 hover:border-sky-400"
+                        className="min-h-6 rounded border border-slate-600 px-2 py-0.5 text-slate-100 hover:border-sky-400"
                         onClick={() => adjustShelfGrid(firstCell.id, 1)}
                       >
                         +32 mm

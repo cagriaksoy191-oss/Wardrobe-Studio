@@ -1,4 +1,4 @@
-import { DoorOpen, Merge, Scissors, X } from 'lucide-react';
+import { AlertTriangle, DoorOpen, Merge, Scissors, X } from 'lucide-react';
 import { type JSX, useEffect, useState } from 'react';
 import {
   HANDLE_FINISH_CATALOG,
@@ -50,12 +50,50 @@ export const FRONT_TYPE_LABELS: Record<FrontType, string> = {
   drawerFront: 'Çekmece önü',
 };
 
+export function splitDoorLeafLabel(
+  label: string,
+  hingeSide: 'left' | 'right'
+): { baseLabel: string; sideBadge: string } {
+  const match = label.match(/\s+(Sol Kapak|Sağ Kapak)$/);
+  if (match) {
+    return {
+      baseLabel: label.slice(0, match.index).trim() || label,
+      sideBadge: match[1],
+    };
+  }
+  const trimmed = label.replace(/\s+Kapak$/, '').trim();
+  return {
+    baseLabel: trimmed || label,
+    sideBadge: hingeSide === 'right' ? 'Sağ Kapak' : 'Sol Kapak',
+  };
+}
+
+export function formatSharedFrontScopeSummary(run: Run, bayIds: readonly string[]): string {
+  const ordered = run.bays.filter((b) => bayIds.includes(b.id));
+  const codes = ordered.map((b) => b.label.split(':')[0].trim() || b.id);
+  if (codes.length <= 1) return codes[0] ?? '';
+  if (codes.length === 2) return `${codes[0]}–${codes[1]}`;
+  return `${codes[0]}–${codes[codes.length - 1]}`;
+}
+
+export function canIsolateBayFromSharedFront(run: Run, front: Front, bayId: string): boolean {
+  if (front.bayIds.length <= 1 || !front.bayIds.includes(bayId)) return false;
+  const remainingIndices = run.bays
+    .map((b, idx) => (front.bayIds.includes(b.id) && b.id !== bayId ? idx : -1))
+    .filter((idx) => idx >= 0);
+  if (remainingIndices.length === 0) return false;
+  for (let i = 1; i < remainingIndices.length; i++) {
+    if (remainingIndices[i] !== remainingIndices[i - 1] + 1) return false;
+  }
+  return true;
+}
+
 export function resolveActiveDoorInspectorContext(
   design: Design,
   resolved: ResolvedModel,
   selectedBayId: string | null,
   activeDoorIds: string[],
-  chosenFrontId?: string
+  chosenFrontId?: string | null
 ): ActiveDoorInspectorContext {
   const primaryDoorId = activeDoorIds[0] ?? null;
   const directHinged = primaryDoorId
@@ -201,7 +239,9 @@ export function switchBayFrontType(
     } else {
       store.updateDoorFrontConfig(bayId, undefined, 'open', hingeAngle);
     }
-    useWardrobeStore.getState().selectDoor(null, bayId);
+    const next = useWardrobeStore.getState();
+    next.selectDoor(null, bayId);
+    next.setSelectedFrontId?.(activeFront?.id ?? null);
     return;
   }
 
@@ -213,8 +253,10 @@ export function switchBayFrontType(
         next.resolved.doors.find((d) => d.frontId === activeFront.id) ??
         next.resolved.doors.find((d) => d.bayId === bayId || d.bayIds.includes(bayId));
       next.selectDoor(nextDoor?.id ?? null, bayId);
+      next.setSelectedFrontId?.(activeFront.id);
     } else {
       store.updateDoorFrontConfig(bayId, undefined, 'auto', hingeAngle);
+      useWardrobeStore.getState().setSelectedFrontId?.(null);
     }
     return;
   }
@@ -227,7 +269,13 @@ export function switchBayFrontType(
       ? next.resolved.slidingDoors?.find((d) => d.frontId === activeFront.id)
       : undefined) ??
     next.resolved.slidingDoors?.find((d) => d.bayId === bayId || d.bayIds.includes(bayId));
+  const resolvedFrontId =
+    nextLeaf?.frontId ??
+    activeFront?.id ??
+    next.design.fronts.find((f) => f.bayIds.includes(bayId) && f.type === 'sliding')?.id ??
+    null;
   next.selectDoor(nextLeaf?.id ?? null, bayId);
+  next.setSelectedFrontId?.(resolvedFrontId);
 }
 
 export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): JSX.Element | null {
@@ -237,12 +285,15 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
   const selectedBayId = useWardrobeStore((s) => s.selectedBayId);
   const selectedDoorId = useWardrobeStore((s) => s.selectedDoorId);
   const selectedDoorIds = useWardrobeStore((s) => s.selectedDoorIds);
+  const selectedFrontId = useWardrobeStore((s) => s.selectedFrontId);
   const openDoorIds = useWardrobeStore((s) => s.openDoorIds);
 
   const setDoorEditorMode = useWardrobeStore((s) => s.setDoorEditorMode);
+  const setSelectedFrontId = useWardrobeStore((s) => s.setSelectedFrontId);
   const toggleDoor = useWardrobeStore((s) => s.toggleDoor);
   const selectDoor = useWardrobeStore((s) => s.selectDoor);
   const updateDoorFrontConfig = useWardrobeStore((s) => s.updateDoorFrontConfig);
+  const patchFrontSystem = useWardrobeStore((s) => s.patchFrontSystem);
   const splitBayDoorHorizontally = useWardrobeStore((s) => s.splitBayDoorHorizontally);
   const mergeBayDoors = useWardrobeStore((s) => s.mergeBayDoors);
   const setCornerDoorMode = useWardrobeStore((s) => s.setCornerDoorMode);
@@ -251,7 +302,6 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
   const activeDoorIds =
     selectedDoorIds.length > 0 ? selectedDoorIds : selectedDoorId ? [selectedDoorId] : [];
 
-  const [chosenFrontId, setChosenFrontId] = useState<string>('');
   const [doorSplitHeightInput, setDoorSplitHeightInput] = useState<number>(1850);
 
   const ctx = resolveActiveDoorInspectorContext(
@@ -259,17 +309,8 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
     resolved,
     selectedBayId,
     activeDoorIds,
-    chosenFrontId || undefined
+    selectedFrontId
   );
-
-  const directFrontId =
-    resolved.slidingDoors?.find((d) => d.id === activeDoorIds[0])?.frontId ??
-    resolved.doors.find((d) => d.id === activeDoorIds[0])?.frontId ??
-    '';
-
-  useEffect(() => {
-    setChosenFrontId(directFrontId);
-  }, [directFrontId, selectedBayId]);
 
   useEffect(() => {
     if (!ctx.run) return;
@@ -287,6 +328,69 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
       onCloseEditor();
     } else {
       setDoorEditorMode(false);
+    }
+  };
+
+  const selectedDoorsAll = activeDoorIds
+    .map(
+      (id) =>
+        resolved.doors.find((d) => d.id === id) ??
+        resolved.slidingDoors?.find((d) => d.id === id) ??
+        null
+    )
+    .filter((d): d is ResolvedDoorLeaf | ResolvedSlidingLeaf => Boolean(d));
+  const isMultiDoorSelected = selectedDoorsAll.length > 1;
+
+  const handleBatchOpenDoors = (open: boolean) => {
+    for (const door of selectedDoorsAll) {
+      const currentlyOpen = Boolean(openDoorIds[door.id]);
+      if (currentlyOpen !== open) {
+        toggleDoor(door.id);
+      }
+    }
+  };
+
+  const renderMultiDoorBatchCard = () =>
+    isMultiDoorSelected ? (
+      <div className="studio-card space-y-2 border-amber-500/40 bg-amber-950/20">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-semibold text-amber-200">
+            Çoklu kapak seçimi ({selectedDoorsAll.length} kapak)
+          </span>
+          <span className="font-mono text-[10px] text-slate-300">Shift+Tık</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => handleBatchOpenDoors(true)}
+            className="min-h-7 rounded-md border border-sky-500/60 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/30"
+          >
+            Seçili {selectedDoorsAll.length} kapağı aç
+          </button>
+          <button
+            type="button"
+            onClick={() => handleBatchOpenDoors(false)}
+            className="min-h-7 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-slate-400 hover:bg-slate-700"
+          >
+            Seçili {selectedDoorsAll.length} kapağı kapat
+          </button>
+        </div>
+      </div>
+    ) : null;
+
+  const diagonalJunction =
+    design.layoutKind === 'l-shape'
+      ? design.junctions.find((j) => j.type === 'diagonal') ?? null
+      : null;
+  const isCornerDoorOpen = Boolean(diagonalJunction && diagonalJunction.doorMode === 'open');
+
+  const restoreCornerDoor = (side: 'left' | 'right') => {
+    setCornerDoorMode(side);
+    const next = useWardrobeStore.getState();
+    const cornerDoor = next.resolved.doors.find((d) => d.isCornerDoor);
+    if (cornerDoor) {
+      next.selectDoor(cornerDoor.id, null);
+      next.setSelectedFrontId?.(null);
     }
   };
 
@@ -311,20 +415,29 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
                 Kapak Editörü — {cornerDoor.label}
               </h2>
             </div>
-            <div className="inline-flex items-center rounded border border-slate-700 bg-slate-950 px-2 py-0.5 font-mono text-[11px] text-slate-200">
-              {cornerDoor.widthMm} × {cornerDoor.heightMm} × {cornerDoor.thicknessMm} mm
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center rounded border border-slate-700 bg-slate-950 px-2 py-0.5 font-mono text-[11px] text-slate-200">
+                {cornerDoor.widthMm} × {cornerDoor.heightMm} × {cornerDoor.thicknessMm} mm
+              </span>
+              {isMultiDoorSelected && (
+                <span className="inline-flex items-center rounded border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                  {selectedDoorsAll.length} kapak seçili
+                </span>
+              )}
             </div>
           </div>
           <button
             type="button"
             onClick={handleClose}
             aria-label="Kapak düzenlemeyi kapat"
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
+            className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Kapat (Esc)</span>
           </button>
         </div>
+
+        {renderMultiDoorBatchCard()}
 
         <HingedOpeningCard
           door={cornerDoor}
@@ -348,7 +461,7 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
                   type="button"
                   aria-pressed={active}
                   onClick={() => setCornerDoorMode(opt.value)}
-                  className={`rounded-md border px-2 py-1.5 text-[11px] font-medium transition ${
+                  className={`min-h-7 rounded-md border px-2 py-1.5 text-[11px] font-medium transition ${
                     active
                       ? 'border-amber-400 bg-amber-500/20 font-semibold text-amber-200'
                       : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
@@ -364,7 +477,7 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
         <button
           type="button"
           onClick={() => toggleDoor(cornerDoor.id)}
-          className="w-full rounded-md border border-sky-500/60 bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-500/30"
+          className="min-h-8 w-full rounded-md border border-sky-500/60 bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-500/30"
         >
           {isOpen ? 'Köşe kapağını kapat' : 'Köşe kapağını aç'}
         </button>
@@ -381,6 +494,29 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
   const selectedDoor = ctx.selectedHingedDoor;
   const selectedSliding = ctx.selectedSlidingLeaf;
   const alternate = selectedDoor?.opening?.alternative;
+  const isSharedMultiBayFront = Boolean(activeFront && activeFront.bayIds.length > 1);
+  const sharedScopeSummary =
+    activeFront && isSharedMultiBayFront
+      ? formatSharedFrontScopeSummary(run, activeFront.bayIds)
+      : '';
+  const canIsolateTargetBay =
+    activeFront && isSharedMultiBayFront
+      ? canIsolateBayFromSharedFront(run, activeFront, targetBay.id)
+      : false;
+
+  const handleIsolateTargetBay = () => {
+    if (!activeFront || !canIsolateTargetBay) return;
+    const remainingBayIds = activeFront.bayIds.filter((id) => id !== targetBay.id);
+    patchFrontSystem(activeFront.id, { bayIds: remainingBayIds });
+    const next = useWardrobeStore.getState();
+    const isolatedDoor =
+      next.resolved.doors.find((d) => d.bayId === targetBay.id) ??
+      next.resolved.slidingDoors?.find((d) => d.bayId === targetBay.id) ??
+      null;
+    next.selectDoor(isolatedDoor?.id ?? null, targetBay.id);
+    next.setSelectedFrontId?.(null);
+  };
+
   const canMergeSplitHinged =
     explicitFrontsForBay.length > 1 &&
     explicitFrontsForBay.every(
@@ -402,6 +538,7 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
       const next = useWardrobeStore.getState();
       const match = next.resolved.doors.find((d) => d.frontId === activeFront.id);
       if (match) next.selectDoor(match.id, targetBay.id);
+      next.setSelectedFrontId?.(activeFront.id);
     }
   };
 
@@ -415,7 +552,7 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
       aria-label="Kapak Editörü Denetçisi"
       className="studio-section space-y-3 border-b-2 border-amber-500/40 bg-slate-900/95 text-xs"
     >
-      {/* ÜST BAŞLIK + KESİM ROZETİ + KAPAT */}
+      {/* ÜST BAŞLIK + KESİM ROZETİ + ORTAK KAPSAM + KAPAT */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-1.5">
@@ -428,9 +565,19 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
             <span className="inline-flex items-center rounded border border-slate-700 bg-slate-950 px-2 py-0.5 font-mono text-[11px] text-slate-200">
               {cutBadgeText}
             </span>
+            {isSharedMultiBayFront && activeFront && (
+              <span className="inline-flex items-center rounded border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                Ortak cephe · {activeFront.bayIds.length} bölme: {sharedScopeSummary}
+              </span>
+            )}
             {isHybridBay && (
               <span className="inline-flex items-center rounded border border-sky-500/50 bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-200">
                 Karma cephe · {explicitFrontsForBay.length} aralık
+              </span>
+            )}
+            {isMultiDoorSelected && (
+              <span className="inline-flex items-center rounded border border-amber-400/60 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                {selectedDoorsAll.length} kapak seçili
               </span>
             )}
           </div>
@@ -439,12 +586,48 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
           type="button"
           onClick={handleClose}
           aria-label="Kapak düzenlemeyi kapat"
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
+          className="inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
           <span>Kapat (Esc)</span>
         </button>
       </div>
+
+      {renderMultiDoorBatchCard()}
+
+      {/* BEŞGEN KÖŞE KAPAĞI AÇIKSA TEK TIKLA GERİ EKLEME KARTI (CF-11) */}
+      {isCornerDoorOpen && (
+        <div className="studio-card space-y-2 border-amber-500/45 bg-amber-950/20">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-amber-200">
+              Beşgen Köşe Kapağı (Açık)
+            </span>
+            <span className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-300">
+              Kapaksız
+            </span>
+          </div>
+          <p className="studio-helper">
+            Beşgen köşe kapağı şu anda açık konumda. İstediğiniz menteşe yönüyle tek tıkla geri
+            ekleyebilirsiniz.
+          </p>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => restoreCornerDoor('left')}
+              className="min-h-7 rounded-md border border-amber-400/70 bg-amber-500/20 px-2 py-1 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/30"
+            >
+              Köşe kapağını geri ekle (Sol)
+            </button>
+            <button
+              type="button"
+              onClick={() => restoreCornerDoor('right')}
+              className="min-h-7 rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-100 transition hover:border-amber-400/60 hover:bg-slate-700"
+            >
+              Sağ menteşe ile ekle
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* KARMA / ÇOK ARALIKLI CEPHE SEÇİCİSİ */}
       {isHybridBay && (
@@ -462,13 +645,13 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => {
-                    setChosenFrontId(fr.id);
                     const leaf =
                       resolved.slidingDoors?.find((d) => d.frontId === fr.id) ??
                       resolved.doors.find((d) => d.frontId === fr.id);
                     selectDoor(leaf?.id ?? null, targetBay.id);
+                    setSelectedFrontId(fr.id);
                   }}
-                  className={`flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition ${
+                  className={`flex min-h-7 items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 text-left text-[11px] transition ${
                     isSelected
                       ? 'border-sky-400 bg-sky-500/20 font-semibold text-white'
                       : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
@@ -485,6 +668,35 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ORTAK ÇOK BÖLMELİ CEPHE UYARISI VE AYIRMA EYLEMİ (CF-06) */}
+      {isSharedMultiBayFront && activeFront && (
+        <div
+          role="note"
+          className="space-y-2 rounded-lg border border-amber-400/50 bg-amber-950/25 p-2.5 text-[11px] text-amber-100"
+        >
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" aria-hidden="true" />
+            <p className="leading-snug">
+              Bu ortak cephe <strong>{activeFront.bayIds.length} bölmeyi ({sharedScopeSummary})</strong>{' '}
+              birlikte kapsar. Cephe türünü değiştirmek kapsanan tüm bölmeleri günceller.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!canIsolateTargetBay}
+            title={
+              canIsolateTargetBay
+                ? 'Seçili bölmeyi ortak cepheden ayırarak bağımsız düzenleyin'
+                : 'Orta bölme doğrudan ayrılamaz; önce uç bölmelerden kapsamı daraltın'
+            }
+            onClick={handleIsolateTargetBay}
+            className="min-h-7 w-full rounded-md border border-amber-400/70 bg-amber-500/20 px-2.5 py-1 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-55"
+          >
+            Yalnızca bu bölmeyi ayır
+          </button>
         </div>
       )}
 
@@ -548,7 +760,7 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
             <button
               type="button"
               onClick={() => toggleDoor(ctx.bayHingedDoors[0].id)}
-              className="w-full rounded-md border border-sky-500/60 bg-sky-500/20 px-3 py-1.5 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/30"
+              className="min-h-8 w-full rounded-md border border-sky-500/60 bg-sky-500/20 px-3 py-1.5 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/30"
             >
               {openDoorIds[ctx.bayHingedDoors[0].id]
                 ? 'Seçili kanadı kapat'
@@ -562,10 +774,11 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
                 {ctx.bayHingedDoors.map((leaf) => {
                   const isOpen = Boolean(openDoorIds[leaf.id]);
                   const isSelected = leaf.id === selectedDoor?.id;
+                  const { baseLabel, sideBadge } = splitDoorLeafLabel(leaf.label, leaf.hingeSide);
                   return (
                     <div
                       key={leaf.id}
-                      className={`flex items-center justify-between gap-2 rounded border px-2 py-1 text-[11px] ${
+                      className={`flex items-center justify-between gap-1.5 rounded border px-2 py-1 text-[11px] ${
                         isSelected
                           ? 'border-amber-500/60 bg-amber-500/10 text-amber-100'
                           : 'border-slate-800 bg-slate-900 text-slate-300'
@@ -574,14 +787,17 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
                       <button
                         type="button"
                         onClick={() => selectDoor(leaf.id, targetBay.id)}
-                        className="min-w-0 flex-1 truncate text-left font-medium hover:text-white"
+                        className="flex min-h-6 min-w-0 flex-1 items-center gap-1.5 text-left font-medium hover:text-white"
                       >
-                        {leaf.label}
+                        <span className="min-w-0 flex-1 truncate">{baseLabel}</span>
+                        <span className="shrink-0 rounded border border-slate-600 bg-slate-950/90 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                          {sideBadge}
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => toggleDoor(leaf.id)}
-                        className="shrink-0 rounded border border-sky-500/50 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200 hover:bg-sky-500/25"
+                        className="min-h-6 min-w-[44px] shrink-0 rounded border border-sky-500/50 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-200 hover:bg-sky-500/25"
                       >
                         {isOpen ? 'Kapat' : 'Aç'}
                       </button>
@@ -699,7 +915,7 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
 
           {/* Malzeme, kulp ve gelişmiş kapsam ayarları (tek katlanabilir bölüm, sıfır tekrar) */}
           <details className="rounded-lg border border-slate-700/80 bg-slate-950/60 p-2.5">
-            <summary className="cursor-pointer text-[11px] font-semibold text-slate-200">
+            <summary className="flex min-h-6 cursor-pointer items-center text-[11px] font-semibold text-slate-200">
               Malzeme, kulp ve kapsam ayarları
             </summary>
             <div className="mt-2.5 space-y-2.5">
@@ -886,16 +1102,15 @@ export function DoorInspectorPanel({ onCloseEditor }: DoorInspectorPanelProps): 
               cepheye geçebilirsiniz.
             </p>
           </div>
-          {activeFront && (
-            <details className="rounded-lg border border-slate-700/80 bg-slate-950/60 p-2.5">
-              <summary className="cursor-pointer text-[11px] font-semibold text-slate-200">
-                Kapsam kotları ve bölme aralığı
-              </summary>
-              <div className="mt-2.5">
-                <FrontSystemEditor embeddedMode="open-advanced" activeFrontId={activeFront.id} />
-              </div>
-            </details>
-          )}
+          {/* CF-15: Implicit open bays also expose custom range / promotion controls */}
+          <details className="rounded-lg border border-slate-700/80 bg-slate-950/60 p-2.5">
+            <summary className="flex min-h-6 cursor-pointer items-center text-[11px] font-semibold text-slate-200">
+              Kapsam kotları ve bölme aralığı
+            </summary>
+            <div className="mt-2.5">
+              <FrontSystemEditor embeddedMode="open-advanced" activeFrontId={activeFront?.id ?? null} />
+            </div>
+          </details>
         </div>
       )}
     </section>

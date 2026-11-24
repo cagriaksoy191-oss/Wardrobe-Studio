@@ -49,6 +49,56 @@ export function fitFrontView(bounds: SceneBounds, axis: 'A' | 'B', width: number
   return { position, target, zoom };
 }
 
+export interface TopPlanFitOptions {
+  topInsetPx?: number;
+  bottomInsetPx?: number;
+  leftInsetPx?: number;
+  rightInsetPx?: number;
+}
+
+/**
+ * Fits 2D top-down plan (`up = [0, 0, -1]`) inside the safe viewport region between
+ * `.studio-scene-toolbar` (top) and `AnalysisToolbar` (bottom), reserving extra
+ * world-space overhang for `+A` / `+B` anchors and `Derinlik` / `Dış` dimension pills.
+ */
+export function computeTopPlanFit(
+  bounds: SceneBounds,
+  width: number,
+  height: number,
+  options: TopPlanFitOptions = {},
+): FrontViewPose {
+  const safeWidth = Math.max(1, width);
+  const safeHeight = Math.max(1, height);
+
+  // World-space overhangs for top-plan dimension pills & +A/+B anchors (metres)
+  const minXExt = bounds.min[0] - 0.08;
+  const maxXExt = bounds.max[0] + 0.16;
+  const minZExt = bounds.min[2] - 0.14;
+  const maxZExt = bounds.max[2] + 0.12;
+
+  const spanX = Math.max(0.2, maxXExt - minXExt);
+  const spanZ = Math.max(0.2, maxZExt - minZExt);
+
+  const leftInset = Math.min(options.leftInsetPx ?? 96, safeWidth * 0.16);
+  const rightInset = Math.min(options.rightInsetPx ?? 116, safeWidth * 0.18);
+  // Reserve space for .studio-scene-toolbar (top) and AnalysisToolbar + pill clearance (bottom)
+  const topInset = Math.min(options.topInsetPx ?? 96, safeHeight * 0.24);
+  const bottomInset = Math.min(options.bottomInsetPx ?? 132, safeHeight * 0.28);
+
+  const usableW = Math.max(1, safeWidth - leftInset - rightInset);
+  const usableH = Math.max(1, safeHeight - topInset - bottomInset);
+  const zoom = Math.min(usableW / spanX, usableH / spanZ);
+
+  const midX = (minXExt + maxXExt) / 2;
+  const midZ = (minZExt + maxZExt) / 2;
+  // With up = [0, 0, -1]: screenX = W/2 + (x - targetX)*zoom, screenY = H/2 + (z - targetZ)*zoom
+  const targetX = midX - (leftInset - rightInset) / (2 * zoom);
+  const targetZ = midZ - (topInset - bottomInset) / (2 * zoom);
+  const target: Point3 = [targetX, 0, targetZ];
+  const position: Point3 = [targetX, bounds.max[1] + 5, targetZ];
+  return { position, target, zoom };
+}
+
 export function applyFrontViewPose(camera: OrthographicCamera, controls: OrbitControls, pose: FrontViewPose) {
   const damping = controls.enableDamping;
   // Flush the old pan offset before placing the camera. Otherwise its inertia

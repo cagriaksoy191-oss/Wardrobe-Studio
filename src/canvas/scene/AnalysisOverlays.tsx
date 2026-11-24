@@ -100,15 +100,22 @@ export function AnalysisOverlays() {
     {sweeps&&model.analysis?.motions.map(m=>{const collision=model.issues.some(i=>i.id.startsWith('obstacle-motion-')&&i.id.endsWith(`-${m.id}`));return <PlanPolygons key={`sweep-${m.id}`} polygons={m.sweepPolygonsMm} y={m.kind==='hinged'?.008:m.kind==='sliding'?.009:.01} color={collision?'#fb7185':m.kind==='hinged'?'#fbbf24':m.kind==='sliding'?'#c084fc':'#38bdf8'} dashedOutline={collision}/>;})}
   </group>;
 }
-export function AnalysisToolbar({ gestureHint }: { gestureHint?: string } = {}) {
+export function AnalysisControlsContent({
+  gestureHint,
+  compactTouch = false,
+}: {
+  gestureHint?: string;
+  compactTouch?: boolean;
+} = {}) {
   const overlay=useWardrobeStore(s=>s.analysisOverlay),setOverlay=useWardrobeStore(s=>s.setAnalysisOverlay);
   const showSweeps=useWardrobeStore(s=>s.showMotionSweeps),setSweeps=useWardrobeStore(s=>s.setShowMotionSweeps);
   const showObstacles=useWardrobeStore(s=>s.showRoomObstacles),setObstacles=useWardrobeStore(s=>s.setShowRoomObstacles);
   const viewMode=useWardrobeStore(s=>s.viewMode),setView=useWardrobeStore(s=>s.setViewMode);
   const setEye=useWardrobeStore(s=>s.setEyeLevelCamera),eye=useWardrobeStore(s=>s.eyeLevelOwner);
   const isTopPlan = viewMode === '2d-plan-top';
-  const style=(active:boolean)=>`rounded border px-2 py-1.5 text-[11px] font-medium ${active?'border-sky-400 bg-sky-500/20 text-sky-200':'border-slate-700 bg-slate-900/95 text-slate-300 hover:border-slate-500'}`;
-  return <div className="pointer-events-auto absolute bottom-3 left-3 z-30 max-w-[calc(100%-24px)] space-y-2 rounded-lg border border-slate-700 bg-slate-950/90 p-2 shadow-lg backdrop-blur">
+  const sizeClass = compactTouch ? 'min-h-[44px] min-w-[44px] px-2.5 py-2' : 'min-h-7 px-2 py-1.5';
+  const style=(active:boolean)=>`rounded border text-[11px] font-medium ${sizeClass} ${active?'border-sky-400 bg-sky-500/20 text-sky-200':'border-slate-700 bg-slate-900/95 text-slate-300 hover:border-slate-500'}`;
+  return <>
     <div className="flex flex-wrap items-center gap-1.5">
       <button type="button" className={style(overlay==='ergonomics')} aria-pressed={overlay==='ergonomics'} onClick={()=>setOverlay(overlay==='ergonomics'?'none':'ergonomics')}>Ergonomi</button>
       <button type="button" className={style(overlay==='ownership')} aria-pressed={overlay==='ownership'} onClick={()=>setOverlay(overlay==='ownership'?'none':'ownership')}>Sahiplik</button>
@@ -120,6 +127,11 @@ export function AnalysisToolbar({ gestureHint }: { gestureHint?: string } = {}) 
     </div>
     {overlay!=='none'&&<div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-200">{overlay==='ownership'?Object.entries(OWNER_BADGES).map(([key,badge])=><span key={key} className="inline-flex items-center gap-1"><span aria-hidden="true" style={{color:badge.color}}>{badge.symbol}</span><span>{OWNER_NAMES[key as keyof typeof OWNER_BADGES]} ({badge.code})</span></span>):Object.entries(REACH_BADGES).map(([key,badge])=><span key={key} className="inline-flex items-center gap-1"><span aria-hidden="true" style={{color:badge.color}}>{badge.symbol}</span><span>{REACH_LABELS[key as keyof typeof REACH_BADGES]} ({badge.code})</span></span>)}</div>}
     {showSweeps&&<p className="text-[11px] text-slate-300"><span className={SWEEP_BADGES.hinged.colorClass}>{SWEEP_BADGES.hinged.symbol} {SWEEP_BADGES.hinged.label}</span> · <span className={SWEEP_BADGES.drawer.colorClass}>{SWEEP_BADGES.drawer.symbol} {SWEEP_BADGES.drawer.label}</span> · <span className={SWEEP_BADGES.sliding.colorClass}>{SWEEP_BADGES.sliding.symbol} {SWEEP_BADGES.sliding.label}</span> · <span className={SWEEP_BADGES.collision.colorClass}>{SWEEP_BADGES.collision.symbol} {SWEEP_BADGES.collision.label} (kesikli)</span> · ▦ Oda engeli</p>}
-    {gestureHint && <p data-testid="canvas-gesture-hint" className="border-t border-slate-800/80 pt-1.5 text-[11px] leading-snug text-slate-300">{gestureHint}</p>}
+    {gestureHint && !compactTouch && <p data-testid="canvas-gesture-hint" className="studio-gesture-hint border-t border-slate-800/80 pt-1.5 text-[11px] leading-snug text-slate-300">{gestureHint}</p>}
+  </>;
+}
+export function AnalysisToolbar({ gestureHint }: { gestureHint?: string } = {}) {
+  return <div data-testid="analysis-toolbar" className="studio-analysis-toolbar pointer-events-auto absolute bottom-3 left-3 z-30 max-w-[calc(100%-24px)] space-y-2 rounded-lg border border-slate-700 bg-slate-950/90 p-2 shadow-lg backdrop-blur">
+    <AnalysisControlsContent gestureHint={gestureHint} />
   </div>;
 }

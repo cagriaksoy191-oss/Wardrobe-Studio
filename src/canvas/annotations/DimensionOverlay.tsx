@@ -1,13 +1,32 @@
 import { Line } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import { SceneHtml as Html } from './SceneHtml';
 import { Check, Pencil, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type * as THREE from 'three';
 import type { DimensionAnnotation, Run } from '../../core/schema/types';
 import { type StudioViewMode, useWardrobeStore } from '../../store/useWardrobeStore';
+import { readNumberDraft } from '../../ui/editorFeedback';
 
 const MM_TO_M = 0.001;
 const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => null;
+
+function ViewProjectionGate({
+  viewMode,
+  onProjected,
+}: {
+  viewMode: StudioViewMode;
+  onProjected: (mode: StudioViewMode) => void;
+}) {
+  const reportedRef = useRef<StudioViewMode | null>(null);
+  useFrame(() => {
+    if (reportedRef.current !== viewMode) {
+      reportedRef.current = viewMode;
+      onProjected(viewMode);
+    }
+  });
+  return null;
+}
 
 export function buildMergedInnerByOuterMap(
   visibleDimensions: DimensionAnnotation[],
@@ -41,8 +60,8 @@ export function resolveDimensionRenderEndpoints(
   viewMode: StudioViewMode,
   runs: Run[]
 ): { startMm: [number, number, number]; endMm: [number, number, number] } {
+  const run = runs.find((r) => r.id === dim.runId);
   if (dim.kind === 'depth' && viewMode === '3d-perspective') {
-    const run = runs.find((r) => r.id === dim.runId);
     if (run) {
       const topY = run.heightMm + 35;
       return {
@@ -50,6 +69,45 @@ export function resolveDimensionRenderEndpoints(
         endMm: [dim.endMm[0], topY, dim.endMm[2]],
       };
     }
+  }
+  // CF-14: Stagger runTotal above cornerArm in 2D Front views so Köşe B never collides with B kolu
+  if (dim.kind === 'runTotal' && (viewMode === '2d-front-A' || viewMode === '2d-front-B') && run) {
+    const raisedY = run.heightMm + 250;
+    return {
+      startMm: [dim.startMm[0], raisedY, dim.startMm[2]],
+      endMm: [dim.endMm[0], raisedY, dim.endMm[2]],
+    };
+  }
+  if (dim.kind === 'cornerArm' && (viewMode === '2d-front-A' || viewMode === '2d-front-B') && run) {
+    const armY = run.heightMm + 50;
+    return {
+      startMm: [dim.startMm[0], armY, dim.startMm[2]],
+      endMm: [dim.endMm[0], armY, dim.endMm[2]],
+    };
+  }
+  // CF-14: Stagger narrow adjacent bayOuter pills in 2D Front B (e.g. Dış: 680 vs Dış: 600 at 1024x768)
+  if (dim.kind === 'bayOuter' && viewMode === '2d-front-B' && run && dim.bayId) {
+    const bIdx = run.bays.findIndex((b) => b.id === dim.bayId);
+    if (bIdx >= 0 && bIdx % 2 === 1 && run.bays.length > 1) {
+      const staggeredY = 175;
+      return {
+        startMm: [dim.startMm[0], staggeredY, dim.startMm[2]],
+        endMm: [dim.endMm[0], staggeredY, dim.endMm[2]],
+      };
+    }
+  }
+  // CF-14: In 3D L-layouts, elevate Run B bayOuter dimensions cleanly above Run A bayOuter pills
+  if (
+    dim.kind === 'bayOuter' &&
+    viewMode === '3d-perspective' &&
+    run?.wallAxis === 'B' &&
+    runs.length > 1
+  ) {
+    const elevatedY = 225;
+    return {
+      startMm: [dim.startMm[0], elevatedY, dim.startMm[2]],
+      endMm: [dim.endMm[0], elevatedY, dim.endMm[2]],
+    };
   }
   return { startMm: dim.startMm, endMm: dim.endMm };
 }
@@ -74,7 +132,9 @@ export function DimensionOverlay({
   const [editingDimId, setEditingDimId] = useState<string | null>(null);
   const [draftValue, setDraftValue] = useState<string>('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [projectedViewMode, setProjectedViewMode] = useState<StudioViewMode>(viewMode);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const isViewProjected = projectedViewMode === viewMode;
 
   useEffect(() => {
     if (editingDimId && inputRef.current) {
@@ -131,20 +191,23 @@ export function DimensionOverlay({
 
   const commitEditing = (dim: DimensionAnnotation, e?: React.SyntheticEvent) => {
     e?.stopPropagation();
-    const parsed = Number(draftValue.trim());
     const minMm = dim.minMm ?? 200;
     const maxMm = dim.maxMm ?? 6000;
+    const badInput = Boolean(inputRef.current?.validity?.badInput);
+    const result = readNumberDraft(draftValue, badInput, minMm, maxMm);
 
-    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
-      setValidationError('Lütfen geçerli bir sayısal milimetre değeri girin.');
+    if (result.kind !== 'value') {
+      setValidationError(
+        result.kind === 'empty'
+          ? `Boş bırakılamaz. Geçerli aralık: ${minMm} – ${maxMm} mm`
+          : result.kind === 'outOfRange'
+            ? `Geçerli aralık: ${minMm} – ${maxMm} mm`
+            : 'Lütfen geçerli bir sayısal milimetre değeri girin.'
+      );
       return;
     }
 
-    const rounded = Math.round(parsed);
-    if (rounded < minMm || rounded > maxMm) {
-      setValidationError(`Geçerli aralık: ${minMm} – ${maxMm} mm`);
-      return;
-    }
+    const rounded = result.value;
 
     switch (dim.editTarget) {
       case 'runLength':
@@ -185,6 +248,7 @@ export function DimensionOverlay({
 
   return (
     <group>
+      <ViewProjectionGate viewMode={viewMode} onProjected={setProjectedViewMode} />
       {visibleDimensions.map((dim) => {
         const endpoints = resolveDimensionRenderEndpoints(dim, viewMode, runs);
         const startM: [number, number, number] = [
@@ -261,6 +325,8 @@ export function DimensionOverlay({
                     <input
                       ref={inputRef}
                       type="number"
+                      aria-label={`${dim.label.split(':')[0]} değeri (mm)`}
+                      aria-invalid={validationError ? true : undefined}
                       min={dim.minMm ?? 200}
                       max={dim.maxMm ?? 6000}
                       step={10}
@@ -279,24 +345,26 @@ export function DimensionOverlay({
                           cancelEditing();
                         }
                       }}
-                      className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-emerald-400 focus:outline-none"
+                      className="w-24 rounded border border-slate-500 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-emerald-400 focus:outline-none"
                     />
                     <span className="text-[10px] font-mono text-slate-400">mm</span>
                     <button
                       type="button"
                       onClick={(e) => commitEditing(dim, e)}
+                      aria-label="Ölçüyü onayla"
                       title="Onayla (Enter)"
-                      className="rounded bg-emerald-500 p-1 text-slate-950 hover:bg-emerald-400 transition"
+                      className="inline-flex min-h-6 min-w-6 items-center justify-center rounded bg-emerald-500 p-1 text-slate-950 hover:bg-emerald-400 transition"
                     >
-                      <Check className="h-3.5 w-3.5" />
+                      <Check className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                     <button
                       type="button"
                       onClick={(e) => cancelEditing(e)}
+                      aria-label="Ölçü düzenlemeyi iptal et"
                       title="İptal (Esc)"
-                      className="rounded bg-slate-800 p-1 text-slate-300 hover:bg-slate-700 transition"
+                      className="inline-flex min-h-6 min-w-6 items-center justify-center rounded bg-slate-800 p-1 text-slate-300 hover:bg-slate-700 transition"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </div>
                   {dim.editTarget === 'bayInnerDerived' && (
@@ -305,7 +373,7 @@ export function DimensionOverlay({
                     </div>
                   )}
                   {validationError && (
-                    <div className="rounded bg-rose-950/90 border border-rose-500/40 px-1.5 py-0.5 text-[9px] text-rose-200">
+                    <div role="alert" className="rounded bg-rose-950/90 border border-rose-500/40 px-1.5 py-0.5 text-[9px] text-rose-200">
                       {validationError}
                     </div>
                   )}
@@ -320,7 +388,7 @@ export function DimensionOverlay({
                       ? `${dim.label} — Kaynak dış genişliği (${dim.sourceValueMm} mm) düzenlemek için tıklayın`
                       : `${dim.label} — Doğrudan ölçü girmek için tıklayın`
                   }
-                  className={`pointer-events-auto group flex ${isFront2D && mergedInner ? 'flex-col items-center leading-tight py-0.5' : 'items-center gap-1 py-0.5'} whitespace-nowrap rounded px-1.5 text-[10px] font-mono font-medium shadow-sm border backdrop-blur-sm transition hover:scale-105 ${
+                  className={`${isViewProjected ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'} group flex ${isFront2D && mergedInner ? 'flex-col items-center leading-tight py-0.5' : 'items-center gap-1 py-0.5'} whitespace-nowrap rounded px-1.5 text-[10px] font-mono font-medium shadow-sm border backdrop-blur-sm transition hover:scale-105 ${
                     isSelectedBayDim
                       ? 'bg-amber-500/95 text-slate-950 border-amber-300 font-bold hover:bg-amber-400'
                       : isInner

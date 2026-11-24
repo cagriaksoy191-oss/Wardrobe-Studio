@@ -6,7 +6,7 @@ import {
   PerspectiveCamera,
 } from '@react-three/drei';
 import { Canvas, type ThreeEvent, useFrame, useThree } from '@react-three/fiber';
-import { BoxSelect, DoorOpen, Lightbulb, RotateCcw, Shirt, Sparkles, X } from 'lucide-react';
+import { BoxSelect, DoorOpen, Lightbulb, RotateCcw, Shirt, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
@@ -23,13 +23,19 @@ import { RunEndAddBayOverlay } from '../annotations/RunEndAddBayOverlay';
 import { SelectedCellDimensionOverlay } from '../annotations/SelectedCellDimensionOverlay';
 import { getOrCreateStudioEnvMap } from '../materials/materialRegistry';
 import { WardrobeMeshGroup } from '../wardrobe/WardrobeMeshGroup';
-import { AnalysisOverlays, AnalysisToolbar } from './AnalysisOverlays';
+import { AnalysisControlsContent, AnalysisOverlays, AnalysisToolbar } from './AnalysisOverlays';
 import { eyeCameraPose } from '../../core/analysis/studioAnalysis';
 import { MotionController, SlidingRails, motionRuntime } from './MotionController';
 import { slidingCellHasOpening } from '../../core/analysis/motionConstraints';
 import { CanvasCapture } from './CanvasCapture';
 import { PresentationOcclusion } from './PresentationOcclusion';
-import { applyFrontViewPose, fitFrontView, furnitureBounds, type SceneBounds } from './frontViewFit';
+import {
+  applyFrontViewPose,
+  computeTopPlanFit,
+  fitFrontView,
+  furnitureBounds,
+  type SceneBounds,
+} from './frontViewFit';
 
 const MM_TO_M = 0.001;
 
@@ -226,6 +232,35 @@ export function computeTotalSelectedCount(selection: {
   );
 }
 
+export function computeDefault3DCameraPose(params: {
+  layoutKind: 'straight' | 'l-shape';
+  lenAM: number;
+  lenBM: number;
+  heightM: number;
+  depthAM: number;
+}): Saved3DCameraState {
+  const isL = params.layoutKind === 'l-shape';
+  const sceneDepthM = isL ? params.lenBM : params.depthAM;
+  const centerXM = params.lenAM / 2;
+  const centerYM = params.heightM / 2;
+  const centerZM = sceneDepthM / 2;
+  const radiusM = Math.hypot(params.lenAM, params.heightM, sceneDepthM) / 2;
+  // CF-10: Pull back default 3D distance slightly and nudge L-shape target rightwards on screen
+  // so Run B Derinlik, Yükseklik and +B stay clear of the left canvas edge & #studio-setup.
+  const distanceFactor = isL ? 1.28 : 1.16;
+  const cameraDistanceM = (radiusM / Math.sin((42 * Math.PI) / 360)) * distanceFactor;
+  const cameraDirection = new THREE.Vector3(isL ? 1 : 0.55, 0.65, 1).normalize();
+  const target: [number, number, number] = isL
+    ? [centerXM - 0.16, centerYM - 0.04, centerZM + 0.18]
+    : [centerXM, centerYM, centerZM];
+  const position: [number, number, number] = [
+    target[0] + cameraDirection.x * cameraDistanceM,
+    target[1] + cameraDirection.y * cameraDistanceM,
+    target[2] + cameraDirection.z * cameraDistanceM,
+  ];
+  return { position, target };
+}
+
 type OrthographicMode = Exclude<StudioViewMode, '3d-perspective'>;
 type OrthographicPose = Saved3DCameraState & { zoom: number; fitted?: boolean };
 
@@ -239,9 +274,12 @@ function OrthographicStudioView({ mode, defaults, bounds, poses, orbitConfig }: 
   const camera = useRef<THREE.OrthographicCamera>(null);
   const controls = useRef<OrbitControlsImpl>(null);
   const { width, height } = useThree(state => state.size);
-  const axis = mode === '2d-front-A' ? 'A' : mode === '2d-front-B' ? 'B' : null;
-  const fitted = useMemo(() => axis && bounds && width > 0 && height > 0 ? fitFrontView(bounds, axis, width, height) : null,
-    [axis, bounds, width, height]);
+  const fitted = useMemo(() => {
+    if (!bounds || width <= 0 || height <= 0) return null;
+    if (mode === '2d-front-A') return fitFrontView(bounds, 'A', width, height);
+    if (mode === '2d-front-B') return fitFrontView(bounds, 'B', width, height);
+    return computeTopPlanFit(bounds, width, height);
+  }, [mode, bounds, width, height]);
   const saved = poses.current[mode];
   const initial = useRef(saved?.fitted ? fitted ?? saved : saved ?? fitted ?? defaults);
   const appliedFit = useRef<typeof fitted>(!saved || saved.fitted ? fitted : null);
@@ -520,6 +558,24 @@ function SceneCameraAndSelectionTracker({
       maxY = Math.max(maxY, py);
     }
 
+    let conflictCenterX: number | undefined;
+    let conflictCenterY: number | undefined;
+    const activeResizeDraft = useWardrobeStore.getState().resizeDraft;
+    if (
+      activeResizeDraft?.conflictBoxWorldCenterMm &&
+      (activeResizeDraft.conflictOverlapMm > 0 || activeResizeDraft.exceedsBoundary)
+    ) {
+      temp
+        .set(
+          activeResizeDraft.conflictBoxWorldCenterMm[0] * MM_TO_M,
+          activeResizeDraft.conflictBoxWorldCenterMm[1] * MM_TO_M,
+          activeResizeDraft.conflictBoxWorldCenterMm[2] * MM_TO_M
+        )
+        .project(camera);
+      conflictCenterX = Math.round(((temp.x + 1) * 0.5) * size.width);
+      conflictCenterY = Math.round(((-temp.y + 1) * 0.5) * size.height);
+    }
+
     const roundedBounds: SelectionScreenBounds = {
       minX: Math.round(minX),
       maxX: Math.round(maxX),
@@ -529,9 +585,11 @@ function SceneCameraAndSelectionTracker({
       centerY: Math.round((minY + maxY) / 2),
       canvasWidth: Math.round(size.width),
       canvasHeight: Math.round(size.height),
+      conflictCenterX,
+      conflictCenterY,
     };
 
-    const sig = `${Math.round(roundedBounds.minX / 3)},${Math.round(roundedBounds.maxX / 3)},${Math.round(roundedBounds.centerY / 3)},${roundedBounds.canvasWidth},${roundedBounds.canvasHeight}`;
+    const sig = `${Math.round(roundedBounds.minX / 3)},${Math.round(roundedBounds.maxX / 3)},${Math.round(roundedBounds.centerY / 3)},${roundedBounds.canvasWidth},${roundedBounds.canvasHeight},${conflictCenterX !== undefined ? Math.round(conflictCenterX / 4) : 'none'}`;
     if (sig !== lastBoundsRef.current) {
       lastBoundsRef.current = sig;
       onUpdateScreenBounds(roundedBounds);
@@ -647,8 +705,21 @@ export function WardrobeCanvas() {
   const [selectionScreenBounds, setSelectionScreenBounds] =
     useState<SelectionScreenBounds | null>(null);
   const [presentationGuides, setPresentationGuides] = useState(false);
+  const [mobileSceneMenuOpen, setMobileSceneMenuOpen] = useState(false);
+  const mobileSceneMenuOpenRef = useRef(mobileSceneMenuOpen);
+  mobileSceneMenuOpenRef.current = mobileSceneMenuOpen;
   const presentation = renderQualityMode === 'presentation';
   const cleanPresentation = presentation && !presentationGuides;
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 640px), (max-height: 500px)');
+    const handleChange = () => {
+      if (!mq.matches) setMobileSceneMenuOpen(false);
+    };
+    mq.addEventListener?.('change', handleChange);
+    return () => mq.removeEventListener?.('change', handleChange);
+  }, []);
 
   useEffect(() => {
     if (cleanPresentation) {
@@ -679,19 +750,16 @@ export function WardrobeCanvas() {
   const heightM = (runA?.heightMm ?? 2400) * MM_TO_M;
   const roomHeightM = design.roomHeightMm * MM_TO_M;
 
-  const centerXM = lenAM / 2;
-  const centerYM = heightM / 2;
-  const sceneDepthM = design.layoutKind === 'l-shape' ? lenBM : (runA ? runFrontMm(runA) : 600) * MM_TO_M;
-  const centerZM = sceneDepthM / 2;
-  const radiusM = Math.hypot(lenAM, heightM, sceneDepthM) / 2;
-  const cameraDistanceM = radiusM / Math.sin(42 * Math.PI / 360) * 1.1;
-  const cameraDirection = new THREE.Vector3(design.layoutKind === 'l-shape' ? 1 : 0.55, 0.65, 1).normalize();
-  const default3DPosition: [number, number, number] = [
-    centerXM + cameraDirection.x * cameraDistanceM,
-    centerYM + cameraDirection.y * cameraDistanceM,
-    centerZM + cameraDirection.z * cameraDistanceM,
-  ];
-  const default3DTarget: [number, number, number] = [centerXM, centerYM, centerZM];
+  const depthAM = (runA ? runFrontMm(runA) : 600) * MM_TO_M;
+  const default3DPose = computeDefault3DCameraPose({
+    layoutKind: design.layoutKind,
+    lenAM,
+    lenBM,
+    heightM,
+    depthAM,
+  });
+  const default3DPosition = default3DPose.position;
+  const default3DTarget = default3DPose.target;
 
   const initial3DCameraPos = saved3DCameraStateRef.current?.position ?? default3DPosition;
   const initial3DCameraTarget = saved3DCameraStateRef.current?.target ?? default3DTarget;
@@ -881,20 +949,24 @@ export function WardrobeCanvas() {
     };
   }, [computeCellsInMarquee, selectedCellIds, setHoveredMarqueeCells, setSelectedCells]);
 
-  // Esc tuşu ile aktif taslağı, kapak düzenleme modunu veya seçimi temizleme
+  // Esc tuşu ile aktif taslağı, kapak düzenleme modunu veya seçimi temizleme (PM-04: dialog/handled guard)
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        const st = useWardrobeStore.getState();
-        if (st.resizeDraft) {
-          st.cancelResizeDraft();
-        } else if (st.doorEditorMode) {
-          st.setDoorEditorMode(false);
-        } else if (st.multiSelectToolActive) {
-          st.setMultiSelectToolActive(false);
-        } else {
-          st.clearCellSelection();
-        }
+      if (e.key !== 'Escape') return;
+      if (e.defaultPrevented || document.querySelector('dialog[open]')) return;
+      if (mobileSceneMenuOpenRef.current) {
+        setMobileSceneMenuOpen(false);
+        return;
+      }
+      const st = useWardrobeStore.getState();
+      if (st.resizeDraft) {
+        st.cancelResizeDraft();
+      } else if (st.doorEditorMode) {
+        st.setDoorEditorMode(false);
+      } else if (st.multiSelectToolActive) {
+        st.setMultiSelectToolActive(false);
+      } else {
+        st.clearCellSelection();
       }
     };
     window.addEventListener('keydown', handleEsc);
@@ -1186,8 +1258,182 @@ export function WardrobeCanvas() {
       {!cleanPresentation && <ContextualCellPopover screenBounds={selectionScreenBounds} />}
       {!cleanPresentation && <AnalysisToolbar gestureHint={gestureHint} />}
 
+      {/* MOBİL / KISA YATAY EKRAN KOMPAKT SAHNE & ANALİZ AÇILIR KONTROLÜ (VF-01, VF-08) */}
+      <button
+        type="button"
+        onClick={() => setMobileSceneMenuOpen((v) => !v)}
+        aria-expanded={mobileSceneMenuOpen}
+        aria-controls="studio-mobile-scene-sheet"
+        className="studio-mobile-scene-toggle pointer-events-auto absolute top-2 left-2 z-40 min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 px-3 py-2 text-xs font-semibold text-slate-100 shadow-lg backdrop-blur-md transition hover:border-amber-400/70"
+      >
+        <SlidersHorizontal className="h-4 w-4 text-amber-300" aria-hidden="true" />
+        <span>Sahne &amp; Analiz {mobileSceneMenuOpen ? '▴' : '▾'}</span>
+      </button>
+
+      {mobileSceneMenuOpen && (
+        <div
+          id="studio-mobile-scene-sheet"
+          role="region"
+          aria-label="Sahne ve analiz araçları"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+          className="pointer-events-auto absolute top-14 left-2 right-2 z-45 max-h-[calc(100%-64px)] space-y-2.5 overflow-y-auto rounded-xl border border-slate-600 bg-slate-950/96 p-2.5 text-xs text-slate-100 shadow-2xl backdrop-blur-md"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              <span className="font-semibold text-white">
+                {viewMode === '3d-perspective' && '3D Stüdyo'}
+                {viewMode === '2d-front-A' && '2D Cephe A'}
+                {viewMode === '2d-front-B' && '2D Cephe B'}
+                {viewMode === '2d-plan-top' && '2D Üst Plan'}
+              </span>
+              <span className="text-slate-400">
+                <strong className="text-sky-300">{resolved.panelThicknessMm} mm</strong> /{' '}
+                <strong className="text-emerald-300">{resolved.backPanelThicknessMm} mm</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerCameraReset();
+                  setMobileSceneMenuOpen(false);
+                }}
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-100 hover:border-amber-400/60"
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Sıfırla</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileSceneMenuOpen(false)}
+                aria-label="Sahne menüsünü kapat"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-500"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              aria-pressed={presentation}
+              onClick={() => {
+                if (!presentation) setPresentationGuides(false);
+                setRenderQualityMode(presentation ? 'edit' : 'presentation');
+              }}
+              className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
+                presentation
+                  ? 'border-violet-400 bg-violet-600 text-white'
+                  : 'border-slate-700 bg-slate-900 text-slate-200 hover:border-violet-400/60'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{presentation ? 'Sunum Modu' : 'Düzenleme Modu'}</span>
+            </button>
+            {presentation && (
+              <button
+                type="button"
+                aria-pressed={presentationGuides}
+                onClick={() => setPresentationGuides(!presentationGuides)}
+                className="inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-slate-200"
+              >
+                {presentationGuides ? 'Kılavuzları gizle' : 'Kılavuzları göster'}
+              </button>
+            )}
+            <button
+              type="button"
+              aria-pressed={design.ledLighting?.enabled ?? true}
+              onClick={() => setLedLighting({ enabled: !(design.ledLighting?.enabled ?? true) })}
+              className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                (design.ledLighting?.enabled ?? true)
+                  ? 'border-amber-400/80 bg-amber-500/20 text-amber-200'
+                  : 'border-slate-700 bg-slate-900 text-slate-400'
+              }`}
+            >
+              <Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>LED</span>
+            </button>
+            <button
+              type="button"
+              aria-pressed={design.interiorItems?.enabled ?? true}
+              onClick={() =>
+                setInteriorItemsConfig({ enabled: !(design.interiorItems?.enabled ?? true) })
+              }
+              className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                (design.interiorItems?.enabled ?? true)
+                  ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-200'
+                  : 'border-slate-700 bg-slate-900 text-slate-400'
+              }`}
+            >
+              <Shirt className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>3D Eşyalar</span>
+            </button>
+            {!cleanPresentation && (
+              <>
+                <button
+                  type="button"
+                  aria-pressed={doorEditorMode}
+                  onClick={() => {
+                    setDoorEditorMode(!doorEditorMode);
+                    setMobileSceneMenuOpen(false);
+                  }}
+                  className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                    doorEditorMode
+                      ? 'border-amber-400 bg-amber-500 text-slate-950'
+                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  <DoorOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{doorEditorMode ? 'Kapak Düzenle Aktif' : 'Kapak Düzenle'}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={multiSelectToolActive}
+                  onClick={() => {
+                    setMultiSelectToolActive(!multiSelectToolActive);
+                    setMobileSceneMenuOpen(false);
+                  }}
+                  className={`inline-flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${
+                    multiSelectToolActive
+                      ? 'border-sky-400 bg-sky-500 text-slate-950'
+                      : 'border-slate-700 bg-slate-900 text-slate-200'
+                  }`}
+                >
+                  <BoxSelect className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Çoklu Seçim</span>
+                </button>
+                {totalSelectedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearCellSelection();
+                      setMobileSceneMenuOpen(false);
+                    }}
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-rose-200"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Seçimi Temizle ({totalSelectedCount})</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {!cleanPresentation && (
+            <div className="space-y-2 border-t border-slate-800 pt-2">
+              <div className="text-[11px] font-semibold text-slate-300">Analiz ve kamera</div>
+              <AnalysisControlsContent compactTouch />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* SAHNE ÜSTÜ SOL: AKTİF GÖRÜNÜM ROZETİ + GÖRÜNÜMÜ SIFIRLA */}
-      <div ref={toolbarRef} className="studio-scene-toolbar flex flex-wrap items-start gap-1.5">
+      <div ref={toolbarRef} data-mobile-open="false" className="studio-scene-toolbar flex flex-wrap items-start gap-1.5">
       <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-800 bg-slate-900/95 px-2.5 py-1 text-xs text-slate-300">
         <span className="h-2 w-2 rounded-full bg-emerald-400" />
         <span className="font-semibold text-white">
@@ -1198,13 +1444,13 @@ export function WardrobeCanvas() {
         </span>
         <span className="text-slate-400">
           <strong className="text-sky-300">{resolved.panelThicknessMm} mm</strong> /{' '}
-          <strong className="text-emerald-300">{resolved.backPanelThicknessMm}mm</strong>
+          <strong className="text-emerald-300">{resolved.backPanelThicknessMm} mm</strong>
         </span>
         <button
           type="button"
           onClick={triggerCameraReset}
           title="Kamerayı varsayılan başlangıç açısına sıfırla"
-          className="ml-1 flex items-center gap-1 rounded border border-slate-700 bg-slate-800/90 px-2 py-0.5 text-[10px] font-medium text-slate-200 hover:border-amber-400/60 hover:text-white transition"
+          className="ml-1 flex min-h-6 items-center gap-1 rounded border border-slate-700 bg-slate-800/90 px-2 py-0.5 text-[10px] font-medium text-slate-200 hover:border-amber-400/60 hover:text-white transition"
         >
           <RotateCcw className="h-3 w-3" />
           Görünümü Sıfırla
@@ -1225,7 +1471,7 @@ export function WardrobeCanvas() {
               ? 'border-violet-400 bg-violet-600 text-white'
               : 'border-slate-700 bg-slate-900/90 text-slate-200 hover:border-violet-400/60 hover:bg-slate-800'
           }`}
-          title="Düzenleme Modu ve Profesyonel Sunum Modu (Gelişmiş IBL Yansıma ve Temas Gölgeleri) arasında geçiş yapın"
+          title="Düzenleme Modu ve Profesyonel Sunum Modu (Gelişmiş Yansıma ve Temas Gölgeleri) arasında geçiş yapın"
         >
           <Sparkles className="h-3.5 w-3.5" />
           <span>{renderQualityMode === 'presentation' ? 'Sunum Modu' : 'Düzenleme Modu'}</span>

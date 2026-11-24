@@ -3,9 +3,15 @@ import { SceneHtml as Html } from './SceneHtml';
 import { AlertTriangle, Check, Pencil, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type * as THREE from 'three';
-import type { ResizeAxis, ResizeDirection, ResolvedSlidingLeaf } from '../../core/schema/types';
+import type {
+  ResizeAxis,
+  ResizeDirection,
+  ResolvedDoorLeaf,
+  ResolvedSlidingLeaf,
+} from '../../core/schema/types';
 import { analyzeSelectedCellsGroup } from '../../core/solver/treeMutator';
 import { useWardrobeStore } from '../../store/useWardrobeStore';
+import { readNumberDraft } from '../../ui/editorFeedback';
 import { motionRuntime } from '../scene/MotionController';
 
 const MM_TO_M = 0.001;
@@ -26,6 +32,88 @@ export interface SlidingLeafDimensionOverlaySpec {
   trackBadgeMm: [number, number, number];
 }
 
+export interface HingedDoorDimensionOverlaySpec {
+  widthMm: number;
+  heightMm: number;
+  thicknessMm: number;
+  xStartMm: [number, number, number];
+  xEndMm: [number, number, number];
+  yStartMm: [number, number, number];
+  yEndMm: [number, number, number];
+}
+
+/** Validates on-canvas inline mm input, strictly rejecting empty / whitespace / badInput before Number() (CF-09). */
+export function parseOverlayMmDraft(
+  raw: string,
+  badInput: boolean,
+  minMm: number,
+  maxMm: number
+): { ok: true; value: number } | { ok: false; error: string } {
+  const res = readNumberDraft(raw, badInput, minMm, maxMm);
+  if (res.kind === 'value') return { ok: true, value: res.value };
+  if (res.kind === 'empty') {
+    return { ok: false, error: `Boş bırakılamaz (${minMm}–${maxMm} mm).` };
+  }
+  return { ok: false, error: `${minMm}–${maxMm} mm arasında geçerli bir sayı girin.` };
+}
+
+/**
+ * Computes 3D endpoints for hinged doors including 45° diagonal corner doors along the true front chord (CF-18)
+ * and elevated Kapak X above bottom Dış/Net İç pills (CF-14).
+ */
+export function computeHingedDoorDimensionOverlay(
+  door: ResolvedDoorLeaf
+): HingedDoorDimensionOverlaySpec {
+  const [hx, hy, hz] = door.pivotWorldMm;
+  const wMm = door.widthMm;
+  const hMm = door.heightMm;
+  const tMm = door.thicknessMm;
+  const yBottom = hy - hMm / 2;
+  const yTop = hy + hMm / 2;
+  // Offset Kapak X clearly above bottom bayOuter/bayInner (y=40mm) pills (CF-14)
+  const xLineY = yBottom + Math.min(260, Math.max(96, Math.round(hMm * 0.14)));
+
+  if (door.isCornerDoor) {
+    const rot = door.closedRotationYRad;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const sign = door.hingeSide === 'left' ? 1 : -1;
+    const frontOff = tMm + 28;
+    const toWorld = (lx: number, ly: number, lz: number): [number, number, number] => [
+      hx + lx * cos + lz * sin,
+      ly,
+      hz - lx * sin + lz * cos,
+    ];
+    const xStartMm = toWorld(0, xLineY, frontOff);
+    const xEndMm = toWorld(sign * wMm, xLineY, frontOff);
+    const yLocalX = sign * Math.max(14, wMm - 14);
+    const yStartMm = toWorld(yLocalX, yBottom, frontOff);
+    const yEndMm = toWorld(yLocalX, yTop, frontOff);
+    return { widthMm: wMm, heightMm: hMm, thicknessMm: tMm, xStartMm, xEndMm, yStartMm, yEndMm };
+  }
+
+  const isRunA = door.runId !== 'run-B';
+  const offsetSign = door.hingeSide === 'left' ? 1 : -1;
+  const centerX = isRunA ? hx + (offsetSign * wMm) / 2 : hx + 22;
+  const centerZ = isRunA ? hz + 22 : hz + (offsetSign * wMm) / 2;
+
+  const xStartMm: [number, number, number] = isRunA
+    ? [centerX - wMm / 2, xLineY, centerZ]
+    : [centerX, xLineY, centerZ - wMm / 2];
+  const xEndMm: [number, number, number] = isRunA
+    ? [centerX + wMm / 2, xLineY, centerZ]
+    : [centerX, xLineY, centerZ + wMm / 2];
+
+  const yStartMm: [number, number, number] = isRunA
+    ? [centerX + wMm / 2 - 14, yBottom, centerZ]
+    : [centerX, yBottom, centerZ + wMm / 2 - 14];
+  const yEndMm: [number, number, number] = isRunA
+    ? [centerX + wMm / 2 - 14, yTop, centerZ]
+    : [centerX, yTop, centerZ + wMm / 2 - 14];
+
+  return { widthMm: wMm, heightMm: hMm, thicknessMm: tMm, xStartMm, xEndMm, yStartMm, yEndMm };
+}
+
 export function computeSlidingLeafDimensionOverlay(
   leaf: ResolvedSlidingLeaf,
   slideOffsetMm: number = leaf.initialOffsetMm
@@ -40,13 +128,15 @@ export function computeSlidingLeafDimensionOverlay(
   const yTop = cy + hMm / 2;
   const isRunA = leaf.wallAxis === 'A';
   const frontOffsetMm = tMm / 2 + 22;
+  // Offset Kanat X cleanly above bottom Dış/Net İç pills (CF-14)
+  const xLineY = yBottom + Math.min(260, Math.max(96, Math.round(hMm * 0.14)));
 
   const xStartMm: [number, number, number] = isRunA
-    ? [cx - wMm / 2, yBottom + 18, cz + frontOffsetMm]
-    : [cx + frontOffsetMm, yBottom + 18, cz - wMm / 2];
+    ? [cx - wMm / 2, xLineY, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, xLineY, cz - wMm / 2];
   const xEndMm: [number, number, number] = isRunA
-    ? [cx + wMm / 2, yBottom + 18, cz + frontOffsetMm]
-    : [cx + frontOffsetMm, yBottom + 18, cz + wMm / 2];
+    ? [cx + wMm / 2, xLineY, cz + frontOffsetMm]
+    : [cx + frontOffsetMm, xLineY, cz + wMm / 2];
 
   const yStartMm: [number, number, number] = isRunA
     ? [cx + wMm / 2 - 14, yBottom, cz + frontOffsetMm]
@@ -77,8 +167,10 @@ export function computeSlidingLeafDimensionOverlay(
 }
 
 export function shouldShowCellDimensionOverlay(
-  group: ReturnType<typeof analyzeSelectedCellsGroup>
+  group: ReturnType<typeof analyzeSelectedCellsGroup>,
+  doorEditorMode = false
 ): boolean {
+  if (doorEditorMode) return false;
   if (group.cells.length === 0) return false;
   if (group.isSingle) return true;
   if (group.isMultiShelfGroupSelection) {
@@ -123,6 +215,7 @@ export function SelectedCellDimensionOverlay() {
 
   const [editingAxis, setEditingAxis] = useState<ResizeAxis | null>(null);
   const [draftVal, setDraftVal] = useState<string>('');
+  const [draftError, setDraftError] = useState<string | null>(null);
   const [direction, setDirection] = useState<ResizeDirection>('up');
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -156,6 +249,7 @@ export function SelectedCellDimensionOverlay() {
 
   useEffect(() => {
     setEditingAxis(null);
+    setDraftError(null);
   }, [activeCellIds.join(','), activeDrawerIds.join(','), activeDoorIds.join(','), doorEditorMode]);
 
   // ---------------------------------------------------------------------------
@@ -236,31 +330,8 @@ export function SelectedCellDimensionOverlay() {
       );
     }
 
-    const [hx, hy, hz] = selectedDoor.pivotWorldMm;
-    const wMm = selectedDoor.widthMm;
-    const hMm = selectedDoor.heightMm;
-    const tMm = selectedDoor.thicknessMm;
-    const isRunA = selectedDoor.runId !== 'run-B';
-    const offsetSign = selectedDoor.hingeSide === 'left' ? 1 : -1;
-
-    const centerX = isRunA ? hx + (offsetSign * wMm) / 2 : hx + 20;
-    const centerZ = isRunA ? hz + 20 : hz + (offsetSign * wMm) / 2;
-    const yBottom = hy - hMm / 2;
-    const yTop = hy + hMm / 2;
-
-    const xStart: [number, number, number] = isRunA
-      ? [centerX - wMm / 2, yBottom + 16, centerZ]
-      : [centerX, yBottom + 16, centerZ - wMm / 2];
-    const xEnd: [number, number, number] = isRunA
-      ? [centerX + wMm / 2, yBottom + 16, centerZ]
-      : [centerX, yBottom + 16, centerZ + wMm / 2];
-
-    const yStart: [number, number, number] = isRunA
-      ? [centerX + wMm / 2 - 14, yBottom, centerZ]
-      : [centerX, yBottom, centerZ + wMm / 2 - 14];
-    const yEnd: [number, number, number] = isRunA
-      ? [centerX + wMm / 2 - 14, yTop, centerZ]
-      : [centerX, yTop, centerZ + wMm / 2 - 14];
+    const doorSpec = computeHingedDoorDimensionOverlay(selectedDoor);
+    const { widthMm: wMm, heightMm: hMm, thicknessMm: tMm, xStartMm: xStart, xEndMm: xEnd, yStartMm: yStart, yEndMm: yEnd } = doorSpec;
 
     return (
       <group userData={{ studioHelper: true }}>
@@ -282,7 +353,7 @@ export function SelectedCellDimensionOverlay() {
           center
           zIndexRange={[30, 10]}
         >
-          <div className="pointer-events-none rounded border border-amber-300 bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950 shadow">
+          <div className="pointer-events-none whitespace-nowrap rounded border border-amber-300 bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950 shadow">
             Kapak X: {wMm} mm · Kalınlık: {tMm} mm
           </div>
         </Html>
@@ -305,13 +376,16 @@ export function SelectedCellDimensionOverlay() {
           center
           zIndexRange={[30, 10]}
         >
-          <div className="pointer-events-none rounded border border-sky-300 bg-sky-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950 shadow">
+          <div className="pointer-events-none whitespace-nowrap rounded border border-sky-300 bg-sky-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950 shadow">
             Kapak Y: {hMm} mm
           </div>
         </Html>
       </group>
     );
   }
+
+  // CF-08: Suppress internal cell & drawer X/Y/Z overlays whenever doorEditorMode is active
+  if (doorEditorMode) return null;
 
   // ---------------------------------------------------------------------------
   // 2. SEÇİLİ ÇEKMECE(LER) X / Y / Z FİZİKSEL ÖLÇÜ ÇİZGİLERİ
@@ -452,52 +526,88 @@ export function SelectedCellDimensionOverlay() {
                       <span>{spec.title}</span>
                       <button
                         type="button"
-                        onClick={() => setEditingAxis(null)}
-                        className="text-slate-400 hover:text-white"
+                        aria-label="Ölçü düzenleyiciyi kapat"
+                        title="Ölçü düzenleyiciyi kapat"
+                        onClick={() => {
+                          setEditingAxis(null);
+                          setDraftError(null);
+                        }}
+                        className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-white"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     </div>
                     <div className="flex items-center gap-1">
                       <input
                         ref={inputRef}
                         type="number"
+                        aria-label={spec.title}
+                        aria-invalid={draftError ? true : undefined}
                         step={10}
                         min={spec.minMm}
                         max={spec.maxMm}
                         value={draftVal}
-                        onChange={(e) => setDraftVal(e.target.value)}
+                        onChange={(e) => {
+                          setDraftVal(e.target.value);
+                          if (draftError) setDraftError(null);
+                        }}
                         onKeyDown={(e) => {
                           e.stopPropagation();
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            const n = Number(draftVal.trim());
-                            if (Number.isFinite(n) && n >= 80) {
-                              updateSelectedDrawerHeight(firstDrw.id, Math.round(n));
+                            const parsed = parseOverlayMmDraft(
+                              draftVal,
+                              Boolean(e.currentTarget.validity?.badInput),
+                              spec.minMm,
+                              spec.maxMm
+                            );
+                            if (!parsed.ok) {
+                              setDraftError(parsed.error);
+                              return;
                             }
+                            updateSelectedDrawerHeight(firstDrw.id, parsed.value);
+                            setDraftError(null);
                             setEditingAxis(null);
                           } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            setDraftError(null);
                             setEditingAxis(null);
                           }
                         }}
-                        className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
+                        className="w-20 rounded border border-slate-500 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
                       />
                       <span className="font-mono text-[10px] text-slate-400">mm</span>
                       <button
                         type="button"
                         onClick={() => {
-                          const n = Number(draftVal.trim());
-                          if (Number.isFinite(n) && n >= 80) {
-                            updateSelectedDrawerHeight(firstDrw.id, Math.round(n));
+                          const parsed = parseOverlayMmDraft(
+                            draftVal,
+                            Boolean(inputRef.current?.validity?.badInput),
+                            spec.minMm,
+                            spec.maxMm
+                          );
+                          if (!parsed.ok) {
+                            setDraftError(parsed.error);
+                            return;
                           }
+                          updateSelectedDrawerHeight(firstDrw.id, parsed.value);
+                          setDraftError(null);
                           setEditingAxis(null);
                         }}
-                        className="flex items-center gap-1 rounded bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400"
+                        className="flex min-h-6 items-center gap-1 rounded bg-sky-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-sky-400"
                       >
-                        <Check className="h-3 w-3" />
+                        <Check className="h-3 w-3" aria-hidden="true" />
                         Uygula
                       </button>
                     </div>
+                    {draftError && (
+                      <div
+                        role="alert"
+                        className="rounded border border-rose-500/40 bg-rose-950/90 px-1.5 py-0.5 text-[10px] text-rose-200"
+                      >
+                        {draftError}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <button
@@ -537,10 +647,10 @@ export function SelectedCellDimensionOverlay() {
   // 3. SEÇİLİ HÜCRE / RAF GRUBU / BEŞGEN KÖŞE ÖLÇÜ ÇİZGİLERİ
   // ---------------------------------------------------------------------------
   const group = analyzeSelectedCellsGroup(activeCellIds, resolved);
-  if (!shouldShowCellDimensionOverlay(group)) return null;
+  if (!shouldShowCellDimensionOverlay(group, doorEditorMode)) return null;
 
   const first = group.cells[0];
-  const [cx, cy, cz] = group.groupWorldCenterMm;
+  const [cx, , cz] = group.groupWorldCenterMm;
   const wMm = group.grossWidthMm;
   const hMm = group.grossHeightMm;
   const dMm = group.netDepthMm;
@@ -557,22 +667,29 @@ export function SelectedCellDimensionOverlay() {
   let zEndMm: [number, number, number];
 
   const frontOffsetMm = 28;
+  // Offset cell X pill cleanly above bottom bayOuter pills (y=40) and away from Y midpoint (CF-14)
+  const cellXLineY =
+    group.yStartMm < 180 && group.yEndMm > 270
+      ? Math.min(group.yEndMm - 40, Math.max(group.yStartMm + 48, 220))
+      : group.yStartMm + Math.min(44, Math.max(14, Math.round(hMm * 0.14)));
 
   if (isCorner) {
-    xStartMm = [cx - wMm * 0.35, group.yStartMm + 16, cz + wMm * 0.35];
-    xEndMm = [cx + wMm * 0.35, group.yStartMm + 16, cz - wMm * 0.35];
+    // Stagger Köşe A (bottom), Y (middle), and Köşe B (upper) vertically so none bury each other (CF-14)
+    const cornerZLineY = group.yEndMm - Math.min(54, Math.max(18, Math.round(hMm * 0.18)));
+    xStartMm = [cx - wMm * 0.35, group.yStartMm + 24, cz + wMm * 0.35];
+    xEndMm = [cx + wMm * 0.35, group.yStartMm + 24, cz - wMm * 0.35];
     yStartPosMm = [cx + wMm * 0.36, group.yStartMm, cz - wMm * 0.36];
     yEndPosMm = [cx + wMm * 0.36, group.yEndMm, cz - wMm * 0.36];
-    zStartMm = [cx - dMm * 0.3, cy, cz - dMm * 0.3];
-    zEndMm = [cx + dMm * 0.3, cy, cz + dMm * 0.3];
+    zStartMm = [cx - dMm * 0.3, cornerZLineY, cz - dMm * 0.3];
+    zEndMm = [cx + dMm * 0.3, cornerZLineY, cz + dMm * 0.3];
   } else if (isRunA) {
     const frontZ = cz + dMm / 2 + frontOffsetMm;
     const backZ = cz - dMm / 2;
     const leftX = cx - wMm / 2;
     const rightX = cx + wMm / 2;
 
-    xStartMm = [leftX, group.yStartMm + 14, frontZ];
-    xEndMm = [rightX, group.yStartMm + 14, frontZ];
+    xStartMm = [leftX, cellXLineY, frontZ];
+    xEndMm = [rightX, cellXLineY, frontZ];
 
     yStartPosMm = [rightX - 14, group.yStartMm, frontZ];
     yEndPosMm = [rightX - 14, group.yEndMm, frontZ];
@@ -585,8 +702,8 @@ export function SelectedCellDimensionOverlay() {
     const leftZ = cz - wMm / 2;
     const rightZ = cz + wMm / 2;
 
-    xStartMm = [frontX, group.yStartMm + 14, leftZ];
-    xEndMm = [frontX, group.yStartMm + 14, rightZ];
+    xStartMm = [frontX, cellXLineY, leftZ];
+    xEndMm = [frontX, cellXLineY, rightZ];
 
     yStartPosMm = [frontX, group.yStartMm, rightZ - 14];
     yEndPosMm = [frontX, group.yEndMm, rightZ - 14];
@@ -674,14 +791,24 @@ export function SelectedCellDimensionOverlay() {
     e.stopPropagation();
     setEditingAxis(spec.axis);
     setDraftVal(String(spec.valueMm));
+    setDraftError(null);
     setDirection(spec.defaultDirection);
   };
 
   const handlePreviewOrApply = (spec: AxisLineSpec, e?: React.SyntheticEvent) => {
     e?.stopPropagation();
-    const num = Number(draftVal.trim());
-    if (!Number.isFinite(num) || Number.isNaN(num)) return;
-    const rounded = Math.round(num);
+    const parsed = parseOverlayMmDraft(
+      draftVal,
+      Boolean(inputRef.current?.validity?.badInput),
+      spec.minMm,
+      spec.maxMm
+    );
+    if (!parsed.ok) {
+      setDraftError(parsed.error);
+      return;
+    }
+    const rounded = parsed.value;
+    setDraftError(null);
 
     if (isCorner && (spec.axis === 'X' || spec.axis === 'Z')) {
       const paramField = spec.axis === 'X' ? 'diagonalArmAMm' : 'diagonalArmBMm';
@@ -745,10 +872,15 @@ export function SelectedCellDimensionOverlay() {
                     <span>{spec.title}</span>
                     <button
                       type="button"
-                      onClick={() => setEditingAxis(null)}
-                      className="text-slate-400 hover:text-white"
+                      aria-label="Ölçü düzenleyiciyi kapat"
+                      title="Ölçü düzenleyiciyi kapat"
+                      onClick={() => {
+                        setEditingAxis(null);
+                        setDraftError(null);
+                      }}
+                      className="inline-flex min-h-6 min-w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-white"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </div>
 
@@ -763,7 +895,7 @@ export function SelectedCellDimensionOverlay() {
                           key={opt.value}
                           type="button"
                           onClick={() => setDirection(opt.value)}
-                          className={`rounded border px-1.5 py-0.5 font-medium transition ${
+                          className={`min-h-6 rounded border px-1.5 py-0.5 font-medium transition ${
                             direction === opt.value
                               ? 'border-amber-400 bg-amber-500/25 text-amber-200 font-semibold'
                               : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200'
@@ -779,11 +911,16 @@ export function SelectedCellDimensionOverlay() {
                     <input
                       ref={inputRef}
                       type="number"
+                      aria-label={spec.title}
+                      aria-invalid={draftError ? true : undefined}
                       step={10}
                       min={spec.minMm}
                       max={spec.maxMm}
                       value={draftVal}
-                      onChange={(e) => setDraftVal(e.target.value)}
+                      onChange={(e) => {
+                        setDraftVal(e.target.value);
+                        if (draftError) setDraftError(null);
+                      }}
                       onKeyDown={(e) => {
                         e.stopPropagation();
                         if (e.key === 'Enter') {
@@ -791,21 +928,30 @@ export function SelectedCellDimensionOverlay() {
                           handlePreviewOrApply(spec);
                         } else if (e.key === 'Escape') {
                           e.preventDefault();
+                          setDraftError(null);
                           setEditingAxis(null);
                         }
                       }}
-                      className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-amber-400 focus:outline-none"
+                      className="w-24 rounded border border-slate-500 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-amber-400 focus:outline-none"
                     />
                     <span className="font-mono text-[10px] text-slate-400">mm</span>
                     <button
                       type="button"
                       onClick={(e) => handlePreviewOrApply(spec, e)}
-                      className="flex items-center gap-1 rounded bg-amber-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-amber-400"
+                      className="flex min-h-6 items-center gap-1 rounded bg-amber-500 px-2 py-1 text-[10px] font-bold text-slate-950 hover:bg-amber-400"
                     >
-                      <Check className="h-3 w-3" />
+                      <Check className="h-3 w-3" aria-hidden="true" />
                       Uygula
                     </button>
                   </div>
+                  {draftError && (
+                    <div
+                      role="alert"
+                      className="rounded border border-rose-500/40 bg-rose-950/90 px-1.5 py-0.5 text-[10px] text-rose-200"
+                    >
+                      {draftError}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <button
