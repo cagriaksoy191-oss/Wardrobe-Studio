@@ -33,7 +33,7 @@ export function MotionController({ showContact = true }: { showContact?: boolean
   }, []);
   useFrame((_,delta)=>{
     const state=useWardrobeStore.getState();
-    motionRuntime.load(state.design,state.resolved);
+    motionRuntime.load(state.design,state.resolved,{clearRecoveryOnDesignChange:true});
     motionRuntime.step(delta,state.openDoorIds,state.openDrawerIds,state.motionCommand);
     publishMotionNotice();
   },-100);
@@ -65,10 +65,24 @@ export function MotionNotice() {
       motionRuntime.cancelRecovery();
     } else if (recovery) {
       motionRuntime.dismissRecovery();
-      region.current?.focus();
+      const stillVisible = Boolean(motionRuntime.motionNotice());
+      publishMotionNotice();
+      if (stillVisible) {
+        region.current?.focus();
+      } else {
+        const landmark = document.querySelector<HTMLElement>('main');
+        const fallbackButton = document.querySelector<HTMLElement>('header button:not(:disabled)');
+        if (landmark) {
+          if (!landmark.hasAttribute('tabindex')) landmark.setAttribute('tabindex', '-1');
+          landmark.focus();
+        } else {
+          fallbackButton?.focus();
+        }
+      }
+      return;
     } else {
       const state = useWardrobeStore.getState();
-      motionRuntime.load(state.design, state.resolved);
+      motionRuntime.load(state.design, state.resolved, { clearRecoveryOnDesignChange: true });
       const plan = motionRuntime.recoveryOffer().plan;
       if (plan && motionRuntime.startRecovery(plan, state.motionCommand.revision)) state.syncRecoveryTargets(plan.steps.map(step => step.id));
     }

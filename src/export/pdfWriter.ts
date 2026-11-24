@@ -3,13 +3,20 @@ import {assertProductionReady,type ProductionPackage} from '../core/production/p
 import type {TechnicalSheet} from '../core/production/technicalSheets';
 
 /** Raster ekran görüntüsü yerine aynı SVG paftalarından vektör PDF üretir. Font yerel gömülür. */
-export function createProductionPdf(pkg:ProductionPackage,sheets:TechnicalSheet[],fontBase64:string):ArrayBuffer {
+export function createProductionPdf(
+  pkg: ProductionPackage,
+  sheets: TechnicalSheet[],
+  fontBase64: string,
+  signal?: AbortSignal
+): ArrayBuffer {
+  signal?.throwIfAborted();
   assertProductionReady(pkg);
   const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a3',compress:true,putOnlyUsedFonts:true,precision:3});
   doc.addFileToVFS('NotoSans-Regular.ttf',fontBase64);doc.addFont('NotoSans-Regular.ttf','NotoSans','normal');doc.setFont('NotoSans');
   doc.setProperties({title:`${pkg.designName} - ${pkg.versionName}`,subject:'Gerçek mm teknik çizim, kesim listesi ve montaj notları',author:'Wardrobe Studio',creator:'Wardrobe Studio / Yerel üretim paketi'});
   doc.setLanguage('tr');doc.setDisplayMode('fullwidth','continuous');
   sheets.forEach((sheet,i)=>{
+    signal?.throwIfAborted();
     if(i)doc.addPage('a3','landscape');
     for(const e of sheet.elements){
       if(e.kind==='text'){
@@ -23,9 +30,17 @@ export function createProductionPdf(pkg:ProductionPackage,sheets:TechnicalSheet[
     }
     doc.setLineDashPattern([],0);
   });
+  signal?.throwIfAborted();
   return doc.output('arraybuffer');
 }
-export async function localPdfFont():Promise<string> {
-  const response=await fetch(`${import.meta.env.BASE_URL}fonts/NotoSans-Regular.ttf`);if(!response.ok)throw new Error('Yerel PDF yazı tipi okunamadı. Sayfayı yenileyip tekrar deneyin.');
-  const data=new Uint8Array(await response.arrayBuffer());let binary='';for(let i=0;i<data.length;i+=8192)binary+=String.fromCharCode(...data.subarray(i,i+8192));return btoa(binary);
+export async function localPdfFont(signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted();
+  const response = await fetch(`${import.meta.env.BASE_URL}fonts/NotoSans-Regular.ttf`, { signal });
+  if (!response.ok) throw new Error('Yerel PDF yazı tipi okunamadı. Sayfayı yenileyip tekrar deneyin.');
+  const buffer = await response.arrayBuffer();
+  signal?.throwIfAborted();
+  const data = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < data.length; i += 8192) binary += String.fromCharCode(...data.subarray(i, i + 8192));
+  return btoa(binary);
 }

@@ -25,6 +25,7 @@ export class MotionSimulator {
   stops:Record<string,MotionStop>={};
   draggingId:string|null=null;
   private model:ResolvedModel|null=null;
+  private designId: string | null = null;
   private flags:Record<string,boolean>={};
   private manualStops = new Map<string, ManualStop>();
   private closingDrawerId: string | null = null;
@@ -36,10 +37,13 @@ export class MotionSimulator {
   private poseRevision = 0;
   private offerCache: { revision: number; offer: RecoveryOffer } | null = null;
   private commandRevision: number | undefined;
-  load(design:Design,model:ResolvedModel) {
+  load(design:Design,model:ResolvedModel,options?:{clearRecoveryOnDesignChange?:boolean}) {
     if(this.model===model)return;
+    const designChanged = this.designId !== null && this.designId !== design.id;
     if (!this.operation) this.recovery = null;
+    this.designId = design.id;
     this.model=model;this.scene=buildMotionScene(design,model);
+    if (designChanged && options?.clearRecoveryOnDesignChange) this.recovery = null;
     this.positions={};this.targets={};this.velocities={};this.stops={};this.flags={};this.draggingId=null;
     this.manualStops.clear();
     this.closingDrawerId = null;
@@ -229,7 +233,7 @@ export class MotionSimulator {
     for(const part of this.scene.parts) {
       const flag=Boolean((part.kind==='drawer'?drawers:doors)[part.id]);
       const newCommand = this.flags[part.id] !== flag;
-      if (!this.paused.has(part.id) && (part.kind!=='sliding'||newCommand||explicit.includes(part.id))) this.targets[part.id]=flag?part.open:0;
+      if (!this.paused.has(part.id) && (part.kind!=='sliding'||newCommand||explicit.includes(part.id))) this.targets[part.id]=flag?part.open:part.home;
       if (newCommand) {
         delete this.stops[part.id];
         this.manualStops.delete(part.id);

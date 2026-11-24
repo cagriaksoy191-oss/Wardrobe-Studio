@@ -1,4 +1,4 @@
-import {useEffect,useId,useMemo,useState} from 'react';
+import {useEffect,useId,useMemo,useRef,useState} from 'react';
 import {useWardrobeStore} from '../store/useWardrobeStore';
 import {useVersionArchive} from '../store/versionArchive';
 import {buildExternalAiPrompt,designDimensions,designMetrics,designSignature,previewDesignJson,type DesignMetrics,type ImportPreview} from '../core/versions/designExchange';
@@ -10,7 +10,7 @@ import {downloadFile,safeFileName} from '../export/download';
 import { StudioDialog } from './StudioDialog';
 
 const button='rounded border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-100 hover:border-sky-400 disabled:opacity-40';
-const input='studio-input w-full rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-100';
+const input='studio-input w-full rounded border border-slate-500 bg-slate-950 p-2 text-xs text-slate-100';
 const WORKING_SLOT_ID = '__working__';
 const metricLabels:Record<keyof DesignMetrics,string>={parts:'Fiziksel parça',panelsAreaM2:'Net üretim levhası (m²)',physicalShelfAreaM2:'Fiziksel raf yüzeyi (m²)',hangingMm:'Kullanılabilir askı boyu (mm)',shelfAreaM2:'Net depolama rafı ve tabanı (m²)',drawerLitres:'Çekmece neti (L)',storageLitres:'Depolama hacmi (L)',doors:'Kapak kanadı',drawers:'Çekmece',errors:'Kritik hata',warnings:'Uyarı / uzman',inventoryShortfall:'Envanter eksik adet'};
 
@@ -87,6 +87,9 @@ export function VersionPanel() {
   const [showCompare,setShowCompare]=useState(false);
   const comparisonSourceAId = useId();
   const comparisonSourceId = useId();
+  const newNameErrorId = useId();
+  const renameErrorId = useId();
+  const fileReadSerial = useRef(0);
   const [request,setRequest]=useState(''),[prompt,setPrompt]=useState(''),[raw,setRaw]=useState(''),[preview,setPreview]=useState<ImportPreview|null>(null),[importName,setImportName]=useState('AI önerisi'),[savedImport,setSavedImport]=useState<string|null>(null);
   useEffect(()=>{void hydrate();},[hydrate]);
   const activeVersion=versions.find(v=>designSignature(v.design)===designSignature(design)),selected=versions.find(v=>v.id===chosen),other=versions.find(v=>v.id===compare);
@@ -107,9 +110,18 @@ export function VersionPanel() {
     <div className="studio-card space-y-2 rounded border border-slate-700/80 bg-slate-900/50 p-2.5">
       <label className="block space-y-1 text-[11px] font-medium text-slate-200">
         Yeni sürüm kaydet
-        <input aria-label="Yeni sürüm adı" className={input} value={name} placeholder="Örn. A — üç raylı çözüm" maxLength={100} onChange={e=>{setName(e.target.value);if(newNameError)setNewNameError('');}}/>
+        <input
+          aria-label="Yeni sürüm adı"
+          aria-invalid={newNameError ? true : undefined}
+          aria-describedby={newNameError ? newNameErrorId : undefined}
+          className={`${input} ${newNameError ? 'border-rose-500' : ''}`}
+          value={name}
+          placeholder="Örn. A — üç raylı çözüm"
+          maxLength={100}
+          onChange={e=>{setName(e.target.value);if(newNameError)setNewNameError('');}}
+        />
       </label>
-      {newNameError && <p role="alert" className="text-[11px] text-rose-300">{newNameError}</p>}
+      {newNameError && <p id={newNameErrorId} role="alert" className="text-[11px] text-rose-300">{newNameError}</p>}
       <button type="button" className={`${button} w-full`} onClick={()=>{
         const trimmed = name.trim();
         if (!trimmed) {
@@ -123,7 +135,15 @@ export function VersionPanel() {
       }}>Aktif tasarımı yeni sürüm kaydet</button>
     </div>
     <div className="studio-card space-y-2 rounded border border-slate-700/80 bg-slate-900/50 p-2.5">
-      <label className="flex items-center gap-2 text-[11px] text-slate-300"><input type="checkbox" checked={archived} onChange={e=>setShowArchived(e.target.checked)}/>Arşivlenenleri de göster</label>
+      <label className="flex items-center gap-2 text-[11px] text-slate-300"><input type="checkbox" checked={archived} onChange={e=>{
+        const nextShowArchived = e.target.checked;
+        setShowArchived(nextShowArchived);
+        if (!nextShowArchived && selected?.archived) {
+          setChosen('');
+          setRenameDraft('');
+          setRenameError('');
+        }
+      }}/>Arşivlenenleri de göster</label>
       <select aria-label="Kayıtlı sürümler" className={input} value={chosen} onChange={e=>{
         const nextId = e.target.value;
         setChosen(nextId);
@@ -137,7 +157,15 @@ export function VersionPanel() {
           <label className="block space-y-1 text-[11px] text-slate-300">
             Seçili sürümün adını değiştir
             <div className="flex gap-1.5">
-              <input aria-label="Seçili sürümün yeni adı" className={input} value={renameDraft} maxLength={100} onChange={e=>{setRenameDraft(e.target.value);if(renameError)setRenameError('');}}/>
+              <input
+                aria-label="Seçili sürümün yeni adı"
+                aria-invalid={renameError ? true : undefined}
+                aria-describedby={renameError ? renameErrorId : undefined}
+                className={`${input} ${renameError ? 'border-rose-500' : ''}`}
+                value={renameDraft}
+                maxLength={100}
+                onChange={e=>{setRenameDraft(e.target.value);if(renameError)setRenameError('');}}
+              />
               <button type="button" className={`${button} shrink-0`} onClick={()=>{
                 const trimmed = renameDraft.trim();
                 if (!trimmed) {
@@ -151,11 +179,19 @@ export function VersionPanel() {
               }}>Adı değiştir</button>
             </div>
           </label>
-          {renameError && <p role="alert" className="text-[11px] text-rose-300">{renameError}</p>}
+          {renameError && <p id={renameErrorId} role="alert" className="text-[11px] text-rose-300">{renameError}</p>}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button type="button" className={button} onClick={()=>{setMessage(open(selected.design,selected.name) ? 'Sürüm açıldı. Önceki çalışma kopyası Geri Al ile geri gelir.' : useWardrobeStore.getState().commandError ?? 'Sürüm açılamadı.');}}>Bu sürümü aç (Geri Al var)</button>
-          <button type="button" className={button} onClick={()=>setArchived(selected.id,!selected.archived)}>{selected.archived?'Arşivden çıkar':'Arşivle'}</button>
+          <button type="button" className={button} onClick={()=>{
+            const nextArchived = !selected.archived;
+            setArchived(selected.id, nextArchived);
+            if (nextArchived && !archived) {
+              setChosen('');
+              setRenameDraft('');
+              setRenameError('');
+            }
+          }}>{selected.archived?'Arşivden çıkar':'Arşivle'}</button>
           <button type="button" className={`${button} col-span-2`} onClick={()=>downloadFile(`${safeFileName(selected.name)}.json`,JSON.stringify(selected.design,null,2),'application/json;charset=utf-8')}>Sürüm JSON indir</button>
         </div>
       </div>}
@@ -223,12 +259,22 @@ export function VersionPanel() {
       </div>
     </StudioDialog>}
     <details className="studio-card rounded border border-sky-800 p-2.5"><summary className="cursor-pointer font-semibold text-sky-200">Dış AI · tam JSON gidiş / dönüş</summary><div className="mt-3 space-y-2">
-      <p className="studio-helper text-[11px] leading-relaxed text-slate-400">Bu araç dış servise bağlanmaz. Hazırlanan metni seçtiğiniz AI aracına kendiniz götürün; dönen tam Design JSON'u önizleyin. Geçerli öneri önce ayrı bir sürüm olur.</p>
+      <p className="studio-helper text-[11px] leading-relaxed text-slate-400">Bu araç dış servise bağlanmaz. Hazırlanan metni seçtiğiniz AI aracına kendiniz götürün; dönen tam tasarım JSON'unu önizleyin. Geçerli öneri önce ayrı bir sürüm olur.</p>
       <textarea aria-label="AI tasarım isteği" className={input} rows={3} placeholder="Bu tasarımda ne değişsin?" value={request} onChange={e=>setRequest(e.target.value)}/>
       <button type="button" className={`${button} w-full`} onClick={()=>{const value=buildExternalAiPrompt(design,request);setPrompt(value);void copy(value);}}>Tam JSON ve talimatları hazırla / kopyala</button>
       {prompt&&<textarea aria-label="AI için kopyalanacak tam metin" readOnly className={`${input} font-mono text-[11px]`} rows={5} value={prompt} onFocus={e=>e.target.select()}/>}
-      <label className="block space-y-1"><span className="text-slate-300">Dönen tam JSON</span><textarea aria-label="AI JSON yanıtı" className={`${input} font-mono text-[11px]`} rows={7} value={raw} onChange={e=>{setRaw(e.target.value);setPreview(null);setSavedImport(null);}}/></label>
-      <label className="block text-[11px] text-slate-300">veya JSON dosyası seçin<input aria-label="AI JSON dosyası" type="file" accept=".json,application/json" className="mt-1 block w-full" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>2000000){setPreview({errors:['JSON en fazla 2 MB olabilir.'],warnings:[]});return;}void file.text().then(t=>{setRaw(t);setPreview(previewDesignJson(t));setSavedImport(null);});e.target.value='';}}/></label>
+      <label className="block space-y-1"><span className="text-slate-300">Dönen tam JSON</span><textarea aria-label="AI JSON yanıtı" className={`${input} font-mono text-[11px]`} rows={7} value={raw} onChange={e=>{fileReadSerial.current++;setRaw(e.target.value);setPreview(null);setSavedImport(null);}}/></label>
+      <label className="block text-[11px] text-slate-300">veya JSON dosyası seçin<input aria-label="AI JSON dosyası" type="file" accept=".json,application/json" className="mt-1 block w-full" onChange={e=>{
+        const file=e.target.files?.[0];
+        e.target.value='';
+        if(!file)return;
+        if(file.size>2000000){setPreview({errors:['JSON en fazla 2 MB olabilir.'],warnings:[]});return;}
+        const serial=++fileReadSerial.current;
+        void file.text().then(
+          t=>{if(serial!==fileReadSerial.current)return;setRaw(t);setPreview(previewDesignJson(t));setSavedImport(null);},
+          ()=>{if(serial!==fileReadSerial.current)return;setPreview({errors:['JSON dosyası okunamadı. Dosya erişimini kontrol edip tekrar seçin.'],warnings:[]});setSavedImport(null);}
+        );
+      }}/></label>
       <button type="button" className={`${button} w-full`} onClick={()=>{setPreview(previewDesignJson(raw));setSavedImport(null);}}>JSON doğrula ve önizle</button>
       {preview&&<div role="status" className="space-y-2 rounded border border-slate-700 p-2.5">{preview.errors.length?<><p className="font-semibold text-red-300">Kaydedilemez · {preview.errors.length} hata</p><ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-red-200">{preview.errors.map((e,i)=><li key={i}>{e}</li>)}</ul></>:preview.design&&<><p className="font-semibold text-emerald-200">Geçerli öneri: {preview.design.name}</p><p className="text-[11px] text-slate-400">{preview.resolved?.bays.length} bölme · {preview.resolved?.doors.length??0} menteşeli / {preview.resolved?.slidingDoors?.length??0} sürgülü kanat · {preview.warnings.length} uyarı/uzman notu</p><MiniDesign design={preview.design}/><input aria-label="Öneri sürüm adı" className={input} value={importName} onChange={e=>setImportName(e.target.value)}/><button type="button" className={`${button} w-full`} disabled={!!savedImport} onClick={()=>{const id=save(importName,preview.design!,'json');if(id){setSavedImport(id);setChosen(id);setRenameDraft(importName.trim()||'AI önerisi');setMessage('Öneri ayrı sürüm olarak arşive eklendi.');}}}>Öneriyi yeni sürüm kaydet</button>{savedImport&&<button type="button" className={`${button} w-full border-amber-500`} onClick={()=>{const version=versions.find(v=>v.id===savedImport);if(version){setMessage(open(version.design,version.name) ? 'Öneri aktif çalışma olarak açıldı. Geri Al ile önceki tasarıma dönebilirsiniz.' : useWardrobeStore.getState().commandError ?? 'Öneri açılamadı.');}}}>Kaydedilen öneriyi aktif tasarım olarak aç</button>}</>}{preview.warnings.length>0&&<details><summary className="text-[11px] text-amber-200">Uyarıları incele ({preview.warnings.length})</summary><ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-slate-400">{preview.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul></details>}</div>}
     </div></details>

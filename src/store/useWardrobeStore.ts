@@ -48,7 +48,7 @@ import {
   updateDrawerFrontHeightInDesign,
   updateLeafSizeInParent,
 } from '../core/solver/treeMutator';
-import { STANDARD_SERVICE_ITEMS } from '../core/inserts/insertRegistry';
+import { INSERT_REGISTRY, STANDARD_SERVICE_ITEMS } from '../core/inserts/insertRegistry';
 import { applyStorageTemplateToDesign, copyBayInDesign, mirrorBayInDesign } from '../core/inserts/storageTemplates';
 import { DEFAULT_PROFILES } from '../core/analysis/studioAnalysis';
 import { automaticBayFront, configureFrontInDesign, splitFrontRangeInDesign } from '../core/fronts/frontCommands';
@@ -188,6 +188,7 @@ interface WardrobeState {
   doorEditorMode: boolean;
   selectedDoorId: string | null;
   selectedDoorIds: string[];
+  selectedFrontId: string | null;
   /** Aşama 2.4: 3D Kamera görünümü sıfırlama sayacı */
   cameraResetTick: number;
   /** Aşama 2.3: Dikdörtgen seçim çerçevesi sürüklenirken canlı vurgulanan hücreler */
@@ -226,6 +227,7 @@ interface WardrobeState {
   clearDrawerSelection: () => void;
   setDoorEditorMode: (active: boolean) => void;
   selectDoor: (doorId: string | null, bayId?: string | null, additive?: boolean) => void;
+  setSelectedFrontId: (frontId: string | null) => void;
   setHoveredMarqueeCells: (cellIds: string[]) => void;
   setMultiSelectToolActive: (active: boolean) => void;
   clearCellSelection: () => void;
@@ -358,6 +360,87 @@ interface WardrobeState {
 
 const defaultInitialDesign = structuredClone(SAMPLE_DESIGNS['straight-wardrobe']);
 
+const RUN_DIM_LABELS: Record<'lengthMm' | 'depthMm' | 'heightMm' | 'plinthHeightMm' | 'topFillerHeightMm', string> = {
+  lengthMm: 'uzunluğu',
+  depthMm: 'derinliği',
+  heightMm: 'yüksekliği',
+  plinthHeightMm: 'baza yüksekliği',
+  topFillerHeightMm: 'üst dolgu yüksekliği',
+};
+
+const CORNER_PARAM_LABELS: Record<'diagonalArmAMm' | 'diagonalArmBMm' | 'fillerWidthMm' | 'shelvesCount', string> = {
+  diagonalArmAMm: 'Köşe A kolu',
+  diagonalArmBMm: 'Köşe B kolu',
+  fillerWidthMm: 'Kör köşe klapası',
+  shelvesCount: 'Köşe raf sayısı',
+};
+
+const CORNER_DOOR_LABELS: Record<'left' | 'right' | 'open', string> = {
+  left: 'Sol menteşe',
+  right: 'Sağ menteşe',
+  open: 'Açık',
+};
+
+const FRONT_MODE_LABELS: Record<BayFrontMode, string> = {
+  auto: 'Otomatik',
+  singleLeft: 'Sol menteşe',
+  singleRight: 'Sağ menteşe',
+  double: 'Çift kanat',
+  open: 'Açık',
+  sliding: 'Sürgülü',
+};
+
+const OWNER_LABELS: Record<OwnerType, string> = {
+  anne: 'Anne',
+  baba: 'Baba',
+  ortak: 'Ortak',
+};
+
+function humanRunLabel(design: Design, runId: string): string {
+  const run = design.runs.find((r) => r.id === runId);
+  if (run) return `${run.wallAxis} Kolu`;
+  if (runId === 'run-A') return 'A Kolu';
+  if (runId === 'run-B') return 'B Kolu';
+  return 'Duvar Kolu';
+}
+
+function humanBayLabel(design: Design, bayId: string): string {
+  for (const run of design.runs) {
+    const bay = run.bays.find((b) => b.id === bayId);
+    if (bay) {
+      const short = bay.label.split(/[:—]/)[0]?.trim();
+      return short || bay.label;
+    }
+  }
+  return 'Bölme';
+}
+
+function humanCellLabel(resolved: ResolvedModel, cellId: string): string {
+  const cell = resolved.cells.find((c) => c.id === cellId);
+  if (cell?.label && !cell.label.startsWith('cell-')) return cell.label;
+  return 'Hücre';
+}
+
+function sanitizeCommandError(error: unknown): string {
+  if (error instanceof ZodError) {
+    const first = error.issues[0];
+    if (first?.path?.includes('bayIds')) {
+      return 'Kapak aralığı en az bir bölme kapsamalıdır.';
+    }
+    if (first?.code === 'custom' && first.message) {
+      return first.message;
+    }
+    return 'Ölçü veya tasarım ayarı geçersiz.';
+  }
+  if (error instanceof Error) {
+    return error.message
+      .replace(/:\s*front-[a-z0-9-]+/gi, '')
+      .replace(/\bfront-[a-z0-9-]+:\s*/gi, '')
+      .trim() || 'Ölçü veya tasarım geçersiz.';
+  }
+  return 'Ölçü veya tasarım geçersiz.';
+}
+
 function formatNowTime(): string {
   return new Date().toLocaleTimeString('tr-TR', {
     hour: '2-digit',
@@ -426,6 +509,92 @@ function readSyncSessionFromLocalStorage(): { session: PersistedStudioSession | 
 export const useWardrobeStore = create<WardrobeState>((set, get) => {
   let transactionActive = false;
   let transactionRecorded = false;
+  const resetHistoryTransaction = () => {
+    transactionActive = false;
+    transactionRecorded = false;
+  };
+  const pruneSelectionForResolved = (
+    state: WardrobeState,
+    nextDesign: Design,
+    nextResolved: ResolvedModel,
+    options?: { exitDoorEditor?: boolean; resetSelection?: boolean; fallbackToFirstCell?: boolean }
+  ) => {
+    const exitDoorEditor = Boolean(options?.exitDoorEditor);
+    const resetSelection = Boolean(options?.resetSelection);
+    const fallbackToFirstCell = Boolean(options?.fallbackToFirstCell);
+    const validCellSet = new Set(nextResolved.cells.map((c) => c.id));
+    const validDrawerSet = new Set(nextResolved.drawers.map((d) => d.id));
+    const validDoorSet = new Set([
+      ...nextResolved.doors.map((d) => d.id),
+      ...(nextResolved.slidingDoors ?? []).map((d) => d.id),
+    ]);
+    const validBaySet = new Set(nextResolved.bays.map((b) => b.id));
+    const validFrontSet = new Set((nextDesign.fronts ?? []).map((f) => f.id));
+
+    const validBayId =
+      !resetSelection && state.selectedBayId && validBaySet.has(state.selectedBayId)
+        ? state.selectedBayId
+        : nextResolved.bays[0]?.id ?? null;
+
+    const validDrawerIds = resetSelection
+      ? []
+      : state.selectedDrawerIds.filter((id) => validDrawerSet.has(id));
+    const validDoorIds =
+      resetSelection || exitDoorEditor
+        ? []
+        : state.selectedDoorIds.filter((id) => validDoorSet.has(id));
+    const nextFrontId =
+      resetSelection || exitDoorEditor
+        ? null
+        : state.selectedFrontId && validFrontSet.has(state.selectedFrontId)
+          ? state.selectedFrontId
+          : null;
+
+    const keepDoorEditor = state.doorEditorMode && !exitDoorEditor;
+    const validSelectedCells =
+      resetSelection || keepDoorEditor
+        ? []
+        : state.selectedCellIds.filter((id) => validCellSet.has(id));
+    const firstCellForBay =
+      nextResolved.cells.find((c) => c.bayId === validBayId)?.id ??
+      nextResolved.cells[0]?.id ??
+      null;
+    const shouldFallbackCell =
+      fallbackToFirstCell &&
+      !keepDoorEditor &&
+      validDrawerIds.length === 0 &&
+      validDoorIds.length === 0;
+    const nextSelectedCells =
+      validSelectedCells.length > 0
+        ? validSelectedCells
+        : shouldFallbackCell && firstCellForBay
+          ? [firstCellForBay]
+          : [];
+
+    const nextOpenDoorIds = resetSelection
+      ? {}
+      : Object.fromEntries(Object.entries(state.openDoorIds).filter(([id]) => validDoorSet.has(id)));
+    const nextOpenDrawerIds = resetSelection
+      ? {}
+      : Object.fromEntries(Object.entries(state.openDrawerIds).filter(([id]) => validDrawerSet.has(id)));
+
+    return {
+      ...(exitDoorEditor ? { doorEditorMode: false } : {}),
+      selectedBayId: validBayId,
+      selectedCellIds: nextSelectedCells,
+      selectedCellId: nextSelectedCells[0] ?? null,
+      selectedDrawerIds: validDrawerIds,
+      selectedDrawerId: validDrawerIds[0] ?? null,
+      selectedDoorIds: validDoorIds,
+      selectedDoorId: validDoorIds[0] ?? null,
+      selectedFrontId: nextFrontId,
+      openDoorIds: nextOpenDoorIds,
+      openDrawerIds: nextOpenDrawerIds,
+      ...(resetSelection || !nextResolved.slidingDoors?.length ? { hasOpenSlidingLeaf: false } : {}),
+      hoveredMarqueeCellIds: [],
+      resizeDraft: null,
+    };
+  };
   let sessionRevision = 0;
   let hydrationRequest = 0;
   let indexedWrites = Promise.resolve();
@@ -502,7 +671,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       if (keepLegacyAnchors) retainLegacyBodyAnchors(currentDesign, draft);
       nextDesign = normalizeAndValidateDesign(draft);
     } catch (error) {
-      set({ commandError: error instanceof Error ? error.message : 'Ölçü veya tasarım geçersiz.' });
+      set({ commandError: sanitizeCommandError(error) });
       return false;
     }
     const nextResolved = solveDesign(nextDesign);
@@ -523,35 +692,17 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     if (transactionActive) transactionRecorded = true;
     const nextFuture: HistoryEntry[] = [];
 
-    const validSelectedIds = get().selectedCellIds.filter((id) =>
-      nextResolved.cells.some((c) => c.id === id)
-    );
-    const validDrawerIds = get().selectedDrawerIds.filter((id) =>
-      nextResolved.drawers.some((d) => d.id === id)
-    );
-    const validDoorIds = get().selectedDoorIds.filter((id) =>
-      nextResolved.doors.some((d) => d.id === id) || nextResolved.slidingDoors?.some(d=>d.id===id)
-    );
-    const doorIds = new Set([...nextResolved.doors, ...(nextResolved.slidingDoors ?? [])].map(door => door.id));
-    const drawerIds = new Set(nextResolved.drawers.map(drawer => drawer.id));
+    const state = get();
+    const pruned = pruneSelectionForResolved(state, nextDesign, nextResolved);
 
     set({
       design: nextDesign,
       resolved: nextResolved,
       historyPast: nextPast,
       historyFuture: nextFuture,
-      hasUnsavedChanges: !sameDesign(nextDesign, get().checkpointDesign),
+      hasUnsavedChanges: !sameDesign(nextDesign, state.checkpointDesign),
       commandError: null,
-      selectedCellIds: validSelectedIds,
-      selectedCellId: validSelectedIds[0] ?? null,
-      selectedDrawerIds: validDrawerIds,
-      selectedDrawerId: validDrawerIds[0] ?? null,
-      selectedDoorIds: validDoorIds,
-      selectedDoorId: validDoorIds[0] ?? null,
-      openDoorIds: Object.fromEntries(Object.entries(get().openDoorIds).filter(([id]) => doorIds.has(id))),
-      openDrawerIds: Object.fromEntries(Object.entries(get().openDrawerIds).filter(([id]) => drawerIds.has(id))),
-      ...(nextResolved.slidingDoors?.length ? {} : { hasOpenSlidingLeaf: false }),
-      resizeDraft: null,
+      ...pruned,
     });
 
     saveCurrentStateToStorage(
@@ -570,8 +721,16 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       return applyCommand('İşlevsel erişim düzeni uygulandı', draft => changeAccessLayout(draft, remedy));
     },
     openNamedVersion:(design,name)=>{
+      resetHistoryTransaction();
       if (!applyCommand(`Sürüm açıldı: ${name}`,()=>structuredClone(design),false)) return false;
-      set({selectedBayId:design.runs[0]?.bays[0]?.id??null,selectedCellId:null,selectedCellIds:[],selectedDrawerId:null,selectedDrawerIds:[],selectedDoorId:null,selectedDoorIds:[],openDoorIds:{},openDrawerIds:{},hasOpenSlidingLeaf:false,motionNotice:null});
+      const state = get();
+      set({
+        ...pruneSelectionForResolved(state, state.design, state.resolved, { exitDoorEditor: true, resetSelection: true }),
+        commandError: null,
+        motionNotice: null,
+        motionRecovery: null,
+        motionRecoveryOffer: null,
+      });
       return true;
     },
     updateRoomHeight: (field, valueMm) => {
@@ -596,7 +755,23 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     })),
     notifyMotion:motionNotice=>{const current=get().motionNotice;if(current?.id!==motionNotice?.id||current?.reason!==motionNotice?.reason)set({motionNotice});},
     configureFrontSystem:(bayId,frontId,type,sliding)=>{const model=get().resolved;applyCommand('Kapak sistemi değiştirildi',draft=>{configureFrontInDesign(draft,model,bayId,frontId,type,sliding);});},
-    patchFrontSystem:(frontId,patch)=>{applyCommand('Kapak kapsamı ve ray ayarları',draft=>{const front=draft.fronts.find(f=>f.id===frontId);if(!front)throw new Error('Kapak aralığı bulunamadı.');Object.assign(front,patch);});},
+    patchFrontSystem:(frontId,patch)=>{applyCommand('Kapak kapsamı ve ray ayarları',draft=>{
+      const front=draft.fronts.find(f=>f.id===frontId);
+      if(!front)throw new Error('Kapak aralığı bulunamadı.');
+      if (patch.bayIds !== undefined) {
+        if (patch.bayIds.length === 0) {
+          throw new Error('Kapak aralığı en az bir bölme kapsamalıdır.');
+        }
+        const run = draft.runs.find(item => item.id === front.runId);
+        const indices = patch.bayIds
+          .map(id => run?.bays.findIndex(bay => bay.id === id) ?? -1)
+          .sort((x, y) => x - y);
+        if (indices[0] < 0 || indices.some((n, i) => i > 0 && n !== indices[i - 1] + 1)) {
+          throw new Error('Ortak kapak yalnızca aynı koldaki bitişik bölmeleri örtebilir.');
+        }
+      }
+      Object.assign(front,patch);
+    });},
     splitFrontSystem:frontId=>{applyCommand('Kapak üst/alt sisteme ayrıldı',draft=>splitFrontRangeInDesign(draft,frontId));},
     removeFrontSystem:frontId=>{applyCommand('Kapak aralığı açıldı',draft=>{const f=draft.fronts.find(f=>f.id===frontId);if(f){f.type='open';delete f.sliding;}});},
     analysisOverlay:'none',showRoomObstacles:true,showMotionSweeps:false,eyeLevelOwner:null,eyeCameraTick:0,selectedObstacleId:null,
@@ -612,7 +787,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       });
       if(get().eyeLevelOwner===owner) set(s=>({eyeCameraTick:s.eyeCameraTick+1}));
     },
-    setRunConstructionMode: (id,mode) => { applyCommand(`${id}: ${mode==='shared'?'Paylaşımlı dikme':'Ayrı gövdeler'}`,draft=>{const run=draft.runs.find(r=>r.id===id);if(run)run.constructionMode=mode;}); },
+    setRunConstructionMode: (id,mode) => { applyCommand(`${humanRunLabel(get().design, id)}: ${mode==='shared'?'Paylaşımlı dikme':'Ayrı gövdeler'}`,draft=>{const run=draft.runs.find(r=>r.id===id);if(run)run.constructionMode=mode;}); },
     setCornerOwner: (id,owner) => {applyCommand('Köşe sahipliği',draft=>{const j=draft.junctions.find(j=>j.id===id);if(j)j.owner=owner;});},
     setCornerHangingRod: (junctionId, enabled) => {
       applyCommand('Beşgen köşe askı borusu', draft => {
@@ -680,6 +855,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     doorEditorMode: false,
     selectedDoorId: null,
     selectedDoorIds: [],
+    selectedFrontId: null,
     cameraResetTick: 0,
     hoveredMarqueeCellIds: [],
     multiSelectToolActive: false,
@@ -695,16 +871,40 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     setViewMode: (viewMode) => set({ viewMode }),
     triggerCameraReset: () => set((s) => ({ cameraResetTick: s.cameraResetTick + 1, eyeLevelOwner:null })),
-    setActiveStep: (activeStep) => set(activeStep === 'view-export' || activeStep === 'versions-production'
-      ? { activeStep, doorEditorMode: false, selectedDoorId: null, selectedDoorIds: [],
-        selectedCellId: null, selectedCellIds: [], selectedDrawerId: null, selectedDrawerIds: [], resizeDraft: null }
-      : { activeStep }),
+    setActiveStep: (activeStep) => {
+      resetHistoryTransaction();
+      set(activeStep === 'view-export' || activeStep === 'versions-production'
+        ? { activeStep, doorEditorMode: false, selectedDoorId: null, selectedDoorIds: [], selectedFrontId: null,
+          selectedCellId: null, selectedCellIds: [], selectedDrawerId: null, selectedDrawerIds: [], resizeDraft: null }
+        : { activeStep });
+    },
     setDoorVisibilityMode: (doorVisibilityMode) => set({ doorVisibilityMode }),
     setRenderQualityMode: (renderQualityMode) => set({ renderQualityMode }),
     setShowDimensions: (showDimensions) => set({ showDimensions }),
     setWireframeMode: (wireframeMode) => set({ wireframeMode }),
     selectBay: (selectedBayId) => {
-      const firstCell = get().resolved.cells.find((c) => c.bayId === selectedBayId);
+      const state = get();
+      if (state.doorEditorMode) {
+        const firstDoorInBay = selectedBayId
+          ? state.resolved.doors.find((d) => d.bayId === selectedBayId) ??
+            state.resolved.slidingDoors?.find(
+              (d) => d.bayId === selectedBayId || d.bayIds.includes(selectedBayId)
+            )
+          : undefined;
+        set({
+          selectedBayId,
+          selectedCellId: null,
+          selectedCellIds: [],
+          selectedDrawerId: null,
+          selectedDrawerIds: [],
+          selectedDoorId: firstDoorInBay?.id ?? null,
+          selectedDoorIds: firstDoorInBay ? [firstDoorInBay.id] : [],
+          selectedFrontId: null,
+          resizeDraft: null,
+        });
+        return;
+      }
+      const firstCell = state.resolved.cells.find((c) => c.bayId === selectedBayId);
       const nextCellId = firstCell ? firstCell.id : null;
       set({
         selectedBayId,
@@ -714,6 +914,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         selectedDrawerIds: [],
         selectedDoorId: null,
         selectedDoorIds: [],
+        selectedFrontId: null,
         resizeDraft: null,
       });
     },
@@ -727,6 +928,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
             selectedDrawerIds: [],
             selectedDoorId: null,
             selectedDoorIds: [],
+            selectedFrontId: null,
             selectedBayId: bayId !== undefined ? bayId : s.selectedBayId,
             resizeDraft: null,
           };
@@ -745,6 +947,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
             selectedDrawerIds: [],
             selectedDoorId: null,
             selectedDoorIds: [],
+            selectedFrontId: null,
             selectedBayId: primaryCell?.bayId ?? (bayId !== undefined ? bayId : s.selectedBayId),
             resizeDraft: null,
           };
@@ -756,6 +959,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           selectedDrawerIds: [],
           selectedDoorId: null,
           selectedDoorIds: [],
+          selectedFrontId: null,
           selectedBayId: bayId !== undefined ? bayId : s.selectedBayId,
           resizeDraft: null,
         };
@@ -775,6 +979,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           selectedDrawerIds: [],
           selectedDoorId: null,
           selectedDoorIds: [],
+          selectedFrontId: null,
           selectedBayId: primaryCell?.bayId ?? (bayId !== undefined ? bayId : s.selectedBayId),
           hoveredMarqueeCellIds: [],
           resizeDraft: null,
@@ -810,6 +1015,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
             selectedCellIds: [],
             selectedDoorId: null,
             selectedDoorIds: [],
+            selectedFrontId: null,
             selectedBayId: primaryDrw?.bayId ?? drw.bayId,
             resizeDraft: null,
           };
@@ -822,6 +1028,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           selectedCellIds: [],
           selectedDoorId: null,
           selectedDoorIds: [],
+          selectedFrontId: null,
           selectedBayId: drw.bayId,
           resizeDraft: null,
         };
@@ -840,6 +1047,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
             doorEditorMode: false,
             selectedDoorId: null,
             selectedDoorIds: [],
+            selectedFrontId: null,
           };
         }
         const firstDoorInBay =
@@ -857,6 +1065,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           doorVisibilityMode: s.doorVisibilityMode === 'hidden' ? 'normal' : s.doorVisibilityMode,
           selectedDoorId: firstDoorInBay?.id ?? null,
           selectedDoorIds: firstDoorInBay ? [firstDoorInBay.id] : [],
+          selectedFrontId: null,
           selectedCellId: null,
           selectedCellIds: [],
           selectedDrawerId: null,
@@ -868,10 +1077,13 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     selectDoor: (doorId, bayId, additive = false) =>
       set((s) => {
         if (!doorId) {
+          const nextBayId = bayId !== undefined ? bayId : s.selectedBayId;
+          const bayChanged = nextBayId !== s.selectedBayId;
           return {
             selectedDoorId: null,
             selectedDoorIds: [],
-            selectedBayId: bayId !== undefined ? bayId : s.selectedBayId,
+            selectedBayId: nextBayId,
+            ...(bayChanged ? { selectedFrontId: null } : {}),
           };
         }
         const door = s.resolved.doors.find((d) => d.id === doorId) ?? s.resolved.slidingDoors?.find(d=>d.id===doorId);
@@ -885,6 +1097,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           return {
             selectedDoorId: primaryId,
             selectedDoorIds: nextIds,
+            selectedFrontId: null,
             selectedCellId: null,
             selectedCellIds: [],
             selectedDrawerId: null,
@@ -895,6 +1108,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         return {
           selectedDoorId: doorId,
           selectedDoorIds: [doorId],
+          selectedFrontId: null,
           selectedCellId: null,
           selectedCellIds: [],
           selectedDrawerId: null,
@@ -902,6 +1116,8 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           selectedBayId: door?.bayId ?? bayId ?? s.selectedBayId,
         };
       }),
+
+    setSelectedFrontId: (selectedFrontId) => set({ selectedFrontId }),
 
     setHoveredMarqueeCells: (hoveredMarqueeCellIds) => set({ hoveredMarqueeCellIds }),
 
@@ -920,6 +1136,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         selectedDrawerIds: [],
         selectedDoorId: null,
         selectedDoorIds: [],
+        selectedFrontId: null,
         hoveredMarqueeCellIds: [],
         resizeDraft: null,
       }),
@@ -1023,24 +1240,25 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     loadPreset: (presetId) => {
       const target = SAMPLE_DESIGNS[presetId];
       if (!target) return;
+      resetHistoryTransaction();
       const cloned = structuredClone(target);
       const nextResolved = solveDesign(cloned);
-      const firstBay = nextResolved.bays[0]?.id ?? null;
-      const firstCell = nextResolved.cells.find((c) => c.bayId === firstBay)?.id ?? null;
       const now = formatNowTime();
+      const state = get();
 
       set({
         design: cloned,
         checkpointDesign: structuredClone(cloned),
         resolved: nextResolved,
-        selectedBayId: firstBay,
-        selectedCellId: firstCell,
-        selectedCellIds: firstCell ? [firstCell] : [],
-        hoveredMarqueeCellIds: [],
-        resizeDraft: null,
-        openDoorIds: {},
-        openDrawerIds: {},
-        hasOpenSlidingLeaf: false,
+        ...pruneSelectionForResolved(state, cloned, nextResolved, {
+          exitDoorEditor: true,
+          resetSelection: true,
+          fallbackToFirstCell: true,
+        }),
+        commandError: null,
+        motionNotice: null,
+        motionRecovery: null,
+        motionRecoveryOffer: null,
         historyPast: [],
         historyFuture: [],
         hasUnsavedChanges: false,
@@ -1051,25 +1269,27 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     startBlankDesign: (options) => {
+      resetHistoryTransaction();
       const blank = createBlankDesign({
         ...options,
         autoFitBayCount: options.autoFitBayCount ?? true,
       });
       if (!applyCommand(`Sıfırdan Boş Tasarım: ${blank.name}`, () => blank)) return;
-      const firstBay = get().resolved.bays[0]?.id ?? null;
+      const state = get();
       set({
-        selectedBayId: firstBay,
-        selectedCellId: null,
-        selectedCellIds: [],
-        hoveredMarqueeCellIds: [],
-        resizeDraft: null,
-        openDoorIds: {},
-        openDrawerIds: {},
-        hasOpenSlidingLeaf: false,
+        ...pruneSelectionForResolved(state, state.design, state.resolved, {
+          exitDoorEditor: true,
+          resetSelection: true,
+        }),
+        commandError: null,
+        motionNotice: null,
+        motionRecovery: null,
+        motionRecoveryOffer: null,
       });
     },
 
     saveCheckpoint: () => {
+      resetHistoryTransaction();
       const state = get();
       const currentDesign = structuredClone(state.design);
       const now = formatNowTime();
@@ -1090,7 +1310,8 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     updateRunDimension: (runId, field, valueMm) => {
       const cleanInt = Math.round(valueMm);
-      applyCommand(`${runId} ${field} = ${cleanInt} mm`, (draft) => {
+      const runLabel = humanRunLabel(get().design, runId);
+      applyCommand(`${runLabel} ${RUN_DIM_LABELS[field]}: ${cleanInt} mm`, (draft) => {
         const run = draft.runs.find((r) => r.id === runId);
         if (!run) return;
         run[field] = cleanInt;
@@ -1142,7 +1363,11 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     updateCornerParam: (field, value) => {
       const cleanInt = Math.round(value);
-      applyCommand(`Köşe Parametresi (${field}: ${cleanInt})`, (draft) => {
+      const label =
+        field === 'shelvesCount'
+          ? `${CORNER_PARAM_LABELS[field]}: ${cleanInt}`
+          : `${CORNER_PARAM_LABELS[field]}: ${cleanInt} mm`;
+      applyCommand(label, (draft) => {
         if (draft.junctions.length > 0) {
           draft.junctions[0][field] = cleanInt;
           if (field === 'shelvesCount') delete draft.junctions[0].intervalHeightsMm;
@@ -1151,7 +1376,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     setCornerDoorMode: (doorMode) => {
-      applyCommand(`Köşe Kapak Yönü: ${doorMode}`, (draft) => {
+      applyCommand(`Köşe kapak yönü: ${CORNER_DOOR_LABELS[doorMode]}`, (draft) => {
         if (draft.junctions.length > 0) {
           draft.junctions[0].doorMode = doorMode;
         }
@@ -1162,7 +1387,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       let createdBayId: string | null = null;
       let createdCellId: string | null = null;
 
-      applyCommand(`Yeni Bölme Eklendi (${runId})`, (draft) => {
+      applyCommand(`Yeni bölme eklendi (${humanRunLabel(get().design, runId)})`, (draft) => {
         const run = draft.runs.find((r) => r.id === runId);
         if (!run) return;
         const idx = run.bays.length + 1;
@@ -1254,7 +1479,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       };
 
       const applied = applyCommand(
-        `3D Uçtan Yeni Bölme Eklendi (${runId} - ${starterLabels[starterKind]})`,
+        `Yeni bölme eklendi (${humanRunLabel(get().design, runId)} · ${starterLabels[starterKind]})`,
         (draft) => {
           const run = draft.runs.find((r) => r.id === runId);
           if (!run) return;
@@ -1318,7 +1543,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       const run = get().design.runs.find((r) => r.id === runId);
       if (!run || run.bays.length <= 1) return;
 
-      applyCommand(`Bölme Silindi (${bayId})`, (draft) => {
+      applyCommand(`Bölme silindi (${humanBayLabel(get().design, bayId)})`, (draft) => {
         const targetRun = draft.runs.find((r) => r.id === runId);
         if (!targetRun || targetRun.bays.length <= 1) return;
         targetRun.bays = targetRun.bays.filter((b) => b.id !== bayId);
@@ -1338,7 +1563,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     setBaySize: (runId, bayId, size) => {
       applyCommand(
-        `Bölme Ölçüsü (${bayId}: ${size.kind === 'fixed' ? `${size.mm}mm Sabit` : `Esnek x${size.weight}`})`,
+        `Bölme ölçüsü (${humanBayLabel(get().design, bayId)}: ${size.kind === 'fixed' ? `${size.mm} mm sabit` : `esnek ×${size.weight}`})`,
         (draft) => {
           const run = draft.runs.find((r) => r.id === runId);
           const bay = run?.bays.find((b) => b.id === bayId);
@@ -1350,7 +1575,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     toggleBayLock: (runId, bayId) => {
-      applyCommand(`Bölme Kilidi Değiştirildi (${bayId})`, (draft) => {
+      applyCommand(`Bölme kilidi değiştirildi (${humanBayLabel(get().design, bayId)})`, (draft) => {
         const run = draft.runs.find((r) => r.id === runId);
         const bay = run?.bays.find((b) => b.id === bayId);
         if (bay) {
@@ -1365,7 +1590,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     setBayOwner: (runId, bayId, owner) => {
-      applyCommand(`Bölme Sahibi Güncellendi (${bayId} -> ${owner})`, (draft) => {
+      applyCommand(`Bölme sahibi güncellendi (${humanBayLabel(get().design, bayId)} → ${OWNER_LABELS[owner]})`, (draft) => {
         const run = draft.runs.find((r) => r.id === runId);
         const bay = run?.bays.find((b) => b.id === bayId);
         if (bay) {
@@ -1380,7 +1605,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     setBayFrontConfig: (runId, bayId, frontMode, hingeAngleDeg) => {
-      applyCommand(`Kapak Ayarı Güncellendi (${bayId}: ${frontMode})`, (draft) => {
+      applyCommand(`Kapak ayarı güncellendi (${humanBayLabel(get().design, bayId)}: ${FRONT_MODE_LABELS[frontMode]})`, (draft) => {
         const run = draft.runs.find((r) => r.id === runId);
         const bay = run?.bays.find((b) => b.id === bayId);
         if (bay) {
@@ -1397,7 +1622,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       const resolvedBay = currentResolved.bays.find((b) => b.id === bayId);
       if (!resolvedBay) return;
 
-      applyCommand(`Kapak Editörü Ayarı (${resolvedBay.label} -> ${frontMode})`, (draft) => {
+      applyCommand(`Kapak ayarı güncellendi (${humanBayLabel(get().design, bayId)}: ${FRONT_MODE_LABELS[frontMode]})`, (draft) => {
         if (frontId) {
           const explicitFront = (draft.fronts ?? []).find((f) => f.id === frontId);
           if (explicitFront) {
@@ -1534,7 +1759,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       if (!primaryBay || !run || targetBayIds.length === 0) return;
 
       applyCommand(
-        `Kapak Bölme Kapsamı Güncellendi (${targetBayIds.join(' + ')})`,
+        `Kapak bölme kapsamı güncellendi (${targetBayIds.map((id) => humanBayLabel(get().design, id)).join(' + ')})`,
         (draft) => {
           draft.fronts = (draft.fronts ?? []).filter(
             (f) => !f.bayIds.some((bid) => targetBayIds.includes(bid))
@@ -1559,9 +1784,9 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     splitCell: (cellId, direction, preset = 'equal') => {
-      const dirLabel = direction === 'vertical' ? 'Dikey' : 'Yatay';
+      const dirLabel = direction === 'vertical' ? 'dikey' : 'yatay';
       let createdCellId: string | null = null;
-      applyCommand(`Hücre ${dirLabel} Bölündü (${cellId})`, (draft) => {
+      applyCommand(`Hücre ${dirLabel} bölündü (${humanCellLabel(get().resolved, cellId)})`, (draft) => {
         const res = splitLeafInDesign(draft, cellId, direction, preset);
         createdCellId = res.newPrimaryCellId;
       });
@@ -1583,7 +1808,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     unsplitCell: (cellId) => {
       let mergedCellId: string | null = null;
-      applyCommand(`Hücre Bölünmesi Birleştirildi (${cellId})`, (draft) => {
+      applyCommand(`Hücre bölünmesi birleştirildi (${humanCellLabel(get().resolved, cellId)})`, (draft) => {
         const res = unsplitParentOfLeafInDesign(draft, cellId);
         mergedCellId = res.mergedCellId;
       });
@@ -1601,7 +1826,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     isolateSubInterval: (cellId) => {
       if (!cellId.includes('::sub-')) return;
       let realizedId = cellId;
-      applyCommand(`Raf/Askı Aralığı Bağımsız Hücreye Ayrıldı (${cellId})`, (draft) => {
+      applyCommand(`Raf/askı aralığı bağımsız hücreye ayrıldı (${humanCellLabel(get().resolved, cellId)})`, (draft) => {
         realizedId = realizeSubIntervalInDesign(draft, cellId);
       });
       const nextResolved = get().resolved;
@@ -1618,7 +1843,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     updateCellSizeInSplit: (cellId, size, locked) => {
-      applyCommand(`Alt Hücre Ölçüsü Güncellendi (${cellId})`, (draft) => {
+      applyCommand(`Alt hücre ölçüsü güncellendi (${humanCellLabel(get().resolved, cellId)})`, (draft) => {
         updateLeafSizeInParent(draft, cellId, size, locked);
       });
     },
@@ -1647,7 +1872,8 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
 
     setCellInsert: (cellId, insert, label, owner, isolateSubInterval = false) => {
       let updatedLeafId = cellId;
-      applyCommand(`Modül Atandı (${cellId}: ${insert ? insert.type : 'Boş'})`, (draft) => {
+      const insertLabel = insert ? (INSERT_REGISTRY[insert.type]?.shortTitle ?? 'Modül') : 'Boş';
+      applyCommand(`Modül atandı (${humanCellLabel(get().resolved, cellId)}: ${insertLabel})`, (draft) => {
         updatedLeafId = setCellInsertInDesign(
           draft,
           cellId,
@@ -1687,15 +1913,15 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     equalizeDrawerBankHeights: (cellId) => {
-      applyCommand(`Çekmece Grubu Eşit Yüksekliğe Dağıtıldı (${cellId})`, (draft) => {
+      applyCommand(`Çekmece grubu eşit yüksekliğe dağıtıldı (${humanCellLabel(get().resolved, cellId)})`, (draft) => {
         equalizeDrawerBankInDesign(draft, cellId);
       });
     },
 
     divideCellIntoN: (cellId, direction, count) => {
-      const dirLabel = direction === 'vertical' ? 'Dikey' : 'Yatay';
+      const dirLabel = direction === 'vertical' ? 'dikey' : 'yatay';
       let createdIds: string[] = [];
-      applyCommand(`Hücre ${count} Eşit ${dirLabel} Bölmeye Ayrıldı (${cellId})`, (draft) => {
+      applyCommand(`Hücre ${count} eşit ${dirLabel} bölmeye ayrıldı (${humanCellLabel(get().resolved, cellId)})`, (draft) => {
         const res = divideCellIntoNInDesign(draft, cellId, direction, count);
         createdIds = res.createdCellIds;
       });
@@ -1836,8 +2062,9 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       if (nonCornerIds.length === 0) return;
 
       const updatedLeafIds: string[] = [];
+      const insertLabel = INSERT_REGISTRY[insert.type]?.shortTitle ?? 'Modül';
       applyCommand(
-        `Toplu Modül Atama (${nonCornerIds.length} Hücre → ${insert.type})`,
+        `Toplu modül atama (${nonCornerIds.length} hücre → ${insertLabel})`,
         (draft) => {
           for (const cid of nonCornerIds) {
             const lid = setCellInsertInDesign(
@@ -2290,7 +2517,9 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     undoSteps: (stepCount) => {
-      const { historyPast, historyFuture, design, checkpointDesign, lastCheckpointAt } = get();
+      resetHistoryTransaction();
+      const state = get();
+      const { historyPast, historyFuture, design, checkpointDesign, lastCheckpointAt } = state;
       const count = Math.min(Math.max(1, Math.round(stepCount)), historyPast.length);
       if (count <= 0) return;
 
@@ -2309,20 +2538,14 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       }
 
       const nextResolved = solveDesign(cursorDesign);
-      const validSelIds = get().selectedCellIds.filter((id) =>
-        nextResolved.cells.some((c) => c.id === id)
-      );
-      const fallbackCellId = validSelIds[0] ?? nextResolved.cells[0]?.id ?? null;
-
       set({
         design: cursorDesign,
         resolved: nextResolved,
         historyPast: cursorPast,
         historyFuture: cursorFuture,
         hasUnsavedChanges: !sameDesign(cursorDesign, checkpointDesign),
-        selectedCellIds: validSelIds.length > 0 ? validSelIds : fallbackCellId ? [fallbackCellId] : [],
-        selectedCellId: fallbackCellId,
-        resizeDraft: null,
+        commandError: null,
+        ...pruneSelectionForResolved(state, cursorDesign, nextResolved, { fallbackToFirstCell: true }),
       });
 
       saveCurrentStateToStorage(
@@ -2335,6 +2558,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     revertToCheckpoint: () => {
+      resetHistoryTransaction();
       const state = get();
       if (sameDesign(state.design, state.checkpointDesign)) return;
 
@@ -2363,19 +2587,14 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
             cursorDesign = nextEntry.snapshot;
           }
           const nextResolved = solveDesign(cursorDesign);
-          const validSelIds = state.selectedCellIds.filter((id) =>
-            nextResolved.cells.some((c) => c.id === id)
-          );
-          const fallbackCellId = validSelIds[0] ?? nextResolved.cells[0]?.id ?? null;
           set({
             design: cursorDesign,
             resolved: nextResolved,
             historyPast: cursorPast,
             historyFuture: cursorFuture,
             hasUnsavedChanges: false,
-            selectedCellIds: validSelIds.length > 0 ? validSelIds : fallbackCellId ? [fallbackCellId] : [],
-            selectedCellId: fallbackCellId,
-            resizeDraft: null,
+            commandError: null,
+            ...pruneSelectionForResolved(state, cursorDesign, nextResolved, { fallbackToFirstCell: true }),
           });
           saveCurrentStateToStorage(
             cursorDesign,
@@ -2388,37 +2607,52 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         }
       }
 
-      // 3) Kayıt noktası 50 adımlık geçmiş tamponunun dışına düştüyse doğrudan geri yükle ve Redo yolu bırak
+      // 3) Kayıt noktası terk edilmiş bir Yinele dalında veya 50 adımlık geçmiş tamponunun dışındaysa
+      // önceki geçmişi silmeden geri alınabilir kayıt ekle ve Yinele yolunu koru.
       const restored = structuredClone(state.checkpointDesign);
-      const future: HistoryEntry[] = [{ label:'Checkpoint öncesi çalışma durumunu geri getir', snapshot:state.design }, ...state.historyFuture];
-      set({ design:restored, resolved:solveDesign(restored), historyPast:[], historyFuture:future,
-        hasUnsavedChanges:false, resizeDraft:null, selectedCellId:null, selectedCellIds:[], selectedDrawerId:null,
-        selectedDrawerIds:[], selectedDoorId:null, selectedDoorIds:[], openDoorIds:{}, openDrawerIds:{}, hasOpenSlidingLeaf:false });
-      saveCurrentStateToStorage(restored, state.checkpointDesign, [], future, state.lastCheckpointAt);
+      const nextResolved = solveDesign(restored);
+      const nowMs = Date.now();
+      const nextPast: HistoryEntry[] = [
+        ...state.historyPast.slice(-(MAX_HISTORY_STEPS - 1)),
+        { label: 'Son kayıt noktasına dönüldü', snapshot: state.design, timestampMs: nowMs },
+      ];
+      const nextFuture: HistoryEntry[] = [
+        { label: 'Kayıt noktası öncesi çalışma durumu', snapshot: state.design, timestampMs: nowMs },
+        ...state.historyFuture,
+      ];
+      set({
+        design: restored,
+        resolved: nextResolved,
+        historyPast: nextPast,
+        historyFuture: nextFuture,
+        hasUnsavedChanges: false,
+        commandError: null,
+        ...pruneSelectionForResolved(state, restored, nextResolved, { resetSelection: true }),
+      });
+      saveCurrentStateToStorage(restored, state.checkpointDesign, nextPast, nextFuture, state.lastCheckpointAt);
     },
 
     redo: () => {
-      const { historyPast, historyFuture, design, checkpointDesign, lastCheckpointAt } = get();
+      resetHistoryTransaction();
+      const state = get();
+      const { historyPast, historyFuture, design, checkpointDesign, lastCheckpointAt } = state;
       if (historyFuture.length === 0) return;
       const nextEntry = historyFuture[0];
       const nextFuture = historyFuture.slice(1);
-      const nextPast = [...historyPast, { label: nextEntry.label, snapshot: design }];
+      const nextPast: HistoryEntry[] = [
+        ...historyPast.slice(-(MAX_HISTORY_STEPS - 1)),
+        { label: nextEntry.label, snapshot: design, timestampMs: nextEntry.timestampMs },
+      ];
 
       const nextResolved = solveDesign(nextEntry.snapshot);
-      const validSelIds = get().selectedCellIds.filter((id) =>
-        nextResolved.cells.some((c) => c.id === id)
-      );
-      const fallbackCellId = validSelIds[0] ?? nextResolved.cells[0]?.id ?? null;
-
       set({
         design: nextEntry.snapshot,
         resolved: nextResolved,
         historyPast: nextPast,
         historyFuture: nextFuture,
         hasUnsavedChanges: !sameDesign(nextEntry.snapshot, checkpointDesign),
-        selectedCellIds: validSelIds.length > 0 ? validSelIds : fallbackCellId ? [fallbackCellId] : [],
-        selectedCellId: fallbackCellId,
-        resizeDraft: null,
+        commandError: null,
+        ...pruneSelectionForResolved(state, nextEntry.snapshot, nextResolved, { fallbackToFirstCell: true }),
       });
 
       saveCurrentStateToStorage(
@@ -2437,37 +2671,40 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     importJsonString: (rawJson) => {
       try {
         const validated = parseDesignJson(rawJson);
-        const currentDesign = get().design;
+        const state = get();
+        const currentDesign = state.design;
         const resolved = solveDesign(validated);
         const allocationError = resolved.issues.find(i => i.code === 'DIMENSION_ALLOCATION_INVALID');
         if (allocationError) return { ok:false, error:allocationError.description };
+        resetHistoryTransaction();
         const nextPast: HistoryEntry[] = [
-          ...get().historyPast.slice(-(MAX_HISTORY_STEPS - 1)),
-          { label: `JSON İçe Aktarıldı: ${validated.name}`, snapshot: currentDesign },
+          ...state.historyPast.slice(-(MAX_HISTORY_STEPS - 1)),
+          { label: `JSON İçe Aktarıldı: ${validated.name}`, snapshot: currentDesign, timestampMs: Date.now() },
         ];
 
-        const firstImportedCell = resolved.cells[0]?.id ?? null;
         set({
           design: validated,
           resolved,
           historyPast: nextPast,
           historyFuture: [],
-          hasUnsavedChanges: !sameDesign(validated, get().checkpointDesign),
-          selectedBayId: validated.runs[0]?.bays[0]?.id ?? null,
-          selectedCellId: firstImportedCell,
-          selectedCellIds: firstImportedCell ? [firstImportedCell] : [],
-          resizeDraft: null,
-          openDoorIds: {},
-          openDrawerIds: {},
-          hasOpenSlidingLeaf: false,
+          hasUnsavedChanges: !sameDesign(validated, state.checkpointDesign),
+          commandError: null,
+          motionNotice: null,
+          motionRecovery: null,
+          motionRecoveryOffer: null,
+          ...pruneSelectionForResolved(state, validated, resolved, {
+            exitDoorEditor: true,
+            resetSelection: true,
+            fallbackToFirstCell: true,
+          }),
         });
 
         saveCurrentStateToStorage(
           validated,
-          get().checkpointDesign,
+          state.checkpointDesign,
           nextPast,
           [],
-          get().lastCheckpointAt
+          state.lastCheckpointAt
         );
         return { ok: true };
       } catch (err) {
@@ -2483,6 +2720,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     },
 
     hydrateFromIndexedDB: async () => {
+      resetHistoryTransaction();
       const revision = sessionRevision;
       const request = ++hydrationRequest;
       const local = readSyncSessionFromLocalStorage();
@@ -2544,8 +2782,10 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         selectedBayId: session.workingDesign.runs[0]?.bays[0]?.id ?? null,
         selectedCellId: firstCell,
         selectedCellIds: firstCell ? [firstCell] : [],
-        selectedDoorId: null, selectedDoorIds: [],
+        doorEditorMode: false,
+        selectedDoorId: null, selectedDoorIds: [], selectedFrontId: null,
         selectedDrawerId: null, selectedDrawerIds: [],
+        commandError: null,
         openDoorIds: {}, openDrawerIds: {}, hasOpenSlidingLeaf: false, resizeDraft: null,
       });
     },

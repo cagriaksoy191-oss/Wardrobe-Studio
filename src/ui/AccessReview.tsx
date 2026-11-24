@@ -102,19 +102,20 @@ export function AccessReview({ onClose, onApplied }: { onClose: () => void; onAp
     </div>
     <div className="min-h-0 flex-1 space-y-4 overflow-auto p-3 sm:p-5">
       <label className="block max-w-md space-y-1 text-xs text-slate-300">İncelenen bölüm
-        <select className="block w-full rounded border border-slate-600 bg-slate-900 p-2 text-sm" value={chosen}
+        <select className="block w-full rounded border border-slate-500 bg-slate-900 p-2 text-sm" value={chosen}
           onChange={event => { setChosen(event.target.value); setPreview(null); setFailure(''); }}>
           {[...new Set(entries.map(entry => entry.bayId))].map(id =>
             <option key={id} value={id}>{sectionName(id)}{warnings.some(entry => entry.bayId === id) ? ' · kontrol' : ''}</option>)}
         </select>
       </label>
-      {representative && <div className="space-y-2 rounded-lg border border-slate-700 p-3 text-sm">
+      {representative && <div className="space-y-3 rounded-lg border border-slate-700 p-3 text-sm">
         <h3 className={`font-semibold ${statusColor[representative.status]}`}>{ACCESS_STATUS_LABEL[representative.status]}</h3>
         {door?.opening && <p className="text-slate-200">Kapak {door.opening.safeAngleDeg}° / {door.maxAngleDeg}°. Engel {door.opening.blockerLabel ?? 'yok'}.</p>}
         {representative.status === 'blocked' && <p className="text-rose-100">{representative.travel
           ? 'Çekmece mevcut düzenle planlanan kızak mesafesine ulaşmıyor.'
           : 'Bu kapak düzeni, rafın referans eşyası için gerekli geçişi sağlamıyor.'}</p>}
         <p className={statusColor[representative.status]}>{representative.label} · {accessMeasurement(representative)}</p>
+        {!option && <AccessPlan model={model} entry={representative} label="Mevcut düzen" />}
         <details open={moduleEntries.length === 1}>
           <summary className="cursor-pointer py-1 text-xs text-slate-300">Bu bölümdeki {moduleEntries.length} ölçümü ve açma sırasını göster</summary>
           <ul className="divide-y divide-slate-800">
