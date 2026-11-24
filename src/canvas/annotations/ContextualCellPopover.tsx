@@ -5,8 +5,6 @@ import {
   ArrowRight,
   ArrowUp,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Columns,
   DoorOpen,
   Equal,
@@ -16,8 +14,8 @@ import {
   Minus,
   Move,
   Plus,
+  RotateCcw,
   Rows,
-  Scissors,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -30,7 +28,7 @@ import {
 import { INTERIOR_ITEM_PRESET_LABELS } from '../wardrobe/WardrobeItemsPreview';
 import { INSERT_REGISTRY } from '../../core/inserts/insertRegistry';
 import type {
-  BayFrontMode,
+  FrontType,
   HandleFinishId,
   HandleStyleId,
   InsertType,
@@ -41,9 +39,17 @@ import type {
 } from '../../core/schema/types';
 import { analyzeSelectedCellsGroup } from '../../core/solver/treeMutator';
 import { useWardrobeStore } from '../../store/useWardrobeStore';
-import { FrontSystemEditor, HingedOpeningCard } from '../../ui/FrontSystemEditor';
-import { defaultShelfIntervalDraft, readShelfIntervalDraft, shelfIntervalLimit } from '../../ui/editorFeedback';
-import { frontVerticalRange } from '../../core/fronts/frontGeometry';
+import {
+  FRONT_TYPE_LABELS,
+  resolveActiveDoorInspectorContext,
+  switchBayFrontType,
+} from '../../ui/DoorInspectorPanel';
+import {
+  defaultShelfIntervalDraft,
+  readShelfIntervalDraft,
+  shelfIntervalLimit,
+} from '../../ui/editorFeedback';
+import { NumberField } from '../../ui/NumberField';
 
 export interface SelectionScreenBounds {
   minX: number;
@@ -54,6 +60,53 @@ export interface SelectionScreenBounds {
   centerY: number;
   canvasWidth: number;
   canvasHeight: number;
+}
+
+export interface PopoverPlacement {
+  leftPx: number;
+  topPx: number;
+  widthPx: number;
+}
+
+const PILL_CLEARANCE_PX = 84;
+const EDGE_MARGIN_PX = 14;
+const TOP_ANCHOR_PX = 104;
+
+export function computePopoverPlacement(
+  screenBounds: SelectionScreenBounds | null,
+  mode: 'door-quick-bar' | 'cell-or-drawer'
+): PopoverPlacement {
+  const canvasWidth = screenBounds?.canvasWidth ?? 900;
+  const maxWidth = mode === 'door-quick-bar' ? 312 : 320;
+  const widthPx = Math.min(maxWidth, Math.max(180, canvasWidth - EDGE_MARGIN_PX * 2));
+  const rightAlignedLeft = Math.max(EDGE_MARGIN_PX, canvasWidth - widthPx - EDGE_MARGIN_PX);
+
+  if (mode === 'door-quick-bar') {
+    if (screenBounds && screenBounds.canvasWidth > 0 && screenBounds.centerX > canvasWidth * 0.55) {
+      return { leftPx: EDGE_MARGIN_PX, topPx: TOP_ANCHOR_PX, widthPx };
+    }
+    return { leftPx: rightAlignedLeft, topPx: TOP_ANCHOR_PX, widthPx };
+  }
+
+  if (screenBounds && screenBounds.canvasWidth > 0) {
+    const rightSpace = canvasWidth - (screenBounds.maxX + PILL_CLEARANCE_PX) - EDGE_MARGIN_PX;
+    const leftSpace = screenBounds.minX - PILL_CLEARANCE_PX - EDGE_MARGIN_PX;
+
+    if (rightSpace >= widthPx) {
+      return { leftPx: rightAlignedLeft, topPx: TOP_ANCHOR_PX, widthPx };
+    }
+    if (leftSpace >= widthPx) {
+      return { leftPx: EDGE_MARGIN_PX, topPx: TOP_ANCHOR_PX, widthPx };
+    }
+    const moreRoomOnRight = canvasWidth - screenBounds.maxX >= screenBounds.minX;
+    return {
+      leftPx: moreRoomOnRight ? rightAlignedLeft : EDGE_MARGIN_PX,
+      topPx: TOP_ANCHOR_PX,
+      widthPx,
+    };
+  }
+
+  return { leftPx: rightAlignedLeft, topPx: TOP_ANCHOR_PX, widthPx };
 }
 
 interface ContextualCellPopoverProps {
@@ -100,11 +153,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const toggleDoor = useWardrobeStore((s) => s.toggleDoor);
   const setDoorEditorMode = useWardrobeStore((s) => s.setDoorEditorMode);
   const updateDoorFrontConfig = useWardrobeStore((s) => s.updateDoorFrontConfig);
-  const splitBayDoorHorizontally = useWardrobeStore((s) => s.splitBayDoorHorizontally);
-  const mergeBayDoors = useWardrobeStore((s) => s.mergeBayDoors);
   const updateCornerParam = useWardrobeStore((s) => s.updateCornerParam);
   const setCornerDoorMode = useWardrobeStore((s) => s.setCornerDoorMode);
-  const setDoorMaterialAndHandle = useWardrobeStore((s) => s.setDoorMaterialAndHandle);
   const setDrawerMaterialAndHandle = useWardrobeStore((s) => s.setDrawerMaterialAndHandle);
   const setCellItemPreset = useWardrobeStore((s) => s.setCellItemPreset);
 
@@ -150,8 +200,6 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const [targetMmInput, setTargetMmInput] = useState<string>('');
   const [neighborMmInput, setNeighborMmInput] = useState<string>('');
   const [drawerHeightInput, setDrawerHeightInput] = useState<string>('');
-  const [doorSplitHeightInput, setDoorSplitHeightInput] = useState<number>(1850);
-  const [showAdvancedSection, setShowAdvancedSection] = useState<boolean>(false);
 
   const selectionSignature = `${activeCellIds.join(',')}|${activeDrawerIds.join(',')}|${activeDoorIds.join(',')}|${doorEditorMode}`;
 
@@ -201,160 +249,128 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
     }
   }, [resizeDraft]);
 
-  // Ekran konumu hesaplama (her zaman sahne sınırları içinde ve yüksek z-index ile)
-  const panelWidth = Math.min(328, Math.max(1, (screenBounds?.canvasWidth ?? 356) - 28));
-  const estimatedPanelHeight = 420;
+  const placement = computePopoverPlacement(
+    screenBounds,
+    doorEditorMode ? 'door-quick-bar' : 'cell-or-drawer'
+  );
+  const panelStyle = {
+    '--context-left': `${placement.leftPx}px`,
+    '--context-top': `${placement.topPx}px`,
+    '--context-width': `${placement.widthPx}px`,
+  } as CSSProperties;
 
-  let leftPx = 16;
-  let topPx = 104;
-
-  if (screenBounds && screenBounds.canvasWidth > 0) {
-    const { minX, maxX, centerX, centerY, canvasWidth, canvasHeight } = screenBounds;
-    const placeOnRight =
-      maxX + panelWidth + 24 <= canvasWidth || centerX < canvasWidth * 0.52;
-
-    if (placeOnRight) {
-      leftPx = Math.max(0, Math.min(canvasWidth - panelWidth - 14, Math.max(14, maxX + 18)));
-    } else {
-      leftPx = Math.max(0, Math.min(canvasWidth - panelWidth - 14, Math.max(14, minX - panelWidth - 18)));
-    }
-
-    topPx = Math.max(
-      104,
-      Math.min(
-        Math.max(104, canvasHeight - estimatedPanelHeight - 74),
-        Math.round(centerY - estimatedPanelHeight * 0.42)
-      )
-    );
-  }
-  const panelStyle = { '--context-left': `${leftPx}px`, '--context-top': `${topPx}px`, '--context-width': `${panelWidth}px` } as CSSProperties;
-  const panelClass = 'context-panel pointer-events-auto absolute z-50 flex flex-col gap-2.5 rounded-xl border border-slate-600 bg-slate-900/98 p-3 text-xs text-slate-100 shadow-2xl';
-  const headingClass = 'context-heading flex items-start justify-between gap-2 border-b border-slate-700 pb-2';
+  const panelClass =
+    'context-panel pointer-events-auto absolute z-50 flex flex-col gap-2 rounded-xl border border-slate-600 bg-slate-900/98 p-2.5 text-xs text-slate-100 shadow-2xl';
+  const headingClass =
+    'context-heading flex items-start justify-between gap-2 border-b border-slate-700 pb-2';
 
   // ===========================================================================
-  // MOD 1: BAĞIMSIZ KAPAK EDİTÖRÜ MODU (`doorEditorMode`)
+  // MOD 1: KOMPAKT YÜZEN KAPAK HIZLI EYLEM ÇUBUĞU (doorEditorMode, <= 165px)
+  // Tüm ayrıntılı menteşe/ray/malzeme ayarları sağ paneldeki DoorInspectorPanel'dedir.
   // ===========================================================================
   if (doorEditorMode) {
-    const slidingSelection=resolved.slidingDoors?.some(d=>activeDoorIds.includes(d.id)) ||
-      (!resolved.doors.some(d=>activeDoorIds.includes(d.id)) && design.fronts.some(f=>f.type==='sliding'&&f.bayIds.includes(selectedBayId??'')));
-    if(slidingSelection) return <section aria-label="Sürgülü kapak düzenleyicisi" style={panelStyle} onPointerDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()} onWheel={e=>e.stopPropagation()} className={panelClass}>
-      <div className={headingClass}><h2 className="font-semibold text-sky-200">Sürgülü kapak editörü</h2><button aria-label="Kapak editörünü kapat" className="rounded border border-slate-600 p-1" onClick={()=>setDoorEditorMode(false)}><X size={16}/></button></div><FrontSystemEditor compact/>
-    </section>;
-    const selectedDoor =
-      resolved.doors.find((d) => d.id === activeDoorIds[0]) ??
-      resolved.doors.find((d) => d.bayId === selectedBayId) ??
-      null;
-    if (selectedDoor?.isCornerDoor) {
-      const alternate = selectedDoor.opening?.alternative;
-      return <section aria-label="Köşe kapak düzenleyicisi" style={panelStyle} className={panelClass}
-        onPointerDown={e=>e.stopPropagation()} onClick={e=>e.stopPropagation()} onWheel={e=>e.stopPropagation()}>
-        <div className={headingClass}><h2 className="font-semibold text-amber-200">{selectedDoor.label}</h2><button aria-label="Kapak editörünü kapat" className="rounded border border-slate-600 p-1" onClick={()=>setDoorEditorMode(false)}><X size={16}/></button></div>
-        <HingedOpeningCard door={selectedDoor} applyAlternative={alternate ? () => setCornerDoorMode(alternate.side) : undefined} />
-        <label className="space-y-1">Köşe menteşe yönü
-          <select className="w-full rounded border border-slate-700 bg-slate-950 p-2" value={selectedDoor.hingeSide} onChange={e=>setCornerDoorMode(e.target.value as 'left'|'right'|'open')}>
-            <option value="left">Sol menteşe</option><option value="right">Sağ menteşe</option><option value="open">Açık köşe</option>
-          </select>
-        </label>
-        <button type="button" className="rounded border border-sky-700 bg-sky-950 p-2" onClick={() => toggleDoor(selectedDoor.id)}>{openDoorIds[selectedDoor.id] ? 'Köşe kapağını kapat' : 'Köşe kapağını aç'}</button>
-      </section>;
-    }
-    const targetBay =
-      resolved.bays.find((b) => b.id === (selectedDoor?.bayId ?? selectedBayId)) ??
-      resolved.bays[0] ??
-      null;
+    const ctx = resolveActiveDoorInspectorContext(
+      design,
+      resolved,
+      selectedBayId,
+      activeDoorIds
+    );
+    if (!ctx.isCornerDoor && !ctx.targetBay) return null;
 
-    if (!targetBay) return null;
+    const openInspectorDrawer = () => {
+      window.dispatchEvent(new CustomEvent('wardrobe:open-selection-drawer'));
+    };
 
-    const explicitFrontsForBay = design.fronts.filter((f) => f.bayIds.includes(targetBay.id));
-    const bayDoors = resolved.doors.filter((d) => d.bayIds.includes(targetBay.id));
-    const run = design.runs.find(run => run.id === targetBay.runId)!;
-    const activeFront =
-      (selectedDoor?.frontId
-        ? design.fronts.find((f) => f.id === selectedDoor.frontId)
-        : explicitFrontsForBay[0]) ?? null;
-    const currentMode: BayFrontMode = activeFront
-      ? activeFront.type === 'open' ? 'open' : activeFront.hingeSide === 'double' ? 'double'
-        : activeFront.hingeSide === 'right' ? 'singleRight' : activeFront.hingeSide === 'auto' ? 'auto' : 'singleLeft'
-      : targetBay.frontMode;
-    const alternate = selectedDoor?.opening?.alternative;
+    const titleText = ctx.isCornerDoor
+      ? ctx.selectedHingedDoor!.label
+      : ctx.targetBay!.label;
+
+    const cutSummary = ctx.isCornerDoor
+      ? `${ctx.selectedHingedDoor!.widthMm} × ${ctx.selectedHingedDoor!.heightMm} × ${ctx.selectedHingedDoor!.thicknessMm} mm`
+      : ctx.activeFrontType === 'sliding' && ctx.selectedSlidingLeaf
+        ? `Ray ${ctx.selectedSlidingLeaf.trackIndex + 1} · ${ctx.selectedSlidingLeaf.widthMm} × ${ctx.selectedSlidingLeaf.heightMm} mm`
+        : ctx.activeFrontType === 'hinged' && ctx.selectedHingedDoor
+          ? `${ctx.selectedHingedDoor.widthMm} × ${ctx.selectedHingedDoor.heightMm} × ${ctx.selectedHingedDoor.thicknessMm} mm`
+          : `Açık · Dış ${ctx.targetBay!.outerWidthMm} mm`;
+
+    const activeLeafId = ctx.isCornerDoor
+      ? ctx.selectedHingedDoor!.id
+      : ctx.activeFrontType === 'sliding'
+        ? ctx.selectedSlidingLeaf?.id ?? null
+        : ctx.selectedHingedDoor?.id ?? null;
+
+    const isLeafOpen = activeLeafId ? Boolean(openDoorIds[activeLeafId]) : false;
+    const alternate = ctx.selectedHingedDoor?.opening?.alternative ?? null;
+
+    const handleFlipDirection = () => {
+      if (!alternate) return;
+      if (ctx.isCornerDoor) {
+        setCornerDoorMode(alternate.side);
+      } else if (ctx.targetBay && ctx.selectedHingedDoor) {
+        updateDoorFrontConfig(
+          ctx.targetBay.id,
+          ctx.activeFront?.id,
+          alternate.side === 'left' ? 'singleLeft' : 'singleRight',
+          ctx.selectedHingedDoor.maxAngleDeg
+        );
+      }
+    };
 
     return (
-      <div
+      <section
         style={panelStyle}
-        role="region" aria-label="Kapak düzenleyicisi"
+        aria-label="Kapak hızlı eylem çubuğu"
         onPointerDown={(e) => e.stopPropagation()}
         onPointerUp={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
-        className={panelClass}
+        className="context-panel pointer-events-auto absolute z-50 flex flex-col gap-1.5 rounded-xl border border-slate-600/90 bg-slate-900/96 p-2.5 text-xs text-slate-100 shadow-2xl"
       >
-        <div className={headingClass}>
-          <div className="min-w-0">
+        {/* Satır 1: Başlık + kesim ölçüsü + Kapat (Esc) */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <DoorOpen className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span className="font-bold text-amber-300">
-                Kapak Editörü — {targetBay.label}
-              </span>
+              <DoorOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
+              <span className="truncate text-[11px] font-semibold text-amber-200">{titleText}</span>
             </div>
-            <div className="mt-0.5 font-mono text-[10px] text-slate-300">
-              {selectedDoor ? (
-                <span>
-                  Seçili Kanat: <strong className="text-amber-300">{selectedDoor.widthMm}</strong> ×{' '}
-                  <strong className="text-sky-300">{selectedDoor.heightMm}</strong> ×{' '}
-                  <strong className="text-emerald-300">{selectedDoor.thicknessMm}</strong> mm
-                </span>
-              ) : (
-                <span>Bölme Dış Genişlik: {targetBay.outerWidthMm} mm (Kapaksız / Açık)</span>
-              )}
-            </div>
+            <div className="truncate font-mono text-[10px] text-slate-300">{cutSummary}</div>
           </div>
           <button
             type="button"
             onClick={() => setDoorEditorMode(false)}
-            title="Kapak Düzenleme Modundan Çık (Esc)"
-            className="rounded-md border border-slate-700 bg-slate-800/90 p-1 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+            aria-label="Kapak düzenlemeyi kapat"
+            title="Kapak düzenlemeyi kapat (Esc)"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700 bg-slate-800/90 text-slate-200 transition hover:border-slate-500 hover:bg-slate-700 hover:text-white"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
-        {selectedDoor && <HingedOpeningCard door={selectedDoor} applyAlternative={alternate
-          ? () => updateDoorFrontConfig(targetBay.id, activeFront?.id, alternate.side === 'left' ? 'singleLeft' : 'singleRight', selectedDoor.maxAngleDeg) : undefined} />}
-        {selectedDoor && <button type="button" className="rounded border border-sky-700 bg-sky-950 px-2 py-2 text-sky-200"
-          onClick={() => toggleDoor(selectedDoor.id)}>{openDoorIds[selectedDoor.id] ? 'Seçili kanadı kapat' : 'Seçili kanadı aç'}</button>}
-        <details className="border-b border-slate-700 pb-2"><summary className="cursor-pointer text-sky-200">Kapak türü, kapsam ve sürgü sistemi</summary><FrontSystemEditor compact/></details>
 
-        {/* 1. KAPAK DÜZENİ VE MENTEŞE YÖNÜ */}
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-            1. Kapak Tipi & Açılış Yönü
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+        {/* Satır 2: Hızlı cephe seçici (Menteşeli | Sürgülü | Açık veya Köşe: Sol | Sağ | Açık) */}
+        {ctx.isCornerDoor && ctx.selectedHingedDoor ? (
+          <div
+            className="grid grid-cols-3 gap-1 rounded-lg border border-slate-700 bg-slate-950 p-0.5"
+            role="group"
+            aria-label="Köşe menteşe yönü"
+          >
             {(
               [
-                { mode: 'auto', label: 'Otomatik kanat' },
-                { mode: 'singleLeft', label: 'Tek Kapak (Sol)' },
-                { mode: 'singleRight', label: 'Tek Kapak (Sağ)' },
-                { mode: 'double', label: 'Çift Kapak (Sol+Sağ)' },
-                { mode: 'open', label: 'Kapaksız (Açık)' },
-              ] as { mode: BayFrontMode; label: string }[]
+                { value: 'left', label: 'Sol' },
+                { value: 'right', label: 'Sağ' },
+                { value: 'open', label: 'Açık' },
+              ] as const
             ).map((opt) => {
-              const isActive = currentMode === opt.mode;
+              const active = ctx.selectedHingedDoor!.hingeSide === opt.value;
               return (
                 <button
-                  key={opt.mode}
+                  key={opt.value}
                   type="button"
-                  onClick={() =>
-                    updateDoorFrontConfig(
-                      targetBay.id,
-                      activeFront?.id,
-                      opt.mode,
-                      selectedDoor?.maxAngleDeg ?? targetBay.hingeAngleDeg
-                    )
-                  }
-                  className={`rounded border px-2 py-1.5 font-medium transition ${
-                    isActive
-                      ? 'border-amber-400 bg-amber-500/20 text-amber-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700'
+                  aria-pressed={active}
+                  onClick={() => setCornerDoorMode(opt.value)}
+                  className={`rounded-md py-1 text-[11px] font-semibold transition ${
+                    active
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
                   {opt.label}
@@ -362,298 +378,84 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               );
             })}
           </div>
-
-          <div className="space-y-1 pt-1">
-            <span className="text-[10px] text-slate-400">Menteşe Açısı:</span>
-            <div className="grid grid-cols-3 gap-1 text-[10px]">
-              {([110, 155, 165] as const).map((deg) => {
-                const currentDeg =
-                  activeFront?.openingAngleDeg ??
-                  selectedDoor?.maxAngleDeg ??
-                  targetBay.hingeAngleDeg;
-                return (
-                  <button
-                    key={deg}
-                    type="button"
-                    onClick={() =>
-                      updateDoorFrontConfig(
-                        targetBay.id,
-                        activeFront?.id,
-                        currentMode === 'open' ? 'auto' : currentMode,
-                        deg
-                      )
-                    }
-                    className={`rounded border py-1 font-mono font-semibold ${
-                      currentDeg === deg
-                        ? 'border-sky-400 bg-sky-500/25 text-sky-200'
-                        : 'border-slate-800 bg-slate-900 text-slate-400'
-                    }`}
-                  >
-                    {deg}° {deg === 155 ? '(İç Çek.)' : ''}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* 2. KAPAĞI YATAY BÖL (ÜST YÜKLÜK + ALT GÖVDE) VEYA BİRLEŞTİR */}
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sky-300">
-            <span>2. Kısmi / Bölünmüş Kapak (Yüklük & Alt)</span>
-            <span className="font-mono text-[9px] text-slate-400">
-              {explicitFrontsForBay.length > 1
-                ? `${explicitFrontsForBay.length} Parça`
-                : 'Tam Boy'}
-            </span>
-          </div>
-
-          {explicitFrontsForBay.length <= 1 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="text-slate-300">Bölme Yüksekliği (Y):</span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    step={20}
-                    min={400}
-                    max={2200}
-                    value={doorSplitHeightInput}
-                    onChange={(e) =>
-                      setDoorSplitHeightInput(Math.max(300, Number(e.target.value) || 1850))
-                    }
-                    className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
-                  />
-                  <span className="font-mono text-[10px] text-slate-400">mm</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => splitBayDoorHorizontally(targetBay.id, doorSplitHeightInput)}
-                className="flex w-full items-center justify-center gap-1.5 rounded border border-sky-400/60 bg-sky-500/20 px-2.5 py-1.5 text-[11px] font-bold text-sky-200 hover:bg-sky-500/30 transition"
-              >
-                <Scissors className="h-3.5 w-3.5" />
-                Kapağı Yatay Böl (Alt Gövde + Üst Yüklük)
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {[...explicitFrontsForBay].sort((a, b) => frontVerticalRange(run, a).start - frontVerticalRange(run, b).start).map((fr, idx) => (
-                <div
-                  key={fr.id}
-                  className="rounded border border-slate-800 bg-slate-900 p-2 space-y-1 text-[10px]"
+        ) : (
+          <div
+            className="grid grid-cols-3 gap-1 rounded-lg border border-slate-700 bg-slate-950 p-0.5"
+            role="group"
+            aria-label="Hızlı cephe sistemi"
+          >
+            {(['hinged', 'sliding', 'open'] as FrontType[]).map((frontType) => {
+              const isActive = ctx.activeFrontType === frontType;
+              return (
+                <button
+                  key={frontType}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() =>
+                    switchBayFrontType(
+                      ctx.targetBay!.id,
+                      ctx.activeFront,
+                      ctx.activeFrontType,
+                      frontType
+                    )
+                  }
+                  className={`rounded-md py-1 text-[11px] font-semibold transition ${
+                    isActive
+                      ? frontType === 'sliding'
+                        ? 'bg-sky-500 text-slate-950'
+                        : frontType === 'open'
+                          ? 'bg-slate-200 text-slate-950'
+                          : 'bg-amber-400 text-slate-950'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
                 >
-                  <div className="flex items-center justify-between font-semibold text-amber-200">
-                    <span>{idx === 0 ? 'Alt Kapak Grubu' : 'Üst Yüklük Kapağı'}</span>
-                    <span className="font-mono text-sky-300">
-                      {frontVerticalRange(run, fr).start} – {frontVerticalRange(run, fr).end} mm
-                    </span>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => mergeBayDoors(targetBay.id)}
-                className="flex w-full items-center justify-center gap-1.5 rounded border border-amber-400/60 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/30 transition"
-              >
-                <Merge className="h-3.5 w-3.5" />
-                Bölünmüş Kapakları Tek Kapakta Birleştir
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 4. KAPAK YÜZEY MALZEMESİ VE KULP ÖZELLEŞTİRME (AŞAMA 3) */}
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-            3. Kapak Malzemesi ve Kulp
-          </div>
-
-          <label className="block space-y-1 text-[10px]">
-            <span className="text-slate-400">Bu Kapağın Yüzey Malzemesi:</span>
-            <select
-              value={
-                activeFront?.materialId ??
-                targetBay.doorMaterialId ??
-                targetBay.frontMaterialId ??
-                ''
-              }
-              onChange={(e) => {
-                const val = (e.target.value || null) as MaterialId | null;
-                setDoorMaterialAndHandle(targetBay.id, activeFront?.id, val, undefined);
-              }}
-              className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-white"
-            >
-              <option value="">
-                Genel Kapak Malzemesini Kullan (
-                {MATERIAL_CATALOG[design.materials.frontMaterialId].name})
-              </option>
-              {Object.values(MATERIAL_CATALOG).map((mat) => (
-                <option key={mat.id} value={mat.id}>
-                  {mat.name} ({mat.categoryLabel})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-            <label className="space-y-1">
-              <span className="text-slate-400">Kulp Modeli:</span>
-              <select
-                value={
-                  activeFront?.handleConfig?.styleId ??
-                  targetBay.handleConfig?.styleId ??
-                  design.materials.doorHandleConfig?.styleId ??
-                  'barModern'
-                }
-                onChange={(e) =>
-                  setDoorMaterialAndHandle(targetBay.id, activeFront?.id, undefined, {
-                    styleId: e.target.value as HandleStyleId,
-                  })
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-              >
-                {Object.values(HANDLE_STYLE_CATALOG).map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-slate-400">Kulp Rengi:</span>
-              <select
-                value={
-                  activeFront?.handleConfig?.finishId ??
-                  targetBay.handleConfig?.finishId ??
-                  design.materials.doorHandleConfig?.finishId ??
-                  'matteBlack'
-                }
-                onChange={(e) =>
-                  setDoorMaterialAndHandle(targetBay.id, activeFront?.id, undefined, {
-                    finishId: e.target.value as HandleFinishId,
-                  })
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-              >
-                {Object.values(HANDLE_FINISH_CATALOG).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-            <label className="space-y-1">
-              <span className="text-slate-400">Konum:</span>
-              <select
-                value={
-                  activeFront?.handleConfig?.placement ??
-                  targetBay.handleConfig?.placement ??
-                  design.materials.doorHandleConfig?.placement ??
-                  'middle'
-                }
-                onChange={(e) =>
-                  setDoorMaterialAndHandle(targetBay.id, activeFront?.id, undefined, {
-                    placement: e.target.value as 'middle' | 'top' | 'bottom' | 'verticalEdge',
-                  })
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-              >
-                <option value="middle">Orta Hiza</option>
-                <option value="top">Üst Hiza</option>
-                <option value="bottom">Alt Hiza</option>
-                <option value="verticalEdge">Tam Boy Kenar</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-slate-400">Yön:</span>
-              <select
-                value={
-                  activeFront?.handleConfig?.orientation ??
-                  targetBay.handleConfig?.orientation ??
-                  design.materials.doorHandleConfig?.orientation ??
-                  'vertical'
-                }
-                onChange={(e) =>
-                  setDoorMaterialAndHandle(targetBay.id, activeFront?.id, undefined, {
-                    orientation: e.target.value as 'vertical' | 'horizontal',
-                  })
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-              >
-                <option value="vertical">Dikey</option>
-                <option value="horizontal">Yatay</option>
-              </select>
-            </label>
-
-            <label className="space-y-1">
-              <span className="text-slate-400">Boy (mm):</span>
-              <select
-                value={
-                  activeFront?.handleConfig?.lengthMm ??
-                  targetBay.handleConfig?.lengthMm ??
-                  design.materials.doorHandleConfig?.lengthMm ??
-                  160
-                }
-                onChange={(e) =>
-                  setDoorMaterialAndHandle(targetBay.id, activeFront?.id, undefined, {
-                    lengthMm: Number(e.target.value),
-                  })
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-[10px] text-white"
-              >
-                <option value={96}>96 mm</option>
-                <option value={160}>160 mm</option>
-                <option value={220}>220 mm</option>
-                <option value={320}>320 mm</option>
-                <option value={600}>600 mm</option>
-                <option value={1100}>1100 mm</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {/* 5. KİNEMATİK AÇ / KAPAT TESTİ */}
-        {bayDoors.length > 0 && (
-          <div className="space-y-1 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Kapak Kanatlarını Test Et (Aç / Kapat)
-            </div>
-            <div className="grid grid-cols-1 gap-1">
-              {bayDoors.map((d) => {
-                const isOpen = Boolean(openDoorIds[d.id]);
-                return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => toggleDoor(d.id)}
-                    className={`flex items-center justify-between rounded border px-2 py-1 text-[11px] font-medium ${
-                      isOpen
-                        ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
-                        : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-700'
-                    }`}
-                  >
-                    <span className="truncate">{d.label}</span>
-                    <span className="font-mono text-[10px] text-amber-300">
-                      {isOpen ? 'Kapat' : 'Aç'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                  {FRONT_TYPE_LABELS[frontType]}
+                </button>
+              );
+            })}
           </div>
         )}
-      </div>
+
+        {/* Satır 3: Birincil hızlı eylem(ler) + dar ekranda Tüm ayarlar / masaüstünde sakin ipucu */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {activeLeafId && (
+            <button
+              type="button"
+              onClick={() => toggleDoor(activeLeafId)}
+              className="flex-1 rounded-md border border-sky-500/60 bg-sky-500/20 px-2 py-1 text-[11px] font-semibold text-sky-100 transition hover:bg-sky-500/30"
+            >
+              {isLeafOpen ? 'Kanadı kapat' : 'Kanadı aç'}
+            </button>
+          )}
+          {alternate && (
+            <button
+              type="button"
+              onClick={handleFlipDirection}
+              className="inline-flex items-center gap-1 rounded-md border border-amber-400/60 bg-amber-500/20 px-2 py-1 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/30"
+            >
+              <RotateCcw className="h-3 w-3" aria-hidden="true" />
+              <span>Yönü ters çevir</span>
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Detaylı kapak ayarları"
+            onClick={openInspectorDrawer}
+            className="rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-100 transition hover:border-sky-400 xl:hidden"
+          >
+            Tüm ayarlar
+          </button>
+        </div>
+
+        <p className="hidden truncate text-[10px] text-slate-300 xl:block">
+          Ayrıntılı menteşe, ray ve malzeme ayarları sağ panelde.
+        </p>
+      </section>
     );
   }
 
   // ===========================================================================
-  // MOD 2: BAĞIMSIZ ÇEKMECE SEÇİMİ VE DÜZENLEME MODU (`selectedDrawerIds`)
+  // MOD 2: BAĞIMSIZ ÇEKMECE SEÇİMİ VE DÜZENLEME MODU (selectedDrawerIds)
   // ===========================================================================
   if (activeDrawerIds.length > 0) {
     const selectedDrawers = activeDrawerIds
@@ -676,7 +478,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
     return (
       <div
         style={panelStyle}
-        role="region" aria-label="Çekmece düzenleyicisi"
+        role="region"
+        aria-label="Çekmece düzenleyicisi"
         onPointerDown={(e) => e.stopPropagation()}
         onPointerUp={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -686,8 +489,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         <div className={headingClass}>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <FolderOpen className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span className="font-bold text-amber-300 truncate">
+              <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden="true" />
+              <span className="truncate font-bold text-amber-300">
                 {selectedDrawers.length === 1
                   ? `Çekmece #${firstDrw.drawerIndex + 1} / ${firstDrw.totalDrawersInBank}`
                   : `${selectedDrawers.length} Çekmece Seçili`}
@@ -702,53 +505,71 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
           <button
             type="button"
             onClick={clearDrawerSelection}
-            title="Çekmece Seçimini Temizle (Esc)"
-            className="rounded-md border border-slate-700 bg-slate-800/90 p-1 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+            aria-label="Çekmece seçimini temizle"
+            title="Çekmece seçimini temizle (Esc)"
+            className="shrink-0 rounded-md border border-slate-700 bg-slate-800/90 p-1 text-slate-300 hover:bg-slate-700 hover:text-white"
           >
-            <X className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Gruptaki Tüm Çekmeceleri Seç veya Eşitle */}
-        {bankDrawers.length > 1 && (
-          <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-            <button
-              type="button"
-              onClick={() => {
-                for (const d of bankDrawers) {
-                  if (!activeDrawerIds.includes(d.id)) {
-                    selectDrawer(d.id, d.cellId, d.bayId, true);
+        {/* Hızlı Kinematik Aç/Kapat + Grup Eşitleme */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <button
+            type="button"
+            onClick={() => {
+              for (const d of selectedDrawers) {
+                toggleDrawer(d.id);
+              }
+            }}
+            className="flex flex-1 items-center justify-center gap-1 rounded border border-amber-400/60 bg-amber-500/20 px-2 py-1.5 font-semibold text-amber-100 transition hover:bg-amber-500/30"
+          >
+            <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{openDrawerIds[firstDrw.id] ? 'Çekmeceyi Kapat' : 'Çekmeceyi Aç'}</span>
+          </button>
+          {bankDrawers.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  for (const d of bankDrawers) {
+                    if (!activeDrawerIds.includes(d.id)) {
+                      selectDrawer(d.id, d.cellId, d.bayId, true);
+                    }
                   }
-                }
-              }}
-              className="flex items-center justify-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1.5 font-medium text-sky-200 hover:bg-sky-500/25"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              Tümünü Seç ({bankDrawers.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => equalizeDrawerBankHeights(firstDrw.cellId)}
-              className="flex items-center justify-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1.5 font-semibold text-emerald-200 hover:bg-emerald-500/25"
-            >
-              <Equal className="h-3.5 w-3.5" />
-              Çekmeceleri Eşitle
-            </button>
-          </div>
-        )}
+                }}
+                aria-label={`Gruptaki tüm ${bankDrawers.length} çekmeceyi seç`}
+                className="flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1.5 font-medium text-sky-200 hover:bg-sky-500/25"
+              >
+                <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Tümü ({bankDrawers.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => equalizeDrawerBankHeights(firstDrw.cellId)}
+                aria-label="Çekmece yüksekliklerini eşitle"
+                className="flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1.5 font-semibold text-emerald-200 hover:bg-emerald-500/25"
+              >
+                <Equal className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Eşitle</span>
+              </button>
+            </>
+          )}
+        </div>
 
-        {/* 1. SEÇİLİ ÇEKMECE ÖN YÜKSEKLİĞİ (`Y`) DÜZENLEME */}
+        {/* 1. SEÇİLİ ÇEKMECE ÖN YÜKSEKLİĞİ (Y) DÜZENLEME */}
         {selectedDrawers.length === 1 && (
-          <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
+          <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
             <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-sky-300">
-              <span>Çekmece #{firstDrw.drawerIndex + 1} Ön Yüksekliği (Y)</span>
-              <span className="font-mono text-[9px] text-slate-400">
+              <span>Çekmece #{firstDrw.drawerIndex + 1} Yüksekliği (Y)</span>
+              <span className="font-mono text-[10px] text-slate-400">
                 Grup: {firstDrw.parentBankHeightMm} mm
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
+                aria-label="Çekmece yüksekliğini 20 mm azalt"
                 onClick={() => handleApplyDrawerHeight(firstDrw.heightMm - 20)}
                 className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-200 hover:bg-slate-800"
               >
@@ -756,6 +577,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               </button>
               <input
                 type="number"
+                aria-label="Çekmece ön yüksekliği (mm)"
                 step={10}
                 min={80}
                 max={Math.max(120, firstDrw.parentBankHeightMm - 80)}
@@ -768,11 +590,12 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     handleApplyDrawerHeight();
                   }
                 }}
-                className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
+                className="w-18 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white"
               />
               <span className="font-mono text-[10px] text-slate-400">mm</span>
               <button
                 type="button"
+                aria-label="Çekmece yüksekliğini 20 mm artır"
                 onClick={() => handleApplyDrawerHeight(firstDrw.heightMm + 20)}
                 className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-slate-200 hover:bg-slate-800"
               >
@@ -786,39 +609,18 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 Uygula
               </button>
             </div>
-            <div className="text-[10px] text-slate-400 leading-snug">
-              Not: Bu çekmecenin yüksekliği değiştiğinde aynı gruptaki diğer çekmeceler toplam kasa
-              yüksekliğini ({firstDrw.parentBankHeightMm} mm) koruyacak şekilde otomatik dengelenir.
-            </div>
           </div>
         )}
 
-        {/* 2. ÇEKMECE GRUBU ADEDİ VE İÇ / DIŞ ÇEKMECE AYARI */}
+        {/* 2. ÇEKMECE GRUBU ADEDİ, İÇ/DIŞ VE KIZAK TÜRÜ */}
         {parentCell && parentCell.insert?.type === 'drawerBank' && (
-          <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-              Çekmece Grubu Ayarları
-            </div>
-            <label className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
-              Çekmece kızak türü
-              <select
-                value={parentCell.insert.drawerSlide ?? ''}
-                onChange={(e) => setCellInsert(parentCell.sourceLeafId ?? parentCell.id, {
-                  ...parentCell.insert!,
-                  drawerSlide: (e.target.value || undefined) as 'partial' | 'full' | undefined,
-                })}
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
-              >
-                <option value="">Önceki düzen · %82</option>
-                <option value="partial">Kısmi açılım · %80</option>
-                <option value="full">Tam açılım · %100</option>
-              </select>
-            </label>
+          <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
             <div className="flex items-center justify-between gap-2 text-[11px]">
-              <span className="text-slate-300">Gruptaki Çekmece Adedi:</span>
+              <span className="text-slate-300">Adet:</span>
               <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
                 <button
                   type="button"
+                  aria-label="Çekmece adedini azalt"
                   onClick={() =>
                     setCellInsert(parentCell.sourceLeafId ?? parentCell.id, {
                       ...parentCell.insert!,
@@ -826,15 +628,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                       drawerFrontHeightsMm: undefined,
                     })
                   }
-                  className="p-0.5 text-slate-400 hover:text-white"
+                  className="p-0.5 text-slate-300 hover:text-white"
                 >
-                  <Minus className="h-3 w-3" />
+                  <Minus className="h-3 w-3" aria-hidden="true" />
                 </button>
                 <span className="w-6 text-center font-mono font-bold text-amber-300">
                   {parentCell.insert.drawerCount ?? 3}
                 </span>
                 <button
                   type="button"
+                  aria-label="Çekmece adedini artır"
                   onClick={() =>
                     setCellInsert(parentCell.sourceLeafId ?? parentCell.id, {
                       ...parentCell.insert!,
@@ -842,15 +645,11 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                       drawerFrontHeightsMm: undefined,
                     })
                   }
-                  className="p-0.5 text-slate-400 hover:text-white"
+                  className="p-0.5 text-slate-300 hover:text-white"
                 >
-                  <Plus className="h-3 w-3" />
+                  <Plus className="h-3 w-3" aria-hidden="true" />
                 </button>
               </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 text-[11px]">
-              <span className="text-slate-300">Çekmece Konumu:</span>
               <button
                 type="button"
                 onClick={() =>
@@ -859,196 +658,201 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     isInternalDrawer: !parentCell.insert?.isInternalDrawer,
                   })
                 }
-                className={`rounded border px-2.5 py-1 text-[11px] font-semibold ${
+                className={`rounded border px-2 py-1 text-[10px] font-semibold ${
                   parentCell.insert.isInternalDrawer
                     ? 'border-amber-500/50 bg-amber-500/20 text-amber-200'
                     : 'border-emerald-500/50 bg-emerald-500/20 text-emerald-200'
                 }`}
               >
-                {parentCell.insert.isInternalDrawer
-                  ? 'İç Çekmece (Kapak Arkası)'
-                  : 'Dış Çekmece (Cephede)'}
+                {parentCell.insert.isInternalDrawer ? 'İç Çekmece' : 'Dış Çekmece'}
               </button>
             </div>
-          </div>
-        )}
-
-        {/* 3. ÇEKMECE ÖN YÜZ MALZEMESİ VE KULP ÖZELLEŞTİRME (AŞAMA 3) */}
-        {parentCell && (
-          <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 text-[10px]">
-            <div className="font-semibold uppercase tracking-wider text-amber-300">
-              3. Çekmece Malzemesi & Kulp Özelleştirme
-            </div>
-
-            <label className="block space-y-1">
-              <span className="text-slate-400">Çekmece Ön Yüz Malzemesi:</span>
+            <label className="flex items-center justify-between gap-2 text-[11px] text-slate-300">
+              <span>Kızak türü</span>
               <select
-                value={
-                  parentCell.insert?.frontMaterialId ??
-                  parentCell.insert?.drawerFrontMaterialId ??
-                  ''
+                aria-label="Çekmece kızak türü"
+                value={parentCell.insert.drawerSlide ?? ''}
+                onChange={(e) =>
+                  setCellInsert(parentCell.sourceLeafId ?? parentCell.id, {
+                    ...parentCell.insert!,
+                    drawerSlide: (e.target.value || undefined) as 'partial' | 'full' | undefined,
+                  })
                 }
-                onChange={(e) => {
-                  const val = (e.target.value || null) as MaterialId | null;
-                  setDrawerMaterialAndHandle(
-                    parentCell.sourceLeafId ?? parentCell.id,
-                    val,
-                    undefined
-                  );
-                }}
-                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-white"
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-white"
               >
-                <option value="">
-                  Genel Çekmece Malzemesini Kullan (
-                  {
-                    MATERIAL_CATALOG[
-                      design.materials.drawerFrontMaterialId ?? design.materials.frontMaterialId
-                    ].name
-                  }
-                  )
-                </option>
-                {Object.values(MATERIAL_CATALOG).map((mat) => (
-                  <option key={mat.id} value={mat.id}>
-                    {mat.name} ({mat.categoryLabel})
-                  </option>
-                ))}
+                <option value="">Varsayılan · %82</option>
+                <option value="partial">Kısmi açılım · %80</option>
+                <option value="full">Tam açılım · %100</option>
               </select>
             </label>
-
-            <div className="grid grid-cols-2 gap-1.5">
-              <label className="space-y-1">
-                <span className="text-slate-400">Kulp Modeli:</span>
-                <select
-                  value={
-                    parentCell.insert?.handleConfig?.styleId ??
-                    design.materials.drawerHandleConfig?.styleId ??
-                    'barModern'
-                  }
-                  onChange={(e) =>
-                    setDrawerMaterialAndHandle(
-                      parentCell.sourceLeafId ?? parentCell.id,
-                      undefined,
-                      { styleId: e.target.value as HandleStyleId }
-                    )
-                  }
-                  className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-                >
-                  {Object.values(HANDLE_STYLE_CATALOG).map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-slate-400">Kulp Rengi:</span>
-                <select
-                  value={
-                    parentCell.insert?.handleConfig?.finishId ??
-                    design.materials.drawerHandleConfig?.finishId ??
-                    'matteBlack'
-                  }
-                  onChange={(e) =>
-                    setDrawerMaterialAndHandle(
-                      parentCell.sourceLeafId ?? parentCell.id,
-                      undefined,
-                      { finishId: e.target.value as HandleFinishId }
-                    )
-                  }
-                  className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-                >
-                  {Object.values(HANDLE_FINISH_CATALOG).map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-2 gap-1.5">
-              <label className="space-y-1">
-                <span className="text-slate-400">Konum:</span>
-                <select
-                  value={
-                    parentCell.insert?.handleConfig?.placement ??
-                    design.materials.drawerHandleConfig?.placement ??
-                    'middle'
-                  }
-                  onChange={(e) =>
-                    setDrawerMaterialAndHandle(
-                      parentCell.sourceLeafId ?? parentCell.id,
-                      undefined,
-                      {
-                        placement: e.target.value as 'middle' | 'top' | 'bottom' | 'verticalEdge',
-                      }
-                    )
-                  }
-                  className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
-                >
-                  <option value="middle">Orta Hiza</option>
-                  <option value="top">Üst Kenar</option>
-                  <option value="bottom">Alt Kenar</option>
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-slate-400">Boy (mm):</span>
-                <select
-                  value={
-                    parentCell.insert?.handleConfig?.lengthMm ??
-                    design.materials.drawerHandleConfig?.lengthMm ??
-                    160
-                  }
-                  onChange={(e) =>
-                    setDrawerMaterialAndHandle(
-                      parentCell.sourceLeafId ?? parentCell.id,
-                      undefined,
-                      { lengthMm: Number(e.target.value) }
-                    )
-                  }
-                  className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-[10px] text-white"
-                >
-                  <option value={96}>96 mm</option>
-                  <option value={160}>160 mm</option>
-                  <option value={220}>220 mm</option>
-                  <option value={320}>320 mm</option>
-                </select>
-              </label>
-            </div>
           </div>
         )}
 
-        {/* 4. 5 PANELLİ KASA NET İÇ HACİM VE KİNEMATİK AÇ/KAPAT */}
-        <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 text-[10px]">
-          <div className="flex items-center justify-between text-slate-300">
-            <span>5 Panelli Kasa Net İç Hacim:</span>
-            <span className="font-mono font-bold text-sky-300">
-              {firstDrw.innerWidthMm}×{firstDrw.innerDepthMm}×{firstDrw.innerHeightMm} mm
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-slate-400">
-            <span>Kasa Malzeme Kalınlıkları:</span>
-            <span className="font-mono text-emerald-300">
-              Yan: {firstDrw.sideThicknessMm} mm · Taban: {firstDrw.bottomThicknessMm} mm
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              for (const d of selectedDrawers) {
-                toggleDrawer(d.id);
-              }
-            }}
-            className="mt-1 flex w-full items-center justify-center gap-1.5 rounded border border-amber-400/60 bg-amber-500/20 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/30 transition"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            {openDrawerIds[firstDrw.id]
-              ? 'Seçili Çekmeceyi Kapat'
-              : 'Seçili Çekmeceyi Aç (Kinematik Test)'}
-          </button>
-        </div>
+        {/* 3. KATLANABİLİR MALZEME, KULP VE KASA DETAYI (DÜŞÜK SIKLIK) */}
+        {parentCell && (
+          <details className="rounded-lg border border-slate-800 bg-slate-950/75 p-2 text-[11px]">
+            <summary className="cursor-pointer font-medium text-slate-200">
+              Malzeme, kulp ve kasa detayı
+            </summary>
+            <div className="mt-2 space-y-2 text-[10px]">
+              <div className="flex items-center justify-between text-slate-300">
+                <span>Kasa Net İç Hacim:</span>
+                <span className="font-mono font-bold text-sky-300">
+                  {firstDrw.innerWidthMm}×{firstDrw.innerDepthMm}×{firstDrw.innerHeightMm} mm
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-slate-400">
+                <span>Kasa Kalınlıkları:</span>
+                <span className="font-mono text-emerald-300">
+                  Yan: {firstDrw.sideThicknessMm} mm · Taban: {firstDrw.bottomThicknessMm} mm
+                </span>
+              </div>
+
+              <label className="block space-y-1">
+                <span className="text-slate-300">Ön Yüz Malzemesi:</span>
+                <select
+                  aria-label="Çekmece ön yüz malzemesi"
+                  value={
+                    parentCell.insert?.frontMaterialId ??
+                    parentCell.insert?.drawerFrontMaterialId ??
+                    ''
+                  }
+                  onChange={(e) => {
+                    const val = (e.target.value || null) as MaterialId | null;
+                    setDrawerMaterialAndHandle(
+                      parentCell.sourceLeafId ?? parentCell.id,
+                      val,
+                      undefined
+                    );
+                  }}
+                  className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-white"
+                >
+                  <option value="">
+                    Genel Çekmece Malzemesi (
+                    {
+                      MATERIAL_CATALOG[
+                        design.materials.drawerFrontMaterialId ?? design.materials.frontMaterialId
+                      ].name
+                    }
+                    )
+                  </option>
+                  {Object.values(MATERIAL_CATALOG).map((mat) => (
+                    <option key={mat.id} value={mat.id}>
+                      {mat.name} ({mat.categoryLabel})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <label className="space-y-1">
+                  <span className="text-slate-300">Kulp Modeli:</span>
+                  <select
+                    aria-label="Çekmece kulp modeli"
+                    value={
+                      parentCell.insert?.handleConfig?.styleId ??
+                      design.materials.drawerHandleConfig?.styleId ??
+                      'barModern'
+                    }
+                    onChange={(e) =>
+                      setDrawerMaterialAndHandle(
+                        parentCell.sourceLeafId ?? parentCell.id,
+                        undefined,
+                        { styleId: e.target.value as HandleStyleId }
+                      )
+                    }
+                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
+                  >
+                    {Object.values(HANDLE_STYLE_CATALOG).map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-slate-300">Kulp Rengi:</span>
+                  <select
+                    aria-label="Çekmece kulp rengi"
+                    value={
+                      parentCell.insert?.handleConfig?.finishId ??
+                      design.materials.drawerHandleConfig?.finishId ??
+                      'matteBlack'
+                    }
+                    onChange={(e) =>
+                      setDrawerMaterialAndHandle(
+                        parentCell.sourceLeafId ?? parentCell.id,
+                        undefined,
+                        { finishId: e.target.value as HandleFinishId }
+                      )
+                    }
+                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
+                  >
+                    {Object.values(HANDLE_FINISH_CATALOG).map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <label className="space-y-1">
+                  <span className="text-slate-300">Konum:</span>
+                  <select
+                    aria-label="Çekmece kulp konumu"
+                    value={
+                      parentCell.insert?.handleConfig?.placement ??
+                      design.materials.drawerHandleConfig?.placement ??
+                      'middle'
+                    }
+                    onChange={(e) =>
+                      setDrawerMaterialAndHandle(
+                        parentCell.sourceLeafId ?? parentCell.id,
+                        undefined,
+                        {
+                          placement: e.target.value as 'middle' | 'top' | 'bottom' | 'verticalEdge',
+                        }
+                      )
+                    }
+                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
+                  >
+                    <option value="middle">Orta Hiza</option>
+                    <option value="top">Üst Kenar</option>
+                    <option value="bottom">Alt Kenar</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-slate-300">Boy (mm):</span>
+                  <select
+                    aria-label="Çekmece kulp boyu"
+                    value={
+                      parentCell.insert?.handleConfig?.lengthMm ??
+                      design.materials.drawerHandleConfig?.lengthMm ??
+                      160
+                    }
+                    onChange={(e) =>
+                      setDrawerMaterialAndHandle(
+                        parentCell.sourceLeafId ?? parentCell.id,
+                        undefined,
+                        { lengthMm: Number(e.target.value) }
+                      )
+                    }
+                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-[10px] text-white"
+                  >
+                    <option value={96}>96 mm</option>
+                    <option value={160}>160 mm</option>
+                    <option value={220}>220 mm</option>
+                    <option value={320}>320 mm</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </details>
+        )}
       </div>
     );
   }
@@ -1063,7 +867,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const activeJunction = design.junctions[0] ?? null;
 
   const changeIntervalTarget = (offset: number) => {
-    setGroupIntervalDraft(draft => {
+    setGroupIntervalDraft((draft) => {
       const count = readShelfIntervalDraft(draft, groupIntervalMax);
       return String(count === null ? 1 : Math.max(1, Math.min(groupIntervalMax, count + offset)));
     });
@@ -1071,24 +875,47 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const applyIntervalTarget = () => {
     if (groupIntervalTarget !== null) setContiguousGroupIntervalCount(groupIntervalTarget);
   };
-  const intervalInput = <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
-    <button type="button" aria-label="Aralık hedefini azalt" onClick={() => changeIntervalTarget(-1)}
-      className="p-0.5 text-slate-400 hover:text-white"><Minus className="h-3 w-3" /></button>
-    <input type="number" inputMode="numeric" min={1} max={groupIntervalMax} step={1}
-      aria-label={group.isMultiShelfGroupSelection ? 'Grup başına aralık' : 'Hedef aralık'}
-      aria-invalid={groupIntervalDraft !== '' && groupIntervalTarget === null ? true : undefined}
-      placeholder="—" value={groupIntervalDraft} onChange={e => setGroupIntervalDraft(e.target.value)}
-      className="w-11 bg-transparent text-center font-mono text-xs font-bold text-amber-300 focus:outline-none" />
-    <button type="button" aria-label="Aralık hedefini artır" onClick={() => changeIntervalTarget(1)}
-      className="p-0.5 text-slate-400 hover:text-white"><Plus className="h-3 w-3" /></button>
-  </div>;
+  const intervalInput = (
+    <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+      <button
+        type="button"
+        aria-label="Aralık hedefini azalt"
+        onClick={() => changeIntervalTarget(-1)}
+        className="p-0.5 text-slate-300 hover:text-white"
+      >
+        <Minus className="h-3 w-3" aria-hidden="true" />
+      </button>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={groupIntervalMax}
+        step={1}
+        aria-label={group.isMultiShelfGroupSelection ? 'Grup başına aralık' : 'Hedef aralık'}
+        aria-invalid={groupIntervalDraft !== '' && groupIntervalTarget === null ? true : undefined}
+        placeholder="—"
+        value={groupIntervalDraft}
+        onChange={(e) => setGroupIntervalDraft(e.target.value)}
+        className="w-11 bg-transparent text-center font-mono text-xs font-bold text-amber-300 focus:outline-none"
+      />
+      <button
+        type="button"
+        aria-label="Aralık hedefini artır"
+        onClick={() => changeIntervalTarget(1)}
+        className="p-0.5 text-slate-300 hover:text-white"
+      >
+        <Plus className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </div>
+  );
 
   const siblingIntervalsOfFirst = firstCell.sourceLeafId
     ? resolved.cells.filter((c) => c.sourceLeafId === firstCell.sourceLeafId)
     : [];
-  const wholeShelfGroup = firstCell.subIntervalKind === 'shelfInterval' &&
+  const wholeShelfGroup =
+    firstCell.subIntervalKind === 'shelfInterval' &&
     siblingIntervalsOfFirst.length > 1 &&
-    group.cells.every(cell => cell.sourceLeafId === firstCell.sourceLeafId);
+    group.cells.every((cell) => cell.sourceLeafId === firstCell.sourceLeafId);
 
   const handleTriggerResizePreview = (customValMm?: number, customDir?: ResizeDirection) => {
     const val = customValMm !== undefined ? customValMm : Number(targetMmInput.trim());
@@ -1099,7 +926,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   return (
     <div
       style={panelStyle}
-      role="region" aria-label={group.isSingle ? 'Raf hücresi düzenleyicisi' : 'Çoklu hücre düzenleyicisi'}
+      role="region"
+      aria-label={group.isSingle ? 'Raf hücresi düzenleyicisi' : 'Çoklu hücre düzenleyicisi'}
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -1110,8 +938,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
       <div className={headingClass}>
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex h-2 w-2 rounded-full bg-amber-400 shrink-0" />
-            <span className="font-bold text-amber-300">
+            <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-400" />
+            <span className="truncate font-bold text-amber-300">
               {group.isSingle
                 ? firstCell.label
                 : group.isMultiShelfGroupSelection
@@ -1152,25 +980,30 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         <button
           type="button"
           onClick={clearCellSelection}
+          aria-label="Seçimi temizle"
           title="Seçimi Temizle (Esc)"
-          className="rounded-md border border-slate-700 bg-slate-800/90 p-1 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+          className="shrink-0 rounded-md border border-slate-700 bg-slate-800/90 p-1 text-slate-300 hover:bg-slate-700 hover:text-white"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
 
-      {wholeShelfGroup && <p className="text-[11px] text-slate-300">
-        Raf grubu: {siblingIntervalsOfFirst.length - 1} fiziksel raf · {siblingIntervalsOfFirst.length} kullanılabilir aralık
-      </p>}
+      {wholeShelfGroup && !resizeDraft && (
+        <p className="text-[11px] text-slate-300">
+          Raf grubu: {siblingIntervalsOfFirst.length - 1} fiziksel raf ·{' '}
+          {siblingIntervalsOfFirst.length} kullanılabilir aralık
+        </p>
+      )}
+
       {/* Tek bir aralık seçiliyse tüm grubu seçme kısayolu */}
-      {group.isSingle && siblingIntervalsOfFirst.length > 1 && (
+      {group.isSingle && siblingIntervalsOfFirst.length > 1 && !resizeDraft && (
         <button
           type="button"
           onClick={() => setSelectedCells(siblingIntervalsOfFirst.map((c) => c.id))}
-          className="flex items-center justify-between rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1.5 text-[11px] font-medium text-sky-200 hover:bg-sky-500/25 transition"
+          className="flex items-center justify-between rounded-lg border border-sky-500/40 bg-sky-500/15 px-2.5 py-1 text-[11px] font-medium text-sky-200 transition hover:bg-sky-500/25"
         >
           <span className="flex items-center gap-1.5">
-            <Layers className="h-3.5 w-3.5 text-sky-400" />
+            <Layers className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
             <span>Grubun Tüm Aralıklarını Seç</span>
           </span>
           <span className="rounded bg-sky-500/30 px-1.5 py-0.5 font-mono text-[10px] font-bold">
@@ -1181,55 +1014,40 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
 
       {/* BEŞGEN KÖŞE ÖZEL KONTROL KARTI */}
       {group.isCornerSelection && activeJunction && (
-        <div className="space-y-2 rounded-lg border border-amber-500/40 bg-slate-950/90 p-2.5">
+        <div className="space-y-2 rounded-lg border border-amber-500/40 bg-slate-950/90 p-2">
           <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-amber-300">
-            <span>Beşgen Köşe Modülü & Raf Ayarları</span>
-            <span className="font-mono text-[9px] text-slate-400">
+            <span>Beşgen Köşe Modülü</span>
+            <span className="font-mono text-[10px] text-slate-300">
               {activeJunction.shelvesCount} raf · {activeJunction.shelvesCount + 1} aralık
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-            <label className="space-y-0.5">
-              <span className="text-slate-400">Köşe rafı sayısı</span>
-              <input
-                type="number"
-                min={1}
-                max={7}
-                value={activeJunction.shelvesCount}
-                onChange={(e) =>
-                  updateCornerParam('shelvesCount', Math.max(1, Math.min(7, Number(e.target.value) || 4)))
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-xs text-white"
-              />
-            </label>
-            <label className="space-y-0.5">
-              <span className="text-slate-400">Köşe A (mm)</span>
-              <input
-                type="number"
-                step={20}
-                min={750}
-                max={1300}
-                value={activeJunction.diagonalArmAMm}
-                onChange={(e) =>
-                  updateCornerParam('diagonalArmAMm', Number(e.target.value) || 900)
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-xs text-white"
-              />
-            </label>
-            <label className="space-y-0.5">
-              <span className="text-slate-400">Köşe B (mm)</span>
-              <input
-                type="number"
-                step={20}
-                min={750}
-                max={1300}
-                value={activeJunction.diagonalArmBMm}
-                onChange={(e) =>
-                  updateCornerParam('diagonalArmBMm', Number(e.target.value) || 900)
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-xs text-white"
-              />
-            </label>
+          <div className="studio-form-grid grid grid-cols-3 gap-x-1.5">
+            <NumberField
+              label="Raf adedi"
+              value={activeJunction.shelvesCount}
+              min={1}
+              max={7}
+              compact
+              onCommit={(v) => updateCornerParam('shelvesCount', v)}
+            />
+            <NumberField
+              label="Köşe A (mm)"
+              value={activeJunction.diagonalArmAMm}
+              min={750}
+              max={1300}
+              step={20}
+              compact
+              onCommit={(v) => updateCornerParam('diagonalArmAMm', v)}
+            />
+            <NumberField
+              label="Köşe B (mm)"
+              value={activeJunction.diagonalArmBMm}
+              min={750}
+              max={1300}
+              step={20}
+              compact
+              onCommit={(v) => updateCornerParam('diagonalArmBMm', v)}
+            />
           </div>
           {activeJunction.intervalHeightsMm && activeJunction.intervalHeightsMm.length > 0 && (
             <button
@@ -1237,115 +1055,61 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               onClick={() => updateCornerParam('shelvesCount', activeJunction.shelvesCount)}
               className="flex w-full items-center justify-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 text-[10px] font-semibold text-sky-200 hover:bg-sky-500/25"
             >
-              <Equal className="h-3 w-3" />
-              Köşe Raf Aralıklarını Eşitle
+              <Equal className="h-3 w-3" aria-hidden="true" />
+              <span>Köşe Raf Aralıklarını Eşitle</span>
             </button>
           )}
         </div>
       )}
 
-      {/* 2. BÖLME, ÇOKLU RAF GRUBU & ARALIK SAYISI DÖNÜŞTÜRME KONTROLLERİ */}
-      {group.isSingle && firstCell.insert?.type === 'shelfStack' && firstCell.insert.adjustable && (
-        <div className="space-y-1 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 text-[11px] text-slate-300">
-          <p>32 mm raf adımı · referans modülün alt iç yüzü</p>
-          {firstCell.insert.shelfPinRows ? (
-            firstCell.subIntervalIndex !== undefined && firstCell.subIntervalIndex < firstCell.insert.shelfPinRows.length
-              ? <div className="flex items-center gap-2">
-                  <span>Aralığın üst rafı</span>
-                  <button type="button" className="rounded border border-slate-600 px-2 py-1"
-                    onClick={() => adjustShelfGrid(firstCell.id, -1)}>−32 mm</button>
-                  <button type="button" className="rounded border border-slate-600 px-2 py-1"
-                    onClick={() => adjustShelfGrid(firstCell.id, 1)}>+32 mm</button>
-                </div>
-              : <p>Taşımak için rafın altındaki aralığı seçin.</p>
-          ) : (
-            <button type="button" className="rounded border border-sky-700 px-2 py-1 text-sky-200"
-              onClick={() => adjustShelfGrid(firstCell.id, 0)}>32 mm düzenini etkinleştir</button>
-          )}
-        </div>
-      )}
-      {!group.isCornerSelection && (
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+      {/* 2. BÖLME & ÇOKLU RAF GRUBU KONTROLLERİ */}
+      {!group.isCornerSelection && (!resizeDraft || !group.isSingle) && (
+        <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
+          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-300">
             <span>
               {group.isSingle
-                ? 'Hücre Bölme İşlemleri'
+                ? 'Hızlı Bölme'
                 : group.isMultiShelfGroupSelection
                   ? 'Çoklu Raf Grubu Toplu Düzenleme'
                   : 'Toplu Aralık & Bölme İşlemleri'}
             </span>
-            <span className="font-mono text-[9px] text-amber-300">
+            <span className="font-mono text-[10px] text-amber-300">
               {resolved.panelThicknessMm} mm Bölücü
             </span>
           </div>
 
           {group.isSingle ? (
-            <>
-              <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => splitCell(firstCell.id, 'vertical', 'equal')}
-                  className="flex items-center justify-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-medium text-slate-200 hover:border-amber-500/60 hover:bg-slate-800"
-                >
-                  <Columns className="h-3.5 w-3.5 text-amber-400" />
-                  Dikey Böl (2)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => splitCell(firstCell.id, 'horizontal', 'equal')}
-                  className="flex items-center justify-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-medium text-slate-200 hover:border-sky-500/60 hover:bg-slate-800"
-                >
-                  <Rows className="h-3.5 w-3.5 text-sky-400" />
-                  Yatay Böl (2)
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between gap-1.5 pt-0.5 text-[11px]">
-                <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setSplitCountInput((v) => Math.max(2, v - 1))}
-                    className="p-0.5 text-slate-400 hover:text-white"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <span className="w-5 text-center font-mono font-bold text-amber-300">
-                    {splitCountInput}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSplitCountInput((v) => Math.min(8, v + 1))}
-                    className="p-0.5 text-slate-400 hover:text-white"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => divideCellIntoN(firstCell.id, 'vertical', splitCountInput)}
-                  className="flex-1 rounded border border-amber-500/40 bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-200 hover:bg-amber-500/25"
-                >
-                  {splitCountInput} Dikey Böl
-                </button>
-                <button
-                  type="button"
-                  onClick={() => divideCellIntoN(firstCell.id, 'horizontal', splitCountInput)}
-                  className="flex-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 text-[10px] font-semibold text-sky-200 hover:bg-sky-500/25"
-                >
-                  {splitCountInput} Yatay Böl
-                </button>
-              </div>
-            </>
+            <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => splitCell(firstCell.id, 'vertical', 'equal')}
+                className="flex items-center justify-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-medium text-slate-200 hover:border-amber-500/60 hover:bg-slate-800"
+              >
+                <Columns className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+                <span>Dikey Böl (2)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => splitCell(firstCell.id, 'horizontal', 'equal')}
+                className="flex items-center justify-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-medium text-slate-200 hover:border-sky-500/60 hover:bg-slate-800"
+              >
+                <Rows className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                <span>Yatay Böl (2)</span>
+              </button>
+            </div>
           ) : group.isMultiShelfGroupSelection ? (
-            /* AŞAMA 2.4 BÖLÜM 3: FARKLI RAF GRUPLARINDAN SEÇİLEN BÖLMELERİN TOPLU DÜZENLENMESİ */
+            /* CAD-07 KORUNUR: Çoklu grup özeti + kaydırılabilir liste + kesilmeyen uyarı */
             <div className="space-y-2">
-              <div className="rounded border border-sky-500/30 bg-sky-950/30 p-2 space-y-1 text-[10px]">
+              <div className="space-y-1 rounded border border-sky-500/30 bg-sky-950/30 p-2 text-[10px]">
                 <div className="font-semibold text-sky-200">
                   Seçili Raf Grupları ({group.shelfGroups.length} grup):
                 </div>
                 <div className="max-h-36 space-y-1 overflow-y-auto pr-1">
                   {group.shelfGroups.map((sg) => (
-                    <div key={sg.groupKey} className="flex items-center justify-between gap-2 text-slate-300">
+                    <div
+                      key={sg.groupKey}
+                      className="flex items-center justify-between gap-2 text-slate-300"
+                    >
                       <span className="truncate">{sg.groupLabel}</span>
                       <span className="shrink-0 font-mono text-amber-300">
                         {sg.cells.length} aralık ({sg.grossHeightMm}mm)
@@ -1355,19 +1119,17 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 </div>
               </div>
 
-              {/* 1. Ayrı Ayrı Eşit Dağıt */}
               <button
                 type="button"
                 onClick={equalizeSelectedCells}
                 className="flex w-full items-center justify-center gap-1.5 rounded border border-sky-500/50 bg-sky-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-sky-200 hover:bg-sky-500/30"
               >
-                <Equal className="h-3.5 w-3.5" />
-                Her Grubu Kendi İçinde Eşit Dağıt
+                <Equal className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Her Grubu Kendi İçinde Eşit Dağıt</span>
               </button>
 
-              {/* 2. Her Grubu N Eşit Aralığa Dönüştür */}
               <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                <span className="text-slate-400">Grup başına aralık (1–{groupIntervalMax}):</span>
+                <span className="text-slate-300">Grup başına aralık (1–{groupIntervalMax}):</span>
                 {intervalInput}
                 <button
                   type="button"
@@ -1375,11 +1137,12 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   onClick={applyIntervalTarget}
                   className="rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
                 >
-                  {groupIntervalTarget === null ? 'Her Gruba Uygula' : `Her Grubu ${groupIntervalTarget} Aralık Yap`}
+                  {groupIntervalTarget === null
+                    ? 'Her Gruba Uygula'
+                    : `Her Grubu ${groupIntervalTarget} Aralık Yap`}
                 </button>
               </div>
 
-              {/* 3. Grupları Birleştir ve Yeniden Böl (Fiziksel olarak komşu ise) */}
               {group.canMergeShelfGroups ? (
                 <div className="space-y-1.5 rounded border border-emerald-500/40 bg-emerald-950/30 p-2">
                   <div className="text-[10px] font-semibold text-emerald-300">
@@ -1389,35 +1152,37 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
                       <button
                         type="button"
+                        aria-label="Birleştirme aralık hedefini azalt"
                         onClick={() => setMergeTargetIntervals((v) => Math.max(1, v - 1))}
-                        className="p-0.5 text-slate-400 hover:text-white"
+                        className="p-0.5 text-slate-300 hover:text-white"
                       >
-                        <Minus className="h-3 w-3" />
+                        <Minus className="h-3 w-3" aria-hidden="true" />
                       </button>
                       <span className="w-6 text-center font-mono text-xs font-bold text-emerald-300">
                         {mergeTargetIntervals}
                       </span>
                       <button
                         type="button"
+                        aria-label="Birleştirme aralık hedefini artır"
                         onClick={() => setMergeTargetIntervals((v) => Math.min(14, v + 1))}
-                        className="p-0.5 text-slate-400 hover:text-white"
+                        className="p-0.5 text-slate-300 hover:text-white"
                       >
-                        <Plus className="h-3 w-3" />
+                        <Plus className="h-3 w-3" aria-hidden="true" />
                       </button>
                     </div>
                     <button
                       type="button"
                       onClick={() => mergeAndResplitSelectedGroups(mergeTargetIntervals)}
-                      className="flex-1 flex items-center justify-center gap-1 rounded bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 hover:bg-emerald-400 transition"
+                      className="flex flex-1 items-center justify-center gap-1 rounded bg-emerald-500 px-2.5 py-1 text-[10px] font-bold text-slate-950 transition hover:bg-emerald-400"
                     >
-                      <Merge className="h-3.5 w-3.5" />
-                      Birleştir ve {mergeTargetIntervals} Eşit Aralığa Böl
+                      <Merge className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Birleştir ve {mergeTargetIntervals} Eşit Aralığa Böl</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 group.cannotMergeReason && (
-                  <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[10px] text-amber-200 leading-relaxed">
+                  <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[10px] leading-relaxed text-amber-200">
                     {group.cannotMergeReason}
                   </div>
                 )
@@ -1431,8 +1196,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   onClick={equalizeSelectedCells}
                   className="flex items-center justify-center gap-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1.5 font-semibold text-sky-200 hover:bg-sky-500/25"
                 >
-                  <Equal className="h-3.5 w-3.5" />
-                  Eşit Dağıt ({group.cells.length})
+                  <Equal className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Eşit Dağıt ({group.cells.length})</span>
                 </button>
                 <button
                   type="button"
@@ -1440,36 +1205,40 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   onClick={() => setContiguousGroupIntervalCount(group.cells.length + 1)}
                   className="flex items-center justify-center gap-1 rounded border border-emerald-500/50 bg-emerald-500/20 px-2 py-1.5 font-bold text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-40"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  {group.cells.length >= groupIntervalMax ? `Üst sınır: ${groupIntervalMax} aralık` : `${group.cells.length} → ${group.cells.length + 1} Eşit Aralık`}
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>
+                    {group.cells.length >= groupIntervalMax
+                      ? `Üst sınır: ${groupIntervalMax}`
+                      : `${group.cells.length} → ${group.cells.length + 1} Aralık`}
+                  </span>
                 </button>
               </div>
 
               <div className="flex items-center justify-between gap-1.5 text-[11px]">
-                <span className="text-slate-400">Hedef Aralık (1–{groupIntervalMax}):</span>
+                <span className="text-slate-300">Hedef (1–{groupIntervalMax}):</span>
                 {intervalInput}
                 <button
                   type="button"
                   disabled={groupIntervalTarget === null}
                   onClick={applyIntervalTarget}
-                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2.5 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
+                  className="rounded border border-amber-500/50 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200 hover:bg-amber-500/30 disabled:opacity-40"
                 >
-                  {groupIntervalTarget === null ? 'Eşit Aralığa Dönüştür' : `${groupIntervalTarget} Eşit Aralığa Dönüştür`}
+                  {groupIntervalTarget === null ? 'Uygula' : `${groupIntervalTarget} Aralık Yap`}
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5 text-[10px]">
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                 <button
                   type="button"
                   onClick={() => batchSplitSelectedCells('vertical')}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:border-amber-500/50"
+                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200 hover:border-amber-500/50"
                 >
                   Tümünü Dikey Böl
                 </button>
                 <button
                   type="button"
                   onClick={() => batchSplitSelectedCells('horizontal')}
-                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300 hover:border-sky-500/50"
+                  className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-200 hover:border-sky-500/50"
                 >
                   Tümünü Yatay Böl
                 </button>
@@ -1477,7 +1246,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
             </div>
           ) : (
             <div className="space-y-1.5">
-              <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[10px] text-amber-200 leading-relaxed">
+              <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[10px] leading-relaxed text-amber-200">
                 {group.cannotMergeReason ??
                   `Seçili ${group.cells.length} bölme farklı konumlarda. Her birini kendi raf grubunda eşit dağıtabilir veya toplu modül atayabilirsiniz.`}
               </div>
@@ -1502,13 +1271,14 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         </div>
       )}
 
-      {/* 3. HIZLI MODÜL ATAMA VE 3D EŞYA ÖNİZLEMESİ */}
-      {!group.isCornerSelection && (
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
+      {/* 3. HIZLI MODÜL ATAMA */}
+      {!group.isCornerSelection && !resizeDraft && (
+        <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
             {group.isSingle ? 'Hızlı Modül Ata' : `Toplu Modül Ata (${group.cells.length} Bölme)`}
           </div>
           <select
+            aria-label={group.isSingle ? 'Hızlı modül seçimi' : 'Toplu modül seçimi'}
             value={firstCell.insert?.type ?? 'empty'}
             onChange={(e) => {
               const nextType = e.target.value as InsertType;
@@ -1522,53 +1292,29 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               </option>
             ))}
           </select>
-
-          {group.isSingle && (
-            <label className="block space-y-1 pt-1 text-[10px]">
-              <span className="text-slate-400">3D İç Eşya Görselleştirmesi:</span>
-              <select
-                value={firstCell.insert?.itemPreset ?? 'auto'}
-                onChange={(e) =>
-                  setCellItemPreset(
-                    firstCell.sourceLeafId ?? firstCell.id,
-                    e.target.value as InteriorItemPreset
-                  )
-                }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-amber-200"
-              >
-                {(Object.entries(INTERIOR_ITEM_PRESET_LABELS) as [InteriorItemPreset, string][]).map(
-                  ([presetId, label]) => (
-                    <option key={presetId} value={presetId}>
-                      {label}
-                    </option>
-                  )
-                )}
-              </select>
-            </label>
-          )}
         </div>
       )}
 
-      {/* 4. YÖNLÜ YENİDEN BOYUTLANDIRMA (`X / Y / Z`) VE KOMŞU ÇAKIŞMA ÖNİZLEMESİ */}
+      {/* 4. YÖNLÜ YENİDEN BOYUTLANDIRMA (X / Y / Z) VE KOMŞU ÇAKIŞMA ÖNİZLEMESİ */}
       {(group.isSingle || isContiguousGroup) && (
-        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/90 p-2.5">
+        <div className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/90 p-2">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-sky-400">
-              <SlidersHorizontal className="h-3 w-3" />
+              <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
               <span>
                 {group.isCornerSelection
-                  ? 'Köşe Raf Yüksekliği (Y) Boyutlandırma'
+                  ? 'Köşe Raf Yüksekliği (Y)'
                   : 'Yönlü Boyutlandırma (X / Y / Z)'}
               </span>
             </span>
-            <span className="text-[9px] text-slate-400">Komşu Korumalı</span>
+            <span className="text-[10px] text-slate-400">Komşu Korumalı</span>
           </div>
 
-          {/* Eksen Seçici Sekmeler */}
           {!group.isCornerSelection && (
-            <div className="grid grid-cols-3 gap-1 rounded bg-slate-900 p-1 text-[10px]">
+            <div className="grid grid-cols-3 gap-1 rounded bg-slate-900 p-0.5 text-[10px]">
               <button
                 type="button"
+                aria-pressed={activeAxis === 'Y'}
                 onClick={() => setActiveAxis('Y')}
                 className={`rounded py-1 font-mono font-semibold transition ${
                   activeAxis === 'Y'
@@ -1580,6 +1326,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               </button>
               <button
                 type="button"
+                aria-pressed={activeAxis === 'X'}
                 onClick={() => setActiveAxis('X')}
                 className={`rounded py-1 font-mono font-semibold transition ${
                   activeAxis === 'X'
@@ -1591,6 +1338,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               </button>
               <button
                 type="button"
+                aria-pressed={activeAxis === 'Z'}
                 onClick={() => setActiveAxis('Z')}
                 className={`rounded py-1 font-mono font-semibold transition ${
                   activeAxis === 'Z'
@@ -1609,6 +1357,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               <>
                 <button
                   type="button"
+                  aria-pressed={activeDirection === 'up'}
                   onClick={() => {
                     setActiveAxis('Y');
                     setActiveDirection('up');
@@ -1616,15 +1365,16 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   }}
                   className={`flex items-center justify-center gap-1 rounded border px-2 py-1 font-medium ${
                     activeDirection === 'up'
-                      ? 'border-sky-400 bg-sky-500/20 text-sky-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                      ? 'border-sky-400 bg-sky-500/20 font-semibold text-sky-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-300'
                   }`}
                 >
-                  <ArrowUp className="h-3 w-3" />
-                  Yukarı (Alt Sabit)
+                  <ArrowUp className="h-3 w-3" aria-hidden="true" />
+                  <span>Yukarı (Alt Sabit)</span>
                 </button>
                 <button
                   type="button"
+                  aria-pressed={activeDirection === 'down'}
                   onClick={() => {
                     setActiveAxis('Y');
                     setActiveDirection('down');
@@ -1632,12 +1382,12 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   }}
                   className={`flex items-center justify-center gap-1 rounded border px-2 py-1 font-medium ${
                     activeDirection === 'down'
-                      ? 'border-sky-400 bg-sky-500/20 text-sky-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                      ? 'border-sky-400 bg-sky-500/20 font-semibold text-sky-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-300'
                   }`}
                 >
-                  <ArrowDown className="h-3 w-3" />
-                  Aşağı (Üst Sabit)
+                  <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                  <span>Aşağı (Üst Sabit)</span>
                 </button>
               </>
             )}
@@ -1646,33 +1396,35 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               <>
                 <button
                   type="button"
+                  aria-pressed={activeDirection === 'left'}
                   onClick={() => {
                     setActiveDirection('left');
                     if (resizeDraft) handleTriggerResizePreview(undefined, 'left');
                   }}
                   className={`flex items-center justify-center gap-1 rounded border px-2 py-1 font-medium ${
                     activeDirection === 'left'
-                      ? 'border-amber-400 bg-amber-500/20 text-amber-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                      ? 'border-amber-400 bg-amber-500/20 font-semibold text-amber-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-300'
                   }`}
                 >
-                  <ArrowLeft className="h-3 w-3" />
-                  Sola (Sağ Sabit)
+                  <ArrowLeft className="h-3 w-3" aria-hidden="true" />
+                  <span>Sola (Sağ Sabit)</span>
                 </button>
                 <button
                   type="button"
+                  aria-pressed={activeDirection === 'right'}
                   onClick={() => {
                     setActiveDirection('right');
                     if (resizeDraft) handleTriggerResizePreview(undefined, 'right');
                   }}
                   className={`flex items-center justify-center gap-1 rounded border px-2 py-1 font-medium ${
                     activeDirection === 'right'
-                      ? 'border-amber-400 bg-amber-500/20 text-amber-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                      ? 'border-amber-400 bg-amber-500/20 font-semibold text-amber-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-300'
                   }`}
                 >
-                  <ArrowRight className="h-3 w-3" />
-                  Sağa (Sol Sabit)
+                  <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                  <span>Sağa (Sol Sabit)</span>
                 </button>
               </>
             )}
@@ -1681,33 +1433,35 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               <>
                 <button
                   type="button"
+                  aria-pressed={activeDirection === 'front'}
                   onClick={() => {
                     setActiveDirection('front');
                     if (resizeDraft) handleTriggerResizePreview(undefined, 'front');
                   }}
                   className={`flex items-center justify-center gap-1 rounded border px-2 py-1 font-medium ${
                     activeDirection === 'front'
-                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                      ? 'border-emerald-400 bg-emerald-500/20 font-semibold text-emerald-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-300'
                   }`}
                 >
-                  <Move className="h-3 w-3" />
-                  Öne (Duvar Sabit)
+                  <Move className="h-3 w-3" aria-hidden="true" />
+                  <span>Öne (Duvar Sabit)</span>
                 </button>
                 <button
                   type="button"
+                  aria-pressed={activeDirection === 'back'}
                   onClick={() => {
                     setActiveDirection('back');
                     if (resizeDraft) handleTriggerResizePreview(undefined, 'back');
                   }}
                   className={`flex items-center justify-center gap-1 rounded border px-2 py-1 font-medium ${
                     activeDirection === 'back'
-                      ? 'border-emerald-400 bg-emerald-500/20 text-emerald-200 font-semibold'
-                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                      ? 'border-emerald-400 bg-emerald-500/20 font-semibold text-emerald-200'
+                      : 'border-slate-800 bg-slate-900 text-slate-300'
                   }`}
                 >
-                  <Move className="h-3 w-3" />
-                  Arkaya (Ön Sabit)
+                  <Move className="h-3 w-3" aria-hidden="true" />
+                  <span>Arkaya (Ön Sabit)</span>
                 </button>
               </>
             )}
@@ -1717,6 +1471,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
           <div className="flex items-center gap-1.5">
             <input
               type="number"
+              aria-label={`Hedef ${activeAxis} ölçüsü (mm)`}
               step={10}
               min={60}
               max={3000}
@@ -1732,13 +1487,13 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   cancelResizeDraft();
                 }
               }}
-              className="w-28 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
+              className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
             />
             <span className="font-mono text-[10px] text-slate-400">mm</span>
             <button
               type="button"
               onClick={() => handleTriggerResizePreview()}
-              className="flex-1 rounded bg-sky-500 px-2.5 py-1 text-[11px] font-bold text-slate-950 hover:bg-sky-400 transition"
+              className="flex-1 rounded bg-sky-500 px-2 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-sky-400"
             >
               Önizle / Hesapla
             </button>
@@ -1747,49 +1502,48 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
           {/* AKTİF TASLAK VE KOMŞU ÇAKIŞMA ÇÖZÜM KARTI */}
           {resizeDraft && (
             <div
-              className={`mt-1 space-y-2 rounded-lg border p-2.5 text-[11px] ${
+              className={`mt-1 space-y-1.5 rounded-lg border p-2 text-[11px] ${
                 resizeDraft.conflictOverlapMm > 0 || resizeDraft.exceedsBoundary
                   ? 'border-rose-500/70 bg-rose-950/50 text-rose-100'
                   : 'border-emerald-500/60 bg-emerald-950/40 text-emerald-100'
               }`}
             >
-              <div className="space-y-0.5 text-[10px]">
-                <div className="text-slate-300">
-                  • <strong>Sabit:</strong> {resizeDraft.fixedBoundaryLabel}
+              <div className="space-y-0.5 text-[10px] text-slate-200">
+                <div>
+                  <strong>Sabit:</strong> {resizeDraft.fixedBoundaryLabel}
                 </div>
-                <div className="text-slate-300">
-                  • <strong>Hareketli:</strong> {resizeDraft.movingBoundaryLabel}
+                <div>
+                  <strong>Hareketli:</strong> {resizeDraft.movingBoundaryLabel}
                 </div>
               </div>
 
               {resizeDraft.exceedsBoundary ? (
-                <div className="flex items-start gap-1.5 rounded border border-rose-500/50 bg-rose-950/80 p-2 text-[10px] text-rose-200">
-                  <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-1.5 rounded border border-rose-500/50 bg-rose-950/80 p-1.5 text-[10px] text-rose-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden="true" />
                   <span>{resizeDraft.boundaryErrorReason}</span>
                 </div>
               ) : resizeDraft.conflictOverlapMm > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-start gap-1.5 rounded border border-rose-500/50 bg-rose-950/80 p-2 text-[10px] text-rose-200">
-                    <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-1.5 rounded border border-rose-500/50 bg-rose-950/80 p-1.5 text-[10px] text-rose-200">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden="true" />
                     <div>
                       <div className="font-bold text-rose-300">
-                        Komşu Bölme ile {resizeDraft.conflictOverlapMm} mm Çakışma!
+                        {resizeDraft.neighborLabel} ile {resizeDraft.conflictOverlapMm} mm çakışma
                       </div>
-                      <p className="mt-0.5 leading-relaxed">
-                        <strong>{resizeDraft.neighborLabel}</strong> ({resizeDraft.neighborCurrentMm}{' '}
-                        mm) izinsiz küçültülmedi ve 3D sahnede kırmızı vurgulandı. Çakışmayı
-                        gidermek için komşu bölme ölçüsünü{' '}
-                        <strong>{resizeDraft.requiredNeighborMm} mm</strong> olarak onaylayın:
+                      <p className="mt-0.5 leading-snug">
+                        Komşu ({resizeDraft.neighborCurrentMm} mm) izinsiz küçültülmedi. Önerilen
+                        yeni ölçü: <strong>{resizeDraft.requiredNeighborMm} mm</strong>.
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between gap-1.5">
-                    <span className="text-[10px] text-rose-200 truncate">
+                    <span className="truncate text-[10px] text-rose-200">
                       Komşu Yeni Ölçü (mm):
                     </span>
                     <input
                       type="number"
+                      aria-label="Komşu yeni ölçü (mm)"
                       step={10}
                       value={neighborMmInput}
                       onChange={(e) => {
@@ -1806,37 +1560,37 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   <button
                     type="button"
                     onClick={autoBalanceResizeDraftNeighbor}
-                    className="w-full rounded border border-amber-400/70 bg-amber-500/25 px-2.5 py-1.5 text-[11px] font-bold text-amber-200 hover:bg-amber-500/35 transition"
+                    className="w-full rounded border border-amber-400/70 bg-amber-500/25 px-2 py-1 text-[11px] font-bold text-amber-200 transition hover:bg-amber-500/35"
                   >
-                    Komşu Sınırı {resizeDraft.requiredNeighborMm} mm Yap (Çakışmayı Çöz)
+                    Komşuyu {resizeDraft.requiredNeighborMm} mm Yap (Çakışmayı Çöz)
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-950/70 p-2 text-[10px] text-emerald-200">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                <div className="flex items-center gap-1.5 rounded border border-emerald-500/40 bg-emerald-950/70 p-1.5 text-[10px] text-emerald-200">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden="true" />
                   <span>
                     Çakışma yok (0 mm).{' '}
                     {resizeDraft.neighborCellIds.length > 0 &&
-                      `Komşu bölme (${resizeDraft.neighborLabel}) ${resizeDraft.neighborDraftMm} mm olarak dengelendi.`}
+                      `${resizeDraft.neighborLabel} ${resizeDraft.neighborDraftMm} mm dengelendi.`}
                   </span>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-1.5 pt-1">
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                 <button
                   type="button"
                   disabled={resizeDraft.conflictOverlapMm > 0 || resizeDraft.exceedsBoundary}
                   onClick={() => commitResizeDraft()}
-                  className="rounded bg-emerald-500 px-2.5 py-1.5 text-[11px] font-bold text-slate-950 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  className="rounded bg-emerald-500 px-2 py-1 text-[11px] font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Değişiklikleri Uygula
+                  Uygula
                 </button>
                 <button
                   type="button"
                   onClick={cancelResizeDraft}
-                  className="rounded border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-700 transition"
+                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-700"
                 >
-                  İptal (Son Geçerli)
+                  İptal
                 </button>
               </div>
             </div>
@@ -1844,24 +1598,117 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         </div>
       )}
 
-      {/* 5. KATLANABİLİR GELİŞMİŞ AYARLAR (AKILLI ŞABLONLAR, ALT ARALIK AYIRMA, UNSPLIT) */}
-      {group.isSingle && !group.isCornerSelection && (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/70">
-          <button
-            type="button"
-            onClick={() => setShowAdvancedSection(!showAdvancedSection)}
-            className="flex w-full items-center justify-between px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200"
-          >
-            <span>Gelişmiş Bölme & Ağaç İşlemleri</span>
-            {showAdvancedSection ? (
-              <ChevronUp className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5" />
-            )}
-          </button>
+      {/* 5. KATLANABİLİR GELİŞMİŞ SEÇENEKLER (N-BÖLME, 32 MM RAF, 3D EŞYA, ŞABLONLAR, UNSPLIT) */}
+      {group.isSingle && !group.isCornerSelection && !resizeDraft && (
+        <details className="rounded-lg border border-slate-800 bg-slate-950/75 p-2 text-[11px]">
+          <summary className="cursor-pointer font-medium text-slate-200">
+            Gelişmiş bölme, 32 mm adım ve 3D eşya
+          </summary>
+          <div className="mt-2 space-y-2 text-[10px]">
+            {/* N Eşit Bölme */}
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-0.5">
+                <button
+                  type="button"
+                  aria-label="Bölme adedini azalt"
+                  onClick={() => setSplitCountInput((v) => Math.max(2, v - 1))}
+                  className="p-0.5 text-slate-300 hover:text-white"
+                >
+                  <Minus className="h-3 w-3" aria-hidden="true" />
+                </button>
+                <span className="w-5 text-center font-mono text-xs font-bold text-amber-300">
+                  {splitCountInput}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Bölme adedini artır"
+                  onClick={() => setSplitCountInput((v) => Math.min(8, v + 1))}
+                  className="p-0.5 text-slate-300 hover:text-white"
+                >
+                  <Plus className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => divideCellIntoN(firstCell.id, 'vertical', splitCountInput)}
+                className="flex-1 rounded border border-amber-500/40 bg-amber-500/15 px-2 py-1 font-semibold text-amber-200 hover:bg-amber-500/25"
+              >
+                {splitCountInput} Dikey Böl
+              </button>
+              <button
+                type="button"
+                onClick={() => divideCellIntoN(firstCell.id, 'horizontal', splitCountInput)}
+                className="flex-1 rounded border border-sky-500/40 bg-sky-500/15 px-2 py-1 font-semibold text-sky-200 hover:bg-sky-500/25"
+              >
+                {splitCountInput} Yatay Böl
+              </button>
+            </div>
 
-          {showAdvancedSection && (
-            <div className="space-y-1.5 border-t border-slate-800 p-2.5 text-[10px]">
+            {/* 32 mm Raf Pim Adımı */}
+            {firstCell.insert?.type === 'shelfStack' && firstCell.insert.adjustable && (
+              <div className="space-y-1 rounded border border-slate-800 bg-slate-900/70 p-2 text-slate-300">
+                <p>32 mm raf adımı · referans modülün alt iç yüzü</p>
+                {firstCell.insert.shelfPinRows ? (
+                  firstCell.subIntervalIndex !== undefined &&
+                  firstCell.subIntervalIndex < firstCell.insert.shelfPinRows.length ? (
+                    <div className="flex items-center gap-2">
+                      <span>Aralığın üst rafı</span>
+                      <button
+                        type="button"
+                        className="rounded border border-slate-600 px-2 py-0.5 text-slate-100 hover:border-sky-400"
+                        onClick={() => adjustShelfGrid(firstCell.id, -1)}
+                      >
+                        −32 mm
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-slate-600 px-2 py-0.5 text-slate-100 hover:border-sky-400"
+                        onClick={() => adjustShelfGrid(firstCell.id, 1)}
+                      >
+                        +32 mm
+                      </button>
+                    </div>
+                  ) : (
+                    <p>Taşımak için rafın altındaki aralığı seçin.</p>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    className="rounded border border-sky-700 px-2 py-1 text-sky-200 hover:border-sky-400"
+                    onClick={() => adjustShelfGrid(firstCell.id, 0)}
+                  >
+                    32 mm düzenini etkinleştir
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* 3D İç Eşya Görselleştirme Geçersiz Kılma */}
+            <label className="block space-y-1">
+              <span className="text-slate-300">3D İç Eşya Görselleştirmesi:</span>
+              <select
+                aria-label="3D iç eşya görselleştirmesi"
+                value={firstCell.insert?.itemPreset ?? 'auto'}
+                onChange={(e) =>
+                  setCellItemPreset(
+                    firstCell.sourceLeafId ?? firstCell.id,
+                    e.target.value as InteriorItemPreset
+                  )
+                }
+                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-amber-200"
+              >
+                {(Object.entries(INTERIOR_ITEM_PRESET_LABELS) as [InteriorItemPreset, string][]).map(
+                  ([presetId, label]) => (
+                    <option key={presetId} value={presetId}>
+                      {label}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+            {/* Alt Aralık Ayırma & Akıllı Şablonlar & Birleştirme */}
+            <div className="space-y-1 border-t border-slate-800 pt-2">
               {firstCell.subIntervalIndex !== undefined && (
                 <button
                   type="button"
@@ -1900,13 +1747,13 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                   onClick={() => unsplitCell(firstCell.id)}
                   className="flex w-full items-center justify-center gap-1 rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 font-semibold text-rose-200 hover:bg-rose-500/20"
                 >
-                  <Merge className="h-3 w-3" />
-                  Bu Bölünmeyi Birleştir (Üst Hücreye Sıfırla)
+                  <Merge className="h-3 w-3" aria-hidden="true" />
+                  <span>Bu Bölünmeyi Birleştir (Üst Hücreye Sıfırla)</span>
                 </button>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        </details>
       )}
     </div>
   );
