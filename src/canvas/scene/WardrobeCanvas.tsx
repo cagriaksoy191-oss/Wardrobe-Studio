@@ -261,6 +261,13 @@ export function computeDefault3DCameraPose(params: {
   return { position, target };
 }
 
+export function get3DCameraContextKey(design: {
+  id: string;
+  layoutKind: 'straight' | 'l-shape';
+}): string {
+  return `${design.id}|${design.layoutKind}`;
+}
+
 type OrthographicMode = Exclude<StudioViewMode, '3d-perspective'>;
 type OrthographicPose = Saved3DCameraState & { zoom: number; fitted?: boolean };
 
@@ -332,6 +339,8 @@ function SceneCameraAndSelectionTracker({
   cameraRef,
   orbitControls3DRef,
   saved3DCameraStateRef,
+  saved3DCameraKeyRef,
+  designCameraKey,
   default3DPosition,
   default3DTarget,
   onUpdateScreenBounds,
@@ -339,6 +348,8 @@ function SceneCameraAndSelectionTracker({
   cameraRef: React.MutableRefObject<THREE.Camera | null>;
   orbitControls3DRef: React.MutableRefObject<OrbitControlsImpl | null>;
   saved3DCameraStateRef: React.MutableRefObject<Saved3DCameraState | null>;
+  saved3DCameraKeyRef: React.MutableRefObject<string>;
+  designCameraKey: string;
   default3DPosition: [number, number, number];
   default3DTarget: [number, number, number];
   onUpdateScreenBounds: (bounds: SelectionScreenBounds | null) => void;
@@ -359,8 +370,50 @@ function SceneCameraAndSelectionTracker({
   const lastBoundsRef = useRef<string>('');
   const lastViewModeRef = useRef<string>(viewMode);
   const lastResetTickRef = useRef<number>(cameraResetTick);
+  const lastDesignCameraKeyRef = useRef<string>(designCameraKey);
   const eyeCameraTick = useWardrobeStore(s=>s.eyeCameraTick);
   const lastEyeTickRef = useRef(0);
+
+  // Tasarım veya L/Düz düzen değiştiğinde varsayılan 3D kamera açısını otomatik uygula;
+  // aynı tasarım içindeki düzenlemelerde ve 3D <-> 2D geçişlerinde kullanıcı kamerası korunur.
+  useLayoutEffect(() => {
+    if (designCameraKey === lastDesignCameraKeyRef.current) return;
+    lastDesignCameraKeyRef.current = designCameraKey;
+    saved3DCameraKeyRef.current = designCameraKey;
+    saved3DCameraStateRef.current = {
+      position: [...default3DPosition],
+      target: [...default3DTarget],
+    };
+    if (
+      viewMode === '3d-perspective' &&
+      camera &&
+      (camera as THREE.PerspectiveCamera).isPerspectiveCamera
+    ) {
+      camera.position.set(
+        default3DPosition[0],
+        default3DPosition[1],
+        default3DPosition[2]
+      );
+      camera.updateProjectionMatrix();
+      if (orbitControls3DRef.current) {
+        orbitControls3DRef.current.target.set(
+          default3DTarget[0],
+          default3DTarget[1],
+          default3DTarget[2]
+        );
+        orbitControls3DRef.current.update();
+      }
+    }
+  }, [
+    designCameraKey,
+    viewMode,
+    camera,
+    default3DPosition,
+    default3DTarget,
+    orbitControls3DRef,
+    saved3DCameraStateRef,
+    saved3DCameraKeyRef,
+  ]);
 
   useEffect(()=>{
     if(eyeCameraTick===lastEyeTickRef.current || viewMode!=='3d-perspective' || !(camera as THREE.PerspectiveCamera).isPerspectiveCamera) return;
@@ -690,6 +743,8 @@ export function WardrobeCanvas() {
   const cameraRef = useRef<THREE.Camera | null>(null);
   const orbitControls3DRef = useRef<OrbitControlsImpl | null>(null);
   const saved3DCameraStateRef = useRef<Saved3DCameraState | null>(null);
+  const designCameraKey = get3DCameraContextKey(design);
+  const saved3DCameraKeyRef = useRef<string>(designCameraKey);
   const orthographicPoses = useRef<Partial<Record<OrthographicMode, OrthographicPose>>>({});
   const marqueeRef = useRef<MarqueeDragState | null>(null);
   const suppressNextClickRef = useRef<boolean>(false);
@@ -761,8 +816,13 @@ export function WardrobeCanvas() {
   const default3DPosition = default3DPose.position;
   const default3DTarget = default3DPose.target;
 
-  const initial3DCameraPos = saved3DCameraStateRef.current?.position ?? default3DPosition;
-  const initial3DCameraTarget = saved3DCameraStateRef.current?.target ?? default3DTarget;
+  const savedCameraMatchesContext = saved3DCameraKeyRef.current === designCameraKey;
+  const initial3DCameraPos = savedCameraMatchesContext
+    ? (saved3DCameraStateRef.current?.position ?? default3DPosition)
+    : default3DPosition;
+  const initial3DCameraTarget = savedCameraMatchesContext
+    ? (saved3DCameraStateRef.current?.target ?? default3DTarget)
+    : default3DTarget;
   const orthographicDefaults: Record<OrthographicMode, OrthographicPose> = {
     '2d-front-A': { position: [lenAM / 2, heightM / 2, 5], target: [lenAM / 2, heightM / 2, 0], zoom: 195 },
     '2d-front-B': { position: [5, heightM / 2, lenBM / 2], target: [0, heightM / 2, lenBM / 2], zoom: 195 },
@@ -1044,6 +1104,8 @@ export function WardrobeCanvas() {
           cameraRef={cameraRef}
           orbitControls3DRef={orbitControls3DRef}
           saved3DCameraStateRef={saved3DCameraStateRef}
+          saved3DCameraKeyRef={saved3DCameraKeyRef}
+          designCameraKey={designCameraKey}
           default3DPosition={default3DPosition}
           default3DTarget={default3DTarget}
           onUpdateScreenBounds={setSelectionScreenBounds}

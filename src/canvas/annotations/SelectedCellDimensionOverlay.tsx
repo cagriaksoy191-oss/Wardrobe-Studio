@@ -622,7 +622,7 @@ export function SelectedCellDimensionOverlay() {
                         setDraftVal(String(spec.valueMm));
                       }
                     }}
-                    className={`pointer-events-auto group flex min-h-6 flex-col items-center justify-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg ${spec.badgeClass}`}
+                    className={`pointer-events-auto group flex min-h-[25px] flex-col items-center justify-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg ${spec.badgeClass}`}
                   >
                     <span className="flex items-center gap-1 whitespace-nowrap">
                       <span>{spec.shortTag}</span>
@@ -963,7 +963,7 @@ export function SelectedCellDimensionOverlay() {
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => handleOpenAxisEditor(spec, e)}
                   title={`${spec.title} — Yönlü boyutlandırmak için tıklayın`}
-                  className={`pointer-events-auto group flex min-h-6 flex-col items-center justify-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg transition hover:scale-105 ${spec.badgeClass}`}
+                  className={`pointer-events-auto group flex min-h-[25px] flex-col items-center justify-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg transition hover:scale-105 ${spec.badgeClass}`}
                 >
                   <span className="flex items-center gap-1 whitespace-nowrap">
                     <span>{spec.shortTag}</span>

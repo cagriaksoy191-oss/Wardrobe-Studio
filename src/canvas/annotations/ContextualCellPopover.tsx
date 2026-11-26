@@ -94,7 +94,7 @@ export function computePopoverPlacement(
   options: PopoverPlacementOptions = {}
 ): PopoverPlacement {
   const canvasWidth = screenBounds?.canvasWidth ?? 900;
-  const maxWidth = mode === 'door-quick-bar' ? 312 : canvasWidth < 740 ? 290 : 320;
+  const maxWidth = mode === 'door-quick-bar' ? 312 : canvasWidth < 740 ? 280 : 320;
   const widthPx = Math.min(maxWidth, Math.max(180, canvasWidth - EDGE_MARGIN_PX * 2));
   const rightAlignedLeft = Math.max(EDGE_MARGIN_PX, canvasWidth - widthPx - EDGE_MARGIN_PX);
 

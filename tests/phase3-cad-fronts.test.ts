@@ -16,7 +16,10 @@ import {
 } from '../src/canvas/annotations/SelectedCellDimensionOverlay';
 import { runEndControlsFit } from '../src/canvas/annotations/runEndControlFit';
 import { computeTopPlanFit, furnitureBounds } from '../src/canvas/scene/frontViewFit';
-import { computeDefault3DCameraPose } from '../src/canvas/scene/WardrobeCanvas';
+import {
+  computeDefault3DCameraPose,
+  get3DCameraContextKey,
+} from '../src/canvas/scene/WardrobeCanvas';
 import { phase5Example } from '../src/core/presets/phase5Examples';
 import { SAMPLE_DESIGNS } from '../src/core/presets/sampleDesigns';
 import { solveDesign } from '../src/core/solver/carcassSolver';
@@ -431,14 +434,14 @@ describe('Phase 3 CAD Framing, Contextual Editing, Front Systems & Overlay Numer
       expect(placed.leftPx).toBe(14);
       expect(placed.widthPx).toBe(320);
 
-      // 1280x800 narrow scene (704px): cap popover width to 290px so right-aligned popover clears compact conflict badge
+      // 1280x800 narrow scene (704px): cap popover width to 280px so right-aligned popover clears compact conflict badge (+8px gap)
       const narrowConflictPlaced = computePopoverPlacement(
         { ...bounds, canvasWidth: 704, conflictCenterX: 335 },
         'cell-or-drawer',
         { conflictActive: true }
       );
-      expect(narrowConflictPlaced.widthPx).toBe(290);
-      expect(narrowConflictPlaced.leftPx).toBe(400);
+      expect(narrowConflictPlaced.widthPx).toBe(280);
+      expect(narrowConflictPlaced.leftPx).toBe(410);
     });
 
     it('enforces a11y labels, desktop quick-bar xl:hidden, PM-04 Escape guard, no IBL jargon, and mobile scene toggle', () => {
@@ -476,7 +479,19 @@ describe('Phase 3 CAD Framing, Contextual Editing, Front Systems & Overlay Numer
       expect(overlaySrc).not.toContain('Çakışma: {resizeDraft.conflictOverlapMm} mm ({resizeDraft.neighborLabel})');
       expect(overlaySrc).toContain('aria-describedby={draftError ? `drawer-dim-error-${spec.axis}` : undefined}');
       expect(overlaySrc).toContain('aria-describedby={draftError ? `cell-dim-error-${spec.axis}` : undefined}');
-      expect(overlaySrc.match(/pointer-events-auto group flex min-h-6 flex-col/g)?.length).toBe(2);
+      expect(overlaySrc.match(/pointer-events-auto group flex min-h-\[25px\] flex-col/g)?.length).toBe(2);
+
+      // Auto-pose 3D camera context key changes across preset/layout switches while staying stable within the same design
+      expect(get3DCameraContextKey({ id: 'straight-wardrobe', layoutKind: 'straight' })).not.toBe(
+        get3DCameraContextKey({ id: 'l-diagonal-asymmetric', layoutKind: 'l-shape' })
+      );
+      expect(get3DCameraContextKey({ id: 'd1', layoutKind: 'straight' })).not.toBe(
+        get3DCameraContextKey({ id: 'd1', layoutKind: 'l-shape' })
+      );
+      expect(get3DCameraContextKey({ id: 'd1', layoutKind: 'straight' })).toBe(
+        get3DCameraContextKey({ id: 'd1', layoutKind: 'straight' })
+      );
+      expect(canvasSrc).toContain('if (designCameraKey === lastDesignCameraKeyRef.current) return;');
 
       // PM-13 drawerHeightInput Escape revert + CF-16 aria-describedby + badInput + VF-04 select borders
       expect(popoverSrc).toMatch(
