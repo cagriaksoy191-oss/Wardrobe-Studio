@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+:root,
+.studio-app {
+  color-scheme: dark;
+}
+
 .studio-app {
   width: 100%;
   height: 100dvh;
@@ -213,8 +218,8 @@
   white-space: nowrap;
 }
 
-.studio-setup { width: clamp(17rem, 20vw, 22rem); }
-.studio-selection { width: clamp(19rem, 22vw, 25rem); }
+.studio-setup { width: min(clamp(17rem, 20vw, 22rem), 26vw); }
+.studio-selection { width: min(clamp(19rem, 22vw, 25rem), 28vw); }
 .studio-setup, .studio-selection, .context-panel { overscroll-behavior: contain; scrollbar-width: thin; }
 .studio-footer { min-height: 1.75rem; }
 .studio-dialog { inset: clamp(.25rem, 1.7vw, 1.25rem); width: auto; height: auto; max-width: none; max-height: none; margin: 0; }
@@ -265,6 +270,31 @@
     inset: auto .4rem 4.2rem;
     width: auto;
     max-height: min(48%, calc(100% - var(--scene-toolbar-bottom, 4.5rem) - 4.2rem));
+  }
+}
+/* WCAG 1.4.4 (200% text-scale / narrow scene): collapse floating toolbars into compact toggle below 460px */
+@container (max-width: 460px) {
+  .studio-mobile-scene-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-width: 44px;
+    min-height: 44px;
+    pointer-events: auto;
+  }
+  .studio-scene-toolbar:not([data-mobile-open="true"]):not(:has(.studio-mobile-scene-toggle)) {
+    display: none;
+  }
+  .studio-scene-toolbar:has(.studio-mobile-scene-toggle):not([data-mobile-open="true"]) > :not(.studio-mobile-scene-toggle) {
+    display: none;
+  }
+  .studio-analysis-toolbar:not([data-mobile-open="true"]) {
+    display: none;
+  }
+  .studio-gesture-hint,
+  [data-testid="canvas-gesture-hint"] {
+    display: none;
   }
 }
 

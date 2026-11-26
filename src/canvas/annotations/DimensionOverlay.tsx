@@ -327,6 +327,7 @@ export function DimensionOverlay({
                       type="number"
                       aria-label={`${dim.label.split(':')[0]} değeri (mm)`}
                       aria-invalid={validationError ? true : undefined}
+                      aria-describedby={validationError ? `dim-error-${dim.id}` : undefined}
                       min={dim.minMm ?? 200}
                       max={dim.maxMm ?? 6000}
                       step={10}
@@ -373,7 +374,7 @@ export function DimensionOverlay({
                     </div>
                   )}
                   {validationError && (
-                    <div role="alert" className="rounded bg-rose-950/90 border border-rose-500/40 px-1.5 py-0.5 text-[9px] text-rose-200">
+                    <div id={`dim-error-${dim.id}`} role="alert" className="rounded bg-rose-950/90 border border-rose-500/40 px-1.5 py-0.5 text-[9px] text-rose-200">
                       {validationError}
                     </div>
                   )}
@@ -388,7 +389,7 @@ export function DimensionOverlay({
                       ? `${dim.label} — Kaynak dış genişliği (${dim.sourceValueMm} mm) düzenlemek için tıklayın`
                       : `${dim.label} — Doğrudan ölçü girmek için tıklayın`
                   }
-                  className={`${isViewProjected ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'} group flex ${isFront2D && mergedInner ? 'flex-col items-center leading-tight py-0.5' : 'items-center gap-1 py-0.5'} whitespace-nowrap rounded px-1.5 text-[10px] font-mono font-medium shadow-sm border backdrop-blur-sm transition hover:scale-105 ${
+                  className={`${isViewProjected ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'} group flex min-h-[25px] ${isFront2D && mergedInner ? 'flex-col items-center justify-center leading-tight py-0.5' : 'items-center gap-1 py-0.5'} whitespace-nowrap rounded px-1.5 text-[10px] font-mono font-medium shadow-sm border backdrop-blur-sm transition hover:scale-105 ${
                     isSelectedBayDim
                       ? 'bg-amber-500/95 text-slate-950 border-amber-300 font-bold hover:bg-amber-400'
                       : isInner

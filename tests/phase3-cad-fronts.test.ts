@@ -334,6 +334,26 @@ describe('Phase 3 CAD Framing, Contextual Editing, Front Systems & Overlay Numer
         ).project(camera);
         const screenXB = ((pB.x + 1) * width) / 2;
         expect(screenXB).toBeGreaterThanOrEqual(24);
+
+        const depthB = model.dimensions.find((d) => d.kind === 'depth' && d.runId === runB.id)!;
+        const depthEndpoints = resolveDimensionRenderEndpoints(depthB, '3d-perspective', design.runs);
+        const depthMidM = new Vector3(
+          ((depthEndpoints.startMm[0] + depthEndpoints.endMm[0]) / 2) * 0.001,
+          ((depthEndpoints.startMm[1] + depthEndpoints.endMm[1]) / 2) * 0.001,
+          ((depthEndpoints.startMm[2] + depthEndpoints.endMm[2]) / 2) * 0.001
+        ).project(camera);
+        const depthScreenX = ((depthMidM.x + 1) * width) / 2;
+        // Centered ~160px Derinlik pill needs >= 80px center X to stay > 0px inside left edge
+        expect(depthScreenX).toBeGreaterThan(80);
+
+        const heightB = model.dimensions.find((d) => d.kind === 'height' && d.runId === runB.id)!;
+        const heightMidM = new Vector3(
+          ((heightB.startMm[0] + heightB.endMm[0]) / 2) * 0.001,
+          ((heightB.startMm[1] + heightB.endMm[1]) / 2) * 0.001,
+          ((heightB.startMm[2] + heightB.endMm[2]) / 2) * 0.001
+        ).project(camera);
+        const heightScreenX = ((heightMidM.x + 1) * width) / 2;
+        expect(heightScreenX).toBeGreaterThan(82);
       }
     });
   });
@@ -409,6 +429,16 @@ describe('Phase 3 CAD Framing, Contextual Editing, Front Systems & Overlay Numer
       };
       const placed = computePopoverPlacement(bounds, 'cell-or-drawer', { conflictActive: true });
       expect(placed.leftPx).toBe(14);
+      expect(placed.widthPx).toBe(320);
+
+      // 1280x800 narrow scene (704px): cap popover width to 290px so right-aligned popover clears compact conflict badge
+      const narrowConflictPlaced = computePopoverPlacement(
+        { ...bounds, canvasWidth: 704, conflictCenterX: 335 },
+        'cell-or-drawer',
+        { conflictActive: true }
+      );
+      expect(narrowConflictPlaced.widthPx).toBe(290);
+      expect(narrowConflictPlaced.leftPx).toBe(400);
     });
 
     it('enforces a11y labels, desktop quick-bar xl:hidden, PM-04 Escape guard, no IBL jargon, and mobile scene toggle', () => {
@@ -436,6 +466,30 @@ describe('Phase 3 CAD Framing, Contextual Editing, Front Systems & Overlay Numer
       expect(canvasSrc).toContain('studio-mobile-scene-sheet');
       expect(analysisSrc).toContain('studio-analysis-toolbar');
       expect(analysisSrc).toContain('studio-gesture-hint');
+
+      // Phase 3 Closure — Obs 1a/1b, PM-13, CF-16, VF-04
+      expect(dimSrc).toContain('min-h-[25px]');
+      expect(dimSrc).toContain('aria-describedby={validationError ? `dim-error-${dim.id}` : undefined}');
+      expect(dimSrc).toContain('id={`dim-error-${dim.id}`}');
+
+      expect(overlaySrc).toContain('Çakışma: {resizeDraft.conflictOverlapMm} mm');
+      expect(overlaySrc).not.toContain('Çakışma: {resizeDraft.conflictOverlapMm} mm ({resizeDraft.neighborLabel})');
+      expect(overlaySrc).toContain('aria-describedby={draftError ? `drawer-dim-error-${spec.axis}` : undefined}');
+      expect(overlaySrc).toContain('aria-describedby={draftError ? `cell-dim-error-${spec.axis}` : undefined}');
+      expect(overlaySrc.match(/pointer-events-auto group flex min-h-6 flex-col/g)?.length).toBe(2);
+
+      // PM-13 drawerHeightInput Escape revert + CF-16 aria-describedby + badInput + VF-04 select borders
+      expect(popoverSrc).toMatch(
+        /e\.key === 'Escape'[\s\S]*setDrawerHeightInput\(String\(firstDrw\.heightMm\)\)[\s\S]*setDrawerHeightError\(null\)[\s\S]*e\.currentTarget\.blur\(\)/
+      );
+      expect(popoverSrc).toContain("aria-describedby={drawerHeightError ? 'popover-drawer-height-error' : undefined}");
+      expect(popoverSrc).toContain('id="popover-drawer-height-error"');
+      expect(popoverSrc).toContain("aria-describedby={groupIntervalInvalid ? 'popover-shelf-interval-error' : undefined}");
+      expect(popoverSrc).toContain('id="popover-shelf-interval-error"');
+      expect(popoverSrc).toContain('setGroupIntervalBadInput(Boolean(e.currentTarget.validity?.badInput))');
+      expect(popoverSrc).toContain("aria-describedby={targetMmError ? 'popover-target-mm-error' : undefined}");
+      expect(popoverSrc).toContain('id="popover-target-mm-error"');
+      expect(popoverSrc).not.toMatch(/<select[\s\S]{0,600}border-slate-700/);
     });
   });
 });

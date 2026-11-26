@@ -543,6 +543,7 @@ export function SelectedCellDimensionOverlay() {
                         type="number"
                         aria-label={spec.title}
                         aria-invalid={draftError ? true : undefined}
+                        aria-describedby={draftError ? `drawer-dim-error-${spec.axis}` : undefined}
                         step={10}
                         min={spec.minMm}
                         max={spec.maxMm}
@@ -602,6 +603,7 @@ export function SelectedCellDimensionOverlay() {
                     </div>
                     {draftError && (
                       <div
+                        id={`drawer-dim-error-${spec.axis}`}
                         role="alert"
                         className="rounded border border-rose-500/40 bg-rose-950/90 px-1.5 py-0.5 text-[10px] text-rose-200"
                       >
@@ -620,7 +622,7 @@ export function SelectedCellDimensionOverlay() {
                         setDraftVal(String(spec.valueMm));
                       }
                     }}
-                    className={`pointer-events-auto group flex flex-col items-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg ${spec.badgeClass}`}
+                    className={`pointer-events-auto group flex min-h-6 flex-col items-center justify-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg ${spec.badgeClass}`}
                   >
                     <span className="flex items-center gap-1 whitespace-nowrap">
                       <span>{spec.shortTag}</span>
@@ -913,6 +915,7 @@ export function SelectedCellDimensionOverlay() {
                       type="number"
                       aria-label={spec.title}
                       aria-invalid={draftError ? true : undefined}
+                      aria-describedby={draftError ? `cell-dim-error-${spec.axis}` : undefined}
                       step={10}
                       min={spec.minMm}
                       max={spec.maxMm}
@@ -946,6 +949,7 @@ export function SelectedCellDimensionOverlay() {
                   </div>
                   {draftError && (
                     <div
+                      id={`cell-dim-error-${spec.axis}`}
                       role="alert"
                       className="rounded border border-rose-500/40 bg-rose-950/90 px-1.5 py-0.5 text-[10px] text-rose-200"
                     >
@@ -959,7 +963,7 @@ export function SelectedCellDimensionOverlay() {
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => handleOpenAxisEditor(spec, e)}
                   title={`${spec.title} — Yönlü boyutlandırmak için tıklayın`}
-                  className={`pointer-events-auto group flex flex-col items-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg transition hover:scale-105 ${spec.badgeClass}`}
+                  className={`pointer-events-auto group flex min-h-6 flex-col items-center justify-center rounded-md border px-2 py-0.5 font-mono text-[10px] font-bold shadow-lg transition hover:scale-105 ${spec.badgeClass}`}
                 >
                   <span className="flex items-center gap-1 whitespace-nowrap">
                     <span>{spec.shortTag}</span>
@@ -993,7 +997,7 @@ export function SelectedCellDimensionOverlay() {
             <div className="pointer-events-none flex items-center gap-1.5 whitespace-nowrap rounded-md border border-rose-400 bg-rose-950/95 px-2.5 py-1 text-[11px] font-bold text-rose-200 shadow-xl">
               <AlertTriangle className="h-3.5 w-3.5 text-rose-400 shrink-0" />
               <span>
-                Çakışma: {resizeDraft.conflictOverlapMm} mm ({resizeDraft.neighborLabel})
+                Çakışma: {resizeDraft.conflictOverlapMm} mm
               </span>
             </div>
           </Html>

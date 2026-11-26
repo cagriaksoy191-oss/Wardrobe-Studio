@@ -151,3 +151,17 @@ describe('Phase 3 Shell — VF-09..VF-13, CF-17, CF-23 Craft, State Preservation
     expect(appSource).toContain('Önceki oturum kaydı okunamadı');
   });
 });
+
+describe('Phase 3 Closure — WebKit Dark Form Chrome & WCAG 1.4.4 200% Text-Scale Sidebar Caps', () => {
+  it('sets color-scheme: dark on :root and .studio-app so native select and number controls stay readable in WebKit/Firefox', () => {
+    expect(cssSource).toMatch(/:root,\s*\.studio-app\s*\{[\s\S]*color-scheme:\s*dark;/);
+  });
+
+  it('caps desktop sidebar widths with min(..., 26vw/28vw) and collapses scene toolbars via @container (max-width: 460px)', () => {
+    expect(cssSource).toContain('.studio-setup { width: min(clamp(17rem, 20vw, 22rem), 26vw); }');
+    expect(cssSource).toContain('.studio-selection { width: min(clamp(19rem, 22vw, 25rem), 28vw); }');
+    expect(cssSource).toMatch(
+      /@container\s*\(max-width:\s*460px\)\s*\{[\s\S]*\.studio-mobile-scene-toggle[\s\S]*\.studio-scene-toolbar[\s\S]*\.studio-analysis-toolbar/
+    );
+  });
+});

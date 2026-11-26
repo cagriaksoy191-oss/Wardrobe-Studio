@@ -247,11 +247,11 @@ export function computeDefault3DCameraPose(params: {
   const radiusM = Math.hypot(params.lenAM, params.heightM, sceneDepthM) / 2;
   // CF-10: Pull back default 3D distance slightly and nudge L-shape target rightwards on screen
   // so Run B Derinlik, Yükseklik and +B stay clear of the left canvas edge & #studio-setup.
-  const distanceFactor = isL ? 1.28 : 1.16;
+  const distanceFactor = isL ? 1.36 : 1.16;
   const cameraDistanceM = (radiusM / Math.sin((42 * Math.PI) / 360)) * distanceFactor;
   const cameraDirection = new THREE.Vector3(isL ? 1 : 0.55, 0.65, 1).normalize();
   const target: [number, number, number] = isL
-    ? [centerXM - 0.16, centerYM - 0.04, centerZM + 0.18]
+    ? [centerXM - 0.30, centerYM - 0.04, centerZM + 0.32]
     : [centerXM, centerYM, centerZM];
   const position: [number, number, number] = [
     target[0] + cameraDirection.x * cameraDistanceM,

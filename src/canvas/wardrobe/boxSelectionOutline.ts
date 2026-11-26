@@ -3,6 +3,13 @@ import type { ResolvedCell } from '../../core/schema/types';
 type Point = [number, number, number];
 const MM_TO_M = 0.001;
 
+// Choose the rendering path for the solved model so it stays stable throughout a drag.
+export const CELL_OUTLINE_BATCH_MIN_MODEL_SIZE = 64;
+
+export function shouldBatchCellBoxOutlines(cellCount: number): boolean {
+  return cellCount >= CELL_OUTLINE_BATCH_MIN_MODEL_SIZE;
+}
+
 const CORNERS: readonly Point[] = [
   [-1, -1, -1], [-1, -1, 1], [-1, 1, -1], [-1, 1, 1],
   [1, -1, -1], [1, -1, 1], [1, 1, -1], [1, 1, 1],

@@ -29,7 +29,11 @@ import { motionRuntime } from '../scene/MotionController';
 import { SlidingLeafInteraction, slidingAsDoor } from './SlidingLeafInteraction';
 import { slidingCellHasOpening } from '../../core/analysis/motionConstraints';
 import { useWardrobeStore } from '../../store/useWardrobeStore';
-import { appendCellBoxOutline, cellBoxSizeMetres } from './boxSelectionOutline';
+import {
+  appendCellBoxOutline,
+  cellBoxSizeMetres,
+  shouldBatchCellBoxOutlines,
+} from './boxSelectionOutline';
 
 const MM_TO_M = 0.001;
 // Z-fighting'i önlemek için çakışık yüzeylerde 0.1 mm mikro daraltma
@@ -39,8 +43,6 @@ const COPLANAR_INSET_M = 0.0001;
 const NOOP_RAYCAST: THREE.Object3D['raycast'] = () => null;
 const MESH_RAYCAST: THREE.Object3D['raycast'] = THREE.Mesh.prototype.raycast;
 const CELL_HIGHLIGHT_WIDTH = 2.2;
-// Choose the rendering path for the solved model so it stays stable throughout a drag.
-const CELL_OUTLINE_BATCH_MIN_MODEL_SIZE = 64;
 
 function cellHighlightColor(
   conflict: boolean, resolved: boolean, hovered: boolean, selected: boolean,
@@ -134,7 +136,7 @@ export function WardrobeMeshGroup({
     [panels]
   );
 
-  const batchBoxOutlines = cells.length >= CELL_OUTLINE_BATCH_MIN_MODEL_SIZE;
+  const batchBoxOutlines = shouldBatchCellBoxOutlines(cells.length);
   const { cellVolumes, boxOutlines } = useMemo(() => {
     const boxOutlines = new Map<string, [number, number, number][]>();
     const selected = new Set(selectedCellIds);

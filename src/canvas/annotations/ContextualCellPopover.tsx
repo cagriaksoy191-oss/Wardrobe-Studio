@@ -94,7 +94,7 @@ export function computePopoverPlacement(
   options: PopoverPlacementOptions = {}
 ): PopoverPlacement {
   const canvasWidth = screenBounds?.canvasWidth ?? 900;
-  const maxWidth = mode === 'door-quick-bar' ? 312 : 320;
+  const maxWidth = mode === 'door-quick-bar' ? 312 : canvasWidth < 740 ? 290 : 320;
   const widthPx = Math.min(maxWidth, Math.max(180, canvasWidth - EDGE_MARGIN_PX * 2));
   const rightAlignedLeft = Math.max(EDGE_MARGIN_PX, canvasWidth - widthPx - EDGE_MARGIN_PX);
 
@@ -219,7 +219,10 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
 
   const [splitCountInput, setSplitCountInput] = useState<number>(3);
   const [groupIntervalDraft, setGroupIntervalDraft] = useState(groupIntervalDefault);
-  const groupIntervalTarget = readShelfIntervalDraft(groupIntervalDraft, groupIntervalMax);
+  const [groupIntervalBadInput, setGroupIntervalBadInput] = useState(false);
+  const groupIntervalTarget = groupIntervalBadInput
+    ? null
+    : readShelfIntervalDraft(groupIntervalDraft, groupIntervalMax);
   const [mergeTargetIntervals, setMergeTargetIntervals] = useState<number>(
     Math.max(2, group.cells.length)
   );
@@ -238,6 +241,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
 
   useEffect(() => {
     setGroupIntervalDraft(groupIntervalDefault);
+    setGroupIntervalBadInput(false);
     setTargetMmError(null);
     setDrawerHeightError(null);
   }, [selectionSignature, groupIntervalDefault]);
@@ -684,6 +688,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 type="number"
                 aria-label="Çekmece ön yüksekliği (mm)"
                 aria-invalid={drawerHeightError ? true : undefined}
+                aria-describedby={drawerHeightError ? 'popover-drawer-height-error' : undefined}
                 step={10}
                 min={80}
                 max={maxDrawerH}
@@ -724,7 +729,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               </button>
             </div>
             {drawerHeightError && (
-              <p role="alert" className="text-[10px] leading-snug text-rose-200">
+              <p id="popover-drawer-height-error" role="alert" className="text-[10px] leading-snug text-rose-200">
                 {drawerHeightError}
               </p>
             )}
@@ -797,7 +802,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     drawerSlide: (e.target.value || undefined) as 'partial' | 'full' | undefined,
                   })
                 }
-                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-white"
+                className="rounded border border-slate-500 bg-slate-900 px-2 py-1 text-[11px] text-white"
               >
                 <option value="">Varsayılan · %82</option>
                 <option value="partial">Kısmi açılım · %80</option>
@@ -844,7 +849,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                       undefined
                     );
                   }}
-                  className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-white"
+                  className="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1 text-[10px] text-white"
                 >
                   <option value="">
                     Genel Çekmece Malzemesi (
@@ -880,7 +885,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                         { styleId: e.target.value as HandleStyleId }
                       )
                     }
-                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
+                    className="w-full rounded border border-slate-500 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
                   >
                     {Object.values(HANDLE_STYLE_CATALOG).map((h) => (
                       <option key={h.id} value={h.id}>
@@ -906,7 +911,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                         { finishId: e.target.value as HandleFinishId }
                       )
                     }
-                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
+                    className="w-full rounded border border-slate-500 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
                   >
                     {Object.values(HANDLE_FINISH_CATALOG).map((f) => (
                       <option key={f.id} value={f.id}>
@@ -936,7 +941,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                         }
                       )
                     }
-                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
+                    className="w-full rounded border border-slate-500 bg-slate-900 px-1.5 py-1 text-[10px] text-white"
                   >
                     <option value="middle">Orta Hiza</option>
                     <option value="top">Üst Kenar</option>
@@ -960,7 +965,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                         { lengthMm: Number(e.target.value) }
                       )
                     }
-                    className="w-full rounded border border-slate-700 bg-slate-900 px-1.5 py-1 font-mono text-[10px] text-white"
+                    className="w-full rounded border border-slate-500 bg-slate-900 px-1.5 py-1 font-mono text-[10px] text-white"
                   >
                     <option value={96}>96 mm</option>
                     <option value={160}>160 mm</option>
@@ -986,6 +991,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const activeJunction = design.junctions[0] ?? null;
 
   const changeIntervalTarget = (offset: number) => {
+    setGroupIntervalBadInput(false);
     setGroupIntervalDraft((draft) => {
       const count = readShelfIntervalDraft(draft, groupIntervalMax);
       return String(count === null ? 1 : Math.max(1, Math.min(groupIntervalMax, count + offset)));
@@ -994,7 +1000,8 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
   const applyIntervalTarget = () => {
     if (groupIntervalTarget !== null) setContiguousGroupIntervalCount(groupIntervalTarget);
   };
-  const groupIntervalInvalid = groupIntervalDraft !== '' && groupIntervalTarget === null;
+  const groupIntervalInvalid =
+    groupIntervalBadInput || (groupIntervalDraft !== '' && groupIntervalTarget === null);
   const intervalInput = (
     <div className="flex items-center gap-1 rounded border border-slate-600 bg-slate-900 px-1 py-0.5">
       <button
@@ -1013,9 +1020,13 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
         step={1}
         aria-label={group.isMultiShelfGroupSelection ? 'Grup başına aralık' : 'Hedef aralık'}
         aria-invalid={groupIntervalInvalid ? true : undefined}
+        aria-describedby={groupIntervalInvalid ? 'popover-shelf-interval-error' : undefined}
         placeholder="—"
         value={groupIntervalDraft}
-        onChange={(e) => setGroupIntervalDraft(e.target.value)}
+        onChange={(e) => {
+          setGroupIntervalBadInput(Boolean(e.currentTarget.validity?.badInput));
+          setGroupIntervalDraft(e.target.value);
+        }}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === 'Enter') {
@@ -1023,6 +1034,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
             applyIntervalTarget();
           } else if (e.key === 'Escape') {
             e.preventDefault();
+            setGroupIntervalBadInput(false);
             setGroupIntervalDraft(groupIntervalDefault);
             e.currentTarget.blur();
           }
@@ -1290,7 +1302,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 </button>
               </div>
               {groupIntervalInvalid && (
-                <p role="alert" className="text-[10px] text-rose-200">
+                <p id="popover-shelf-interval-error" role="alert" className="text-[10px] text-rose-200">
                   1 ile {groupIntervalMax} arasında tam sayı girin.
                 </p>
               )}
@@ -1379,7 +1391,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                 </button>
               </div>
               {groupIntervalInvalid && (
-                <p role="alert" className="text-[10px] text-rose-200">
+                <p id="popover-shelf-interval-error" role="alert" className="text-[10px] text-rose-200">
                   1 ile {groupIntervalMax} arasında tam sayı girin.
                 </p>
               )}
@@ -1631,6 +1643,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
               type="number"
               aria-label={`Hedef ${activeAxis} ölçüsü (mm)`}
               aria-invalid={targetMmError ? true : undefined}
+              aria-describedby={targetMmError ? 'popover-target-mm-error' : undefined}
               step={10}
               min={60}
               max={3000}
@@ -1662,7 +1675,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
             </button>
           </div>
           {targetMmError && (
-            <p role="alert" className="text-[10px] leading-snug text-rose-200">
+            <p id="popover-target-mm-error" role="alert" className="text-[10px] leading-snug text-rose-200">
               {targetMmError}
             </p>
           )}
@@ -1863,7 +1876,7 @@ export function ContextualCellPopover({ screenBounds }: ContextualCellPopoverPro
                     e.target.value as InteriorItemPreset
                   )
                 }
-                className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[10px] text-amber-200"
+                className="w-full rounded border border-slate-500 bg-slate-900 px-2 py-1 text-[10px] text-amber-200"
               >
                 {(Object.entries(INTERIOR_ITEM_PRESET_LABELS) as [InteriorItemPreset, string][]).map(
                   ([presetId, label]) => (
