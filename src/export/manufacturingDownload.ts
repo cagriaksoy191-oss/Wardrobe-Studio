@@ -10,17 +10,38 @@ import { downloadFile, safeFileName } from './download';
 
 const STALE_SNAPSHOT_ERROR = 'Paket hazırlanırken tasarım veya sürüm değişti. Güncel tasarım için yeniden indirin.';
 
-export function manufacturingVersion(design: Design, versions: NamedVersion[]) {
+export function manufacturingVersion(
+  design: Design,
+  versions: NamedVersion[],
+  activeVersionId?: string | null
+) {
   if (!versions.length) return undefined;
   const signature = designSignature(design);
-  return versions.find(version => designSignature(version.design) === signature);
+  if (activeVersionId) {
+    const activeMatch = versions.find(
+      version => version.id === activeVersionId && designSignature(version.design) === signature
+    );
+    if (activeMatch) return activeMatch;
+  }
+  return (
+    versions.find(version => !version.archived && designSignature(version.design) === signature) ??
+    versions.find(version => designSignature(version.design) === signature)
+  );
 }
 
-function watchManufacturingSnapshot(design: Design, resolved: unknown, version: NamedVersion | undefined) {
+function watchManufacturingSnapshot(
+  design: Design,
+  resolved: unknown,
+  version: NamedVersion | undefined,
+  activeVersionId: string | null
+) {
   let snapshotChanged = false;
-  const currentVersion = () => manufacturingVersion(design, useVersionArchive.getState().versions);
+  const currentVersion = () =>
+    manufacturingVersion(design, useVersionArchive.getState().versions, useWardrobeStore.getState().activeVersionId);
   const unsubscribeDesign = useWardrobeStore.subscribe(state => {
-    if (state.design !== design || state.resolved !== resolved) snapshotChanged = true;
+    if (state.design !== design || state.resolved !== resolved || state.activeVersionId !== activeVersionId) {
+      snapshotChanged = true;
+    }
   });
   const unsubscribeArchive = useVersionArchive.subscribe((state, previous) => {
     if (state.versions !== previous.versions && currentVersion() !== version) snapshotChanged = true;
@@ -40,12 +61,12 @@ function watchManufacturingSnapshot(design: Design, resolved: unknown, version: 
 /** The product download command. The serializers also serve diagnostic and QA callers. */
 export async function downloadFullManufacturingFile(format: 'csv' | 'zip', signal: AbortSignal) {
   signal.throwIfAborted();
-  const { design, resolved } = useWardrobeStore.getState();
+  const { design, resolved, activeVersionId } = useWardrobeStore.getState();
   if (!design?.id || resolved?.designId !== design.id || !Array.isArray(resolved.issues)) {
     throw new Error(INVALID_MANUFACTURING_SNAPSHOT);
   }
 
-  const version = manufacturingVersion(design, useVersionArchive.getState().versions);
+  const version = manufacturingVersion(design, useVersionArchive.getState().versions, activeVersionId);
   const pkg = extractProduction(design, resolved, version?.name ?? 'Çalışma kopyası');
   const denial = fullManufacturingExportDenial(design, resolved, pkg);
   if (denial) throw new Error(denial);
@@ -58,7 +79,7 @@ export async function downloadFullManufacturingFile(format: 'csv' | 'zip', signa
 
   // Invalidate the request even if the editor returns to the original snapshot
   // before the ZIP writer finishes loading.
-  const watcher = watchManufacturingSnapshot(design, resolved, version);
+  const watcher = watchManufacturingSnapshot(design, resolved, version, activeVersionId);
   try {
     const { createTechnicalZip } = await import('./zipWriter');
     watcher.assertFresh(signal);
@@ -75,18 +96,18 @@ export async function downloadFullManufacturingFile(format: 'csv' | 'zip', signa
 /** Stale-safe diagnostic/technical PDF & printable HTML export with full MS-EXPORT-001 parity. */
 export async function downloadProductionDocument(format: 'pdf' | 'printable', signal: AbortSignal) {
   signal.throwIfAborted();
-  const { design, resolved } = useWardrobeStore.getState();
+  const { design, resolved, activeVersionId } = useWardrobeStore.getState();
   if (!design?.id || resolved?.designId !== design.id || !Array.isArray(resolved.issues)) {
     throw new Error(INVALID_MANUFACTURING_SNAPSHOT);
   }
 
-  const version = manufacturingVersion(design, useVersionArchive.getState().versions);
+  const version = manufacturingVersion(design, useVersionArchive.getState().versions, activeVersionId);
   const pkg = extractProduction(design, resolved, version?.name ?? 'Çalışma kopyası');
   assertProductionReady(pkg);
 
   const diagnostic = pkg.accessStatus === 'blocked';
   const stem = safeFileName(`${design.name}-${pkg.versionName}`);
-  const watcher = watchManufacturingSnapshot(design, resolved, version);
+  const watcher = watchManufacturingSnapshot(design, resolved, version, activeVersionId);
   try {
     const { createProductionPdf, localPdfFont } = await import('./pdfWriter');
     watcher.assertFresh(signal);

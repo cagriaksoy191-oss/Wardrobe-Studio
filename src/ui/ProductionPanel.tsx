@@ -18,8 +18,8 @@ const CAPTURE_KIND_LABELS: Record<string, string> = {
   edges: 'Tel / kenar',
 };
 export function ProductionPanel({ onReviewAccess }: { onReviewAccess: () => void }) {
-  const design=useWardrobeStore(s=>s.design),model=useWardrobeStore(s=>s.resolved),versions=useVersionArchive(s=>s.versions);
-  const version=useMemo(()=>manufacturingVersion(design,versions),[design,versions]);
+  const design=useWardrobeStore(s=>s.design),model=useWardrobeStore(s=>s.resolved),activeVersionId=useWardrobeStore(s=>s.activeVersionId),versions=useVersionArchive(s=>s.versions);
+  const version=useMemo(()=>manufacturingVersion(design,versions,activeVersionId),[design,versions,activeVersionId]);
   const pkg=useMemo(()=>extractProduction(design,model,version?.name??'Çalışma kopyası'),[design,model,version?.name]);
   const sheets=useMemo(()=>buildTechnicalSheets(design,model,pkg,true),[design,model,pkg]);
   const [chosen,setChosen]=useState('00-KAPAK'),[show,setShow]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[renderPrompt,setRenderPrompt]=useState(''),[renderPromptStatus,setRenderPromptStatus]=useState('');
@@ -94,27 +94,27 @@ export function ProductionPanel({ onReviewAccess }: { onReviewAccess: () => void
         setMessage(error instanceof Error ? error.message : 'Çıktı oluşturulamadı.');
       }
     } finally {
-      activeTask.current = null;
+      if (activeTask.current === operation) activeTask.current = null;
       if (!operation.signal.aborted) setBusy(false);
     }
   };
   const pdf = () => task(async signal => {
-    const { design: startDesign, resolved: startResolved } = useWardrobeStore.getState();
+    const { design: startDesign, resolved: startResolved, activeVersionId: startVersionId } = useWardrobeStore.getState();
     const result = await downloadProductionDocument('pdf', signal);
     const current = useWardrobeStore.getState();
-    if (!signal.aborted && current.design === startDesign && current.resolved === startResolved) setMessage(result);
+    if (!signal.aborted && current.design === startDesign && current.resolved === startResolved && current.activeVersionId === startVersionId) setMessage(result);
   });
   const printable = () => task(async signal => {
-    const { design: startDesign, resolved: startResolved } = useWardrobeStore.getState();
+    const { design: startDesign, resolved: startResolved, activeVersionId: startVersionId } = useWardrobeStore.getState();
     const result = await downloadProductionDocument('printable', signal);
     const current = useWardrobeStore.getState();
-    if (!signal.aborted && current.design === startDesign && current.resolved === startResolved) setMessage(result);
+    if (!signal.aborted && current.design === startDesign && current.resolved === startResolved && current.activeVersionId === startVersionId) setMessage(result);
   });
   const fullExport = (format: 'csv' | 'zip') => task(async signal => {
-    const { design: startDesign, resolved: startResolved } = useWardrobeStore.getState();
+    const { design: startDesign, resolved: startResolved, activeVersionId: startVersionId } = useWardrobeStore.getState();
     const result = await downloadFullManufacturingFile(format, signal);
     const current = useWardrobeStore.getState();
-    if (!signal.aborted && current.design === startDesign && current.resolved === startResolved) setMessage(result);
+    if (!signal.aborted && current.design === startDesign && current.resolved === startResolved && current.activeVersionId === startVersionId) setMessage(result);
   });
   const downloadSvg=()=>task(async()=>{
     downloadFile(`${safeFileName(sheet.id)}.svg`,svg,'image/svg+xml;charset=utf-8');

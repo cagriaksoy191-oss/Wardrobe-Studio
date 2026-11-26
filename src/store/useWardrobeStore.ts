@@ -116,7 +116,9 @@ export interface PersistedStudioSession {
 }
 
 interface WardrobeState {
-  openNamedVersion:(design:Design,name:string)=>boolean;
+  activeVersionId: string | null;
+  setActiveVersionId: (versionId: string | null) => void;
+  openNamedVersion:(design:Design,name:string,versionId?:string)=>boolean;
   setCornerHangingRod: (junctionId: string, enabled: boolean) => void;
   adjustShelfGrid: (cellId: string, direction: -1 | 0 | 1) => void;
   setSurfaceMaterial: (slot: SurfaceMaterialSlot, materialId: MaterialId) => void;
@@ -701,6 +703,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       historyPast: nextPast,
       historyFuture: nextFuture,
       hasUnsavedChanges: !sameDesign(nextDesign, state.checkpointDesign),
+      activeVersionId: null,
       commandError: null,
       ...pruned,
     });
@@ -720,12 +723,13 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
       if (get().design !== expectedDesign) return false;
       return applyCommand('İşlevsel erişim düzeni uygulandı', draft => changeAccessLayout(draft, remedy));
     },
-    openNamedVersion:(design,name)=>{
+    openNamedVersion:(design,name,versionId)=>{
       resetHistoryTransaction();
       if (!applyCommand(`Sürüm açıldı: ${name}`,()=>structuredClone(design),false)) return false;
       const state = get();
       set({
         ...pruneSelectionForResolved(state, state.design, state.resolved, { exitDoorEditor: true, resetSelection: true }),
+        activeVersionId: versionId ?? null,
         commandError: null,
         motionNotice: null,
         motionRecovery: null,
@@ -839,6 +843,8 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
     design: bootWorkingDesign,
     checkpointDesign: bootCheckpointDesign,
     resolved: bootResolved,
+    activeVersionId: null,
+    setActiveVersionId: (activeVersionId) => set({ activeVersionId }),
     viewMode: '3d-perspective',
     activeStep: 'room-carcass',
     doorVisibilityMode: 'normal',
@@ -1250,6 +1256,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         design: cloned,
         checkpointDesign: structuredClone(cloned),
         resolved: nextResolved,
+        activeVersionId: null,
         ...pruneSelectionForResolved(state, cloned, nextResolved, {
           exitDoorEditor: true,
           resetSelection: true,
@@ -1281,6 +1288,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           exitDoorEditor: true,
           resetSelection: true,
         }),
+        activeVersionId: null,
         commandError: null,
         motionNotice: null,
         motionRecovery: null,
@@ -2544,6 +2552,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         historyPast: cursorPast,
         historyFuture: cursorFuture,
         hasUnsavedChanges: !sameDesign(cursorDesign, checkpointDesign),
+        activeVersionId: null,
         commandError: null,
         ...pruneSelectionForResolved(state, cursorDesign, nextResolved, { fallbackToFirstCell: true }),
       });
@@ -2593,6 +2602,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
             historyPast: cursorPast,
             historyFuture: cursorFuture,
             hasUnsavedChanges: false,
+            activeVersionId: null,
             commandError: null,
             ...pruneSelectionForResolved(state, cursorDesign, nextResolved, { fallbackToFirstCell: true }),
           });
@@ -2626,6 +2636,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         historyPast: nextPast,
         historyFuture: nextFuture,
         hasUnsavedChanges: false,
+        activeVersionId: null,
         commandError: null,
         ...pruneSelectionForResolved(state, restored, nextResolved, { resetSelection: true }),
       });
@@ -2651,6 +2662,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         historyPast: nextPast,
         historyFuture: nextFuture,
         hasUnsavedChanges: !sameDesign(nextEntry.snapshot, checkpointDesign),
+        activeVersionId: null,
         commandError: null,
         ...pruneSelectionForResolved(state, nextEntry.snapshot, nextResolved, { fallbackToFirstCell: true }),
       });
@@ -2688,6 +2700,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
           historyPast: nextPast,
           historyFuture: [],
           hasUnsavedChanges: !sameDesign(validated, state.checkpointDesign),
+          activeVersionId: null,
           commandError: null,
           motionNotice: null,
           motionRecovery: null,
@@ -2785,6 +2798,7 @@ export const useWardrobeStore = create<WardrobeState>((set, get) => {
         doorEditorMode: false,
         selectedDoorId: null, selectedDoorIds: [], selectedFrontId: null,
         selectedDrawerId: null, selectedDrawerIds: [],
+        activeVersionId: null,
         commandError: null,
         openDoorIds: {}, openDrawerIds: {}, hasOpenSlidingLeaf: false, resizeDraft: null,
       });

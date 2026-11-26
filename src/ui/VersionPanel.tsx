@@ -1,12 +1,13 @@
 import {useEffect,useId,useMemo,useRef,useState} from 'react';
 import {useWardrobeStore} from '../store/useWardrobeStore';
 import {useVersionArchive} from '../store/versionArchive';
-import {buildExternalAiPrompt,designDimensions,designMetrics,designSignature,previewDesignJson,type DesignMetrics,type ImportPreview} from '../core/versions/designExchange';
+import {buildExternalAiPrompt,designDimensions,designMetrics,previewDesignJson,type DesignMetrics,type ImportPreview} from '../core/versions/designExchange';
 import {extractProduction} from '../core/production/productionModel';
 import {buildTechnicalSheets,sheetToSvg} from '../core/production/technicalSheets';
 import {solveDesign} from '../core/solver/carcassSolver';
 import type {Design,ResolvedModel} from '../core/schema/types';
 import {downloadFile,safeFileName} from '../export/download';
+import {manufacturingVersion} from '../export/manufacturingDownload';
 import { StudioDialog } from './StudioDialog';
 
 const button='rounded border border-slate-600 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-100 hover:border-sky-400 disabled:opacity-40';
@@ -79,7 +80,7 @@ function CompareLeaves({ a, b }: { a: ResolvedModel; b: ResolvedModel }) {
   </table>;
 }
 export function VersionPanel() {
-  const design=useWardrobeStore(s=>s.design),open=useWardrobeStore(s=>s.openNamedVersion),resolved=useWardrobeStore(s=>s.resolved);
+  const design=useWardrobeStore(s=>s.design),open=useWardrobeStore(s=>s.openNamedVersion),resolved=useWardrobeStore(s=>s.resolved),activeVersionId=useWardrobeStore(s=>s.activeVersionId),setActiveVersionId=useWardrobeStore(s=>s.setActiveVersionId);
   const {versions,save,rename,setArchived,hydrate,error,status,recoveryDocuments}=useVersionArchive();
   const [name,setName]=useState(''),[newNameError,setNewNameError]=useState('');
   const [chosen,setChosen]=useState(''),[renameDraft,setRenameDraft]=useState(''),[renameError,setRenameError]=useState('');
@@ -92,7 +93,7 @@ export function VersionPanel() {
   const fileReadSerial = useRef(0);
   const [request,setRequest]=useState(''),[prompt,setPrompt]=useState(''),[raw,setRaw]=useState(''),[preview,setPreview]=useState<ImportPreview|null>(null),[importName,setImportName]=useState('AI önerisi'),[savedImport,setSavedImport]=useState<string|null>(null);
   useEffect(()=>{void hydrate();},[hydrate]);
-  const activeVersion=versions.find(v=>designSignature(v.design)===designSignature(design)),selected=versions.find(v=>v.id===chosen),other=versions.find(v=>v.id===compare);
+  const activeVersion=manufacturingVersion(design,versions,activeVersionId),selected=versions.find(v=>v.id===chosen),other=versions.find(v=>v.id===compare);
   const slotAVersion = compareA === WORKING_SLOT_ID ? null : versions.find(v => v.id === compareA) ?? null;
   const designA = slotAVersion ? slotAVersion.design : design;
   const labelA = slotAVersion ? slotAVersion.name : design.name;
@@ -131,7 +132,7 @@ export function VersionPanel() {
         }
         setNewNameError('');
         const id=save(trimmed,design);
-        if(id){setChosen(id);setRenameDraft(trimmed);setRenameError('');setName('');setMessage('Yeni sürüm çalışma arşivine eklendi.');}
+        if(id){setActiveVersionId(id);setChosen(id);setRenameDraft(trimmed);setRenameError('');setName('');setMessage('Yeni sürüm çalışma arşivine eklendi.');}
       }}>Aktif tasarımı yeni sürüm kaydet</button>
     </div>
     <div className="studio-card space-y-2 rounded border border-slate-700/80 bg-slate-900/50 p-2.5">
@@ -182,10 +183,13 @@ export function VersionPanel() {
           {renameError && <p id={renameErrorId} role="alert" className="text-[11px] text-rose-300">{renameError}</p>}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={button} onClick={()=>{setMessage(open(selected.design,selected.name) ? 'Sürüm açıldı. Önceki çalışma kopyası Geri Al ile geri gelir.' : useWardrobeStore.getState().commandError ?? 'Sürüm açılamadı.');}}>Bu sürümü aç (Geri Al var)</button>
+          <button type="button" className={button} onClick={()=>{setMessage(open(selected.design,selected.name,selected.id) ? 'Sürüm açıldı. Önceki çalışma kopyası Geri Al ile geri gelir.' : useWardrobeStore.getState().commandError ?? 'Sürüm açılamadı.');}}>Bu sürümü aç (Geri Al var)</button>
           <button type="button" className={button} onClick={()=>{
             const nextArchived = !selected.archived;
             setArchived(selected.id, nextArchived);
+            if (nextArchived && activeVersionId === selected.id) {
+              setActiveVersionId(null);
+            }
             if (nextArchived && !archived) {
               setChosen('');
               setRenameDraft('');
@@ -276,7 +280,7 @@ export function VersionPanel() {
         );
       }}/></label>
       <button type="button" className={`${button} w-full`} onClick={()=>{setPreview(previewDesignJson(raw));setSavedImport(null);}}>JSON doğrula ve önizle</button>
-      {preview&&<div role="status" className="space-y-2 rounded border border-slate-700 p-2.5">{preview.errors.length?<><p className="font-semibold text-red-300">Kaydedilemez · {preview.errors.length} hata</p><ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-red-200">{preview.errors.map((e,i)=><li key={i}>{e}</li>)}</ul></>:preview.design&&<><p className="font-semibold text-emerald-200">Geçerli öneri: {preview.design.name}</p><p className="text-[11px] text-slate-400">{preview.resolved?.bays.length} bölme · {preview.resolved?.doors.length??0} menteşeli / {preview.resolved?.slidingDoors?.length??0} sürgülü kanat · {preview.warnings.length} uyarı/uzman notu</p><MiniDesign design={preview.design}/><input aria-label="Öneri sürüm adı" className={input} value={importName} onChange={e=>setImportName(e.target.value)}/><button type="button" className={`${button} w-full`} disabled={!!savedImport} onClick={()=>{const id=save(importName,preview.design!,'json');if(id){setSavedImport(id);setChosen(id);setRenameDraft(importName.trim()||'AI önerisi');setMessage('Öneri ayrı sürüm olarak arşive eklendi.');}}}>Öneriyi yeni sürüm kaydet</button>{savedImport&&<button type="button" className={`${button} w-full border-amber-500`} onClick={()=>{const version=versions.find(v=>v.id===savedImport);if(version){setMessage(open(version.design,version.name) ? 'Öneri aktif çalışma olarak açıldı. Geri Al ile önceki tasarıma dönebilirsiniz.' : useWardrobeStore.getState().commandError ?? 'Öneri açılamadı.');}}}>Kaydedilen öneriyi aktif tasarım olarak aç</button>}</>}{preview.warnings.length>0&&<details><summary className="text-[11px] text-amber-200">Uyarıları incele ({preview.warnings.length})</summary><ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-slate-400">{preview.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul></details>}</div>}
+      {preview&&<div role="status" className="space-y-2 rounded border border-slate-700 p-2.5">{preview.errors.length?<><p className="font-semibold text-red-300">Kaydedilemez · {preview.errors.length} hata</p><ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-red-200">{preview.errors.map((e,i)=><li key={i}>{e}</li>)}</ul></>:preview.design&&<><p className="font-semibold text-emerald-200">Geçerli öneri: {preview.design.name}</p><p className="text-[11px] text-slate-400">{preview.resolved?.bays.length} bölme · {preview.resolved?.doors.length??0} menteşeli / {preview.resolved?.slidingDoors?.length??0} sürgülü kanat · {preview.warnings.length} uyarı/uzman notu</p><MiniDesign design={preview.design}/><input aria-label="Öneri sürüm adı" className={input} value={importName} onChange={e=>setImportName(e.target.value)}/><button type="button" className={`${button} w-full`} disabled={!!savedImport} onClick={()=>{const id=save(importName,preview.design!,'json');if(id){setSavedImport(id);setChosen(id);setRenameDraft(importName.trim()||'AI önerisi');setMessage('Öneri ayrı sürüm olarak arşive eklendi.');}}}>Öneriyi yeni sürüm kaydet</button>{savedImport&&<button type="button" className={`${button} w-full border-amber-500`} onClick={()=>{const version=versions.find(v=>v.id===savedImport);if(version){setMessage(open(version.design,version.name,version.id) ? 'Öneri aktif çalışma olarak açıldı. Geri Al ile önceki tasarıma dönebilirsiniz.' : useWardrobeStore.getState().commandError ?? 'Öneri açılamadı.');}}}>Kaydedilen öneriyi aktif tasarım olarak aç</button>}</>}{preview.warnings.length>0&&<details><summary className="text-[11px] text-amber-200">Uyarıları incele ({preview.warnings.length})</summary><ul className="max-h-40 space-y-1 overflow-y-auto text-[11px] text-slate-400">{preview.warnings.map((w,i)=><li key={i}>{w}</li>)}</ul></details>}</div>}
     </div></details>
     {(error||message)&&<p role="status" className={`rounded border p-2 text-[11px] ${error?'border-red-800 text-red-200':'border-sky-900 text-sky-200'}`}>{error??message}</p>}
     {recoveryDocuments.length>0&&<button type="button" className={button}

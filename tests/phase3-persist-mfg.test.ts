@@ -4,10 +4,15 @@ import { MotionSimulator } from '../src/core/analysis/motionSimulator';
 import { phase5Example } from '../src/core/presets/phase5Examples';
 import { normalizeAndValidateDesign } from '../src/core/schema/designSchema';
 import { solveDesign } from '../src/core/solver/carcassSolver';
-import { downloadProductionDocument } from '../src/export/manufacturingDownload';
+import { downloadFullManufacturingFile, downloadProductionDocument, manufacturingVersion } from '../src/export/manufacturingDownload';
 import { localPdfFont } from '../src/export/pdfWriter';
 import { useVersionArchive } from '../src/store/versionArchive';
 import { useWardrobeStore } from '../src/store/useWardrobeStore';
+import {
+  flushNumberFieldDraft,
+  WARDROBE_FLUSH_DRAFTS_EVENT,
+  type FlushDraftsEventDetail,
+} from '../src/ui/NumberField';
 
 const { download } = vi.hoisted(() => ({ download: vi.fn() }));
 vi.mock('../src/export/download', async importOriginal => ({
@@ -154,6 +159,191 @@ describe('Phase 3 — Persistence, Store Integrity, Motion Recovery & Manufactur
       await expect(htmlPromise).resolves.toMatch(/Yazdırılabilir rapor/);
       expect(download).toHaveBeenCalledTimes(2);
       expect(download.mock.calls[1][0]).toMatch(/-yazdir\.html$/);
+    });
+
+    it('permanently invalidates pending PDF and printable HTML downloads after transient A -> B -> A return', async () => {
+      const straight = normalizeAndValidateDesign(phase5Example('straight'));
+      const straightResolved = solveDesign(straight);
+      const diagonal = normalizeAndValidateDesign(phase5Example('diagonal'));
+      const diagonalResolved = solveDesign(diagonal);
+
+      for (const format of ['pdf', 'printable'] as const) {
+        download.mockReset();
+        useWardrobeStore.setState({ design: straight, resolved: straightResolved, activeVersionId: null });
+        const gate = deferred<Response>();
+        vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+
+        const pending = downloadProductionDocument(format, new AbortController().signal);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Transient switch A -> B -> exact original A reference before fetch settles
+        useWardrobeStore.setState({ design: diagonal, resolved: diagonalResolved });
+        useWardrobeStore.setState({ design: straight, resolved: straightResolved });
+        expect(useWardrobeStore.getState().design).toBe(straight);
+        expect(useWardrobeStore.getState().resolved).toBe(straightResolved);
+
+        gate.resolve(makeFontResponse());
+        await expect(pending).rejects.toThrow(/tasarım veya sürüm değişti/i);
+        expect(download).not.toHaveBeenCalled();
+      }
+    });
+
+    it('invalidates a pending PDF download when activeVersionId switches between duplicate-signature versions mid-fetch', async () => {
+      const straight = normalizeAndValidateDesign(phase5Example('straight'));
+      useWardrobeStore.setState({ design: straight, resolved: solveDesign(straight), activeVersionId: null });
+      const v1Id = useVersionArchive.getState().save('V1 — İlk', straight)!;
+      const v2Id = useVersionArchive.getState().save('V2 — Onay', straight)!;
+      useWardrobeStore.getState().setActiveVersionId(v1Id);
+
+      const gate = deferred<Response>();
+      vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+
+      const pending = downloadProductionDocument('pdf', new AbortController().signal);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      gate.resolve(makeFontResponse());
+
+      await expect(pending).rejects.toThrow(/tasarım veya sürüm değişti/i);
+      expect(download).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PM-14b — Duplicate-signature version identity & export filename fidelity', () => {
+    it('resolves non-archived V2 over archived V1 with identical signature and stamps V2 on export filenames', async () => {
+      const straight = normalizeAndValidateDesign(phase5Example('straight'));
+      useWardrobeStore.setState({ design: straight, resolved: solveDesign(straight), activeVersionId: null });
+      vi.stubGlobal('fetch', vi.fn(async () => makeFontResponse()));
+
+      const v1Id = useVersionArchive.getState().save('V1 — İlk', straight)!;
+      useVersionArchive.getState().setArchived(v1Id, true);
+      const v2Id = useVersionArchive.getState().save('V2 — Müşteri Onayı', straight)!;
+
+      // Even before explicit open, manufacturingVersion prefers non-archived V2 over archived V1
+      expect(manufacturingVersion(straight, useVersionArchive.getState().versions, null)?.id).toBe(v2Id);
+
+      // Opening V2 sets activeVersionId to V2 even when active design already matches V2's signature
+      const opened = useWardrobeStore.getState().openNamedVersion(straight, 'V2 — Müşteri Onayı', v2Id);
+      expect(opened).toBe(true);
+      expect(useWardrobeStore.getState().activeVersionId).toBe(v2Id);
+      expect(
+        manufacturingVersion(
+          useWardrobeStore.getState().design,
+          useVersionArchive.getState().versions,
+          useWardrobeStore.getState().activeVersionId
+        )?.name
+      ).toBe('V2 — Müşteri Onayı');
+
+      // CSV & PDF exports stamp V2 (never archived V1)
+      await downloadFullManufacturingFile('csv', new AbortController().signal);
+      expect(download).toHaveBeenCalledTimes(1);
+      expect(download.mock.calls[0][0]).toContain('V2');
+      expect(download.mock.calls[0][0]).not.toContain('V1');
+
+      await downloadProductionDocument('pdf', new AbortController().signal);
+      expect(download).toHaveBeenCalledTimes(2);
+      expect(download.mock.calls[1][0]).toContain('V2');
+      expect(download.mock.calls[1][0]).not.toContain('V1');
+
+      // Two non-archived duplicates disambiguate cleanly via activeVersionId
+      useVersionArchive.getState().setArchived(v1Id, false);
+      expect(manufacturingVersion(straight, useVersionArchive.getState().versions, v2Id)?.id).toBe(v2Id);
+      expect(manufacturingVersion(straight, useVersionArchive.getState().versions, v1Id)?.id).toBe(v1Id);
+
+      // Mutating the design clears activeVersionId
+      useWardrobeStore.getState().updateRunDimension('run-A', 'lengthMm', 3100);
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+
+      // Time travel & design-replacing operations clear activeVersionId as well
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      useWardrobeStore.getState().undoSteps(1);
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      useWardrobeStore.getState().redo();
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      useWardrobeStore.getState().revertToCheckpoint();
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      useWardrobeStore.getState().loadPreset('straight-wardrobe');
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      useWardrobeStore.getState().startBlankDesign({ layoutKind: 'straight', lengthAMm: 2600 });
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+
+      useWardrobeStore.getState().setActiveVersionId(v2Id);
+      expect(useWardrobeStore.getState().importJsonString(JSON.stringify(straight)).ok).toBe(true);
+      expect(useWardrobeStore.getState().activeVersionId).toBeNull();
+    });
+  });
+
+  describe('PM-02 — Behavioral wardrobe:flush-drafts integration with store & checkpoint', () => {
+    it('commits valid focused draft before saveCheckpoint and aborts save on invalid draft without touching prior checkpoint', () => {
+      const bus = new EventTarget();
+      const focusMock = vi.fn();
+      const fakeInput = { focus: focusMock } as unknown as HTMLInputElement;
+      let draftText = '3350';
+      let badInput = false;
+
+      // Mirror NumberField's wardrobe:flush-drafts handler wired to updateRunDimension
+      bus.addEventListener(WARDROBE_FLUSH_DRAFTS_EVENT, (event) => {
+        const detail = (event as CustomEvent<FlushDraftsEventDetail>).detail;
+        const currentLength = useWardrobeStore.getState().design.runs[0].lengthMm;
+        const result = flushNumberFieldDraft(draftText, badInput, currentLength, 600, 6000, detail, fakeInput);
+        if (result.action === 'commit' && result.committedValue !== undefined) {
+          useWardrobeStore.getState().updateRunDimension('run-A', 'lengthMm', result.committedValue);
+        }
+      });
+
+      // Mirror App's handleSaveCheckpoint coordinator
+      const triggerSaveCheckpoint = () => {
+        const detail: FlushDraftsEventDetail = { hadInvalid: false, firstInvalidEl: null };
+        bus.dispatchEvent(new CustomEvent(WARDROBE_FLUSH_DRAFTS_EVENT, { detail }));
+        if (detail.hadInvalid) {
+          detail.firstInvalidEl?.focus();
+          return { saved: false, detail };
+        }
+        useWardrobeStore.getState().saveCheckpoint();
+        return { saved: true, detail };
+      };
+
+      // 1) Valid draft commits to store and updates checkpoint cleanly
+      const validOutcome = triggerSaveCheckpoint();
+      expect(validOutcome.saved).toBe(true);
+      expect(validOutcome.detail.hadInvalid).toBe(false);
+      expect(useWardrobeStore.getState().design.runs[0].lengthMm).toBe(3350);
+      expect(useWardrobeStore.getState().checkpointDesign.runs[0].lengthMm).toBe(3350);
+      expect(useWardrobeStore.getState().hasUnsavedChanges).toBe(false);
+      expect(focusMock).not.toHaveBeenCalled();
+
+      const historyLenAfterValid = useWardrobeStore.getState().historyPast.length;
+
+      // 2) Out-of-range invalid draft aborts save, focuses invalid input, and preserves prior checkpoint
+      draftText = '99999';
+      badInput = false;
+      const invalidOutcome = triggerSaveCheckpoint();
+      expect(invalidOutcome.saved).toBe(false);
+      expect(invalidOutcome.detail.hadInvalid).toBe(true);
+      expect(invalidOutcome.detail.firstInvalidEl).toBe(fakeInput);
+      expect(focusMock).toHaveBeenCalledTimes(1);
+      expect(useWardrobeStore.getState().design.runs[0].lengthMm).toBe(3350);
+      expect(useWardrobeStore.getState().checkpointDesign.runs[0].lengthMm).toBe(3350);
+      expect(useWardrobeStore.getState().historyPast).toHaveLength(historyLenAfterValid);
+
+      // 3) Empty/badInput draft also aborts save and leaves checkpoint intact
+      draftText = '';
+      badInput = true;
+      const badInputOutcome = triggerSaveCheckpoint();
+      expect(badInputOutcome.saved).toBe(false);
+      expect(badInputOutcome.detail.hadInvalid).toBe(true);
+      expect(focusMock).toHaveBeenCalledTimes(2);
+      expect(useWardrobeStore.getState().checkpointDesign.runs[0].lengthMm).toBe(3350);
     });
   });
 
@@ -418,6 +608,8 @@ describe('Phase 3 — Persistence, Store Integrity, Motion Recovery & Manufactur
       expect(src).toContain("downloadProductionDocument('pdf', signal)");
       expect(src).toContain("downloadProductionDocument('printable', signal)");
       expect(src).toContain('wardrobe:cancel-production-exports');
+      expect(src).toContain('if (activeTask.current === operation) activeTask.current = null;');
+      expect(src).toContain('manufacturingVersion(design,versions,activeVersionId)');
       expect(src).toContain("setRenderPrompt('');");
       expect(src).toContain("color: 'Görünüm'");
       expect(src).toContain("depth: 'Derinlik'");
@@ -447,6 +639,9 @@ describe('Phase 3 — Persistence, Store Integrity, Motion Recovery & Manufactur
       expect(src).toContain('aria-describedby={renameError ? renameErrorId : undefined}');
       expect(src).toContain('border-slate-500');
       expect(src).toContain('fileReadSerial');
+      expect(src).toContain('manufacturingVersion(design,versions,activeVersionId)');
+      expect(src).toContain('open(selected.design,selected.name,selected.id)');
+      expect(src).toContain('setActiveVersionId(id)');
       expect(src).toContain("tasarım JSON'unu");
       expect(src).not.toContain("Design JSON'u");
     });
