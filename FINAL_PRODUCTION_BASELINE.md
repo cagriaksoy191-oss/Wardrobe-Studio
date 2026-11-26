@@ -1,41 +1,40 @@
 # Wardrobe Studio · doğrulanmış üretim tabanı
 
-21 Kasım 2026 · GitHub, Cloudflare paneli, Linux build kaydı ve gerçek HTTPS yanıtları karşılaştırıldı. [Canlı uygulama](https://wardrobe-studio.cagriaksoy191.workers.dev/)
+26 Kasım 2026 · GitHub, Cloudflare Workers Builds ve gerçek HTTPS yanıtları karşılaştırıldı. [Canlı uygulama](https://wardrobe-studio.cagriaksoy191.workers.dev/) · [Aşama 3 yayın raporu](PHASE3_UX_PRODUCTION_RELEASE.md)
 
 | Referans | Doğrulanan değer |
 |---|---|
-| GitHub `origin/main` | `5044f17fe6cb95ec51d12ae9f6a2537252793f25` |
-| Son uygulama paketini ilk yayınlayan commit | `23c72df4d99fa781ad2242904929c19d053b0673` |
-| Cloudflare build | `b8558118-d594-4f98-a615-aedc8d31288d` · GitHub kontrolü başarılı · Linux 358/358, build ve statik kabul geçti |
-| Etkin Worker | `c352f36f-107a-4fc5-90cc-4464dcb8367b` · Ready · %100 trafik |
-| Plan ve giriş noktası | Workers Free (panelde $0) · özel GitHub deposunun `main` dalı · Workers Static Assets |
-| Önceki doğrulanmış Worker | `ceb5a259-89d7-48fb-a8a5-dbdac8f229b1` · WS-UX-011 ilk yayınındaki aynı statik paket |
-| WS-UX-011 öncesi sürüm | `22f84d50-8c7f-4f04-b76b-4bac389b1a52` · farklı uygulama kodu · [WS-UX-011 yayın kaydı](WS_UX_011_PRODUCTION_RELEASE.md) |
+| Uygulama paketini yayınlayan `main` commit'i | `185dd485a7a04c305e9997fd497e3cac67706bb1` (uygulama kodu: `dc488263a2d34802c79fdfc10cc98b2eb5e8ab81`, `53fe48c..185dd48` fast-forward) |
+| Cloudflare build (`185dd48`) | `825003a1-dd83-4669-bf2e-8afda794b76d` · GitHub kontrolü `139988287957` başarılı · Linux 506/506 test, build ve statik doğrulama geçti |
+| Doğrulanan uygulama Worker'ı | `c2893096-a64b-4df2-ba7e-38db2a799140` · Ready · %100 trafik |
+| Plan ve giriş noktası | Workers Free (panelde $0) · özel GitHub deposunun `main` dalı · Workers Static Assets (`0` binding) |
+| Önceki üretim tabanı (geri alma referansı) | `53fe48c82ff312268218173bdaf2e936ecaf9e45` (etiket: `release/baseline-pre-phase3-53fe48c`) · Worker `1f8b5159-ddc3-4baa-a4be-d4f3e3a8998e` · Build `4aaa50ad-14b7-4fc2-9a29-3290d26b4a14` |
+| Daha önceki tarihsel taban (21 Kasım 2026) | `5044f17fe6cb95ec51d12ae9f6a2537252793f25` · Worker `c352f36f-107a-4fc5-90cc-4464dcb8367b` · [WS-UX-011 yayın kaydı](WS_UX_011_PRODUCTION_RELEASE.md) |
 
-`23c72df..5044f17` farkı altı Markdown belgesinden oluşur. Statik uygulama verisini tarayıcıda saklar. Wrangler dry-run API Worker, çalışma zamanı binding’i veya backend göstermedi. Test, arşiv ve geliştirme dosyaları dağıtıma girmez. Geri dönüş kararı için önce olayın hangi sürümde başladığını ve seçilen Worker’ın gerçekten farklı uygulama dosyaları sunup sunmadığını belirleyin. Geri alma işlemi açık kullanıcı onayı gerektirir. [GitHub main](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/commit/5044f17fe6cb95ec51d12ae9f6a2537252793f25) · [Cloudflare build](https://dash.cloudflare.com/b76b247b22f0678a722cad37767e2b19/workers/services/view/wardrobe-studio/production/builds/b8558118-d594-4f98-a615-aedc8d31288d) · [Bakım kılavuzu](FINAL_MAINTENANCE_AND_AI_HANDOFF.md)
+Statik uygulama verisini tarayıcıda (`localStorage` + `IndexedDB`) saklar. Wrangler dry-run API Worker, çalışma zamanı binding'i veya backend göstermedi. Test, arşiv ve geliştirme dosyaları dağıtıma girmez. Bu belge güncellendikten sonra salt Markdown commit'i de Workers Builds `*` izleme yoluyla aynı uygulama paketini dağıtabilir. [GitHub uygulama commit'i](https://github.com/cagriaksoy191-oss/Wardrobe-Studio/commit/185dd485a7a04c305e9997fd497e3cac67706bb1) · [Cloudflare build](https://dash.cloudflare.com/b76b247b22f0678a722cad37767e2b19/workers/services/view/wardrobe-studio/production/builds/825003a1-dd83-4669-bf2e-8afda794b76d) · [Bakım kılavuzu](FINAL_MAINTENANCE_AND_AI_HANDOFF.md)
 
-## HTTPS dosyaları
+## HTTPS dosyaları (`185dd48` / `dc48826`)
 
-21 Kasım 2026, 17.49 TSİ. Her dosyanın HTTP 200 yanıt gövdesi temiz checkout’tan üretilen paketle byte ve SHA-256 düzeyinde aynı. `index.html` canlı kök adresten alındı. `_headers` dağıtım ayarı, canlı yanıttaki karşılıkları aracılığıyla kontrol edildi.
+26 Kasım 2026, 17.53 TSİ (14:53 UTC). 9 ikili JS/CSS/font dosyası temiz `npm ci` derlemesiyle bayt ve SHA-256 düzeyinde birebir, 3 metin dosyası (`index.html`, `fonts/OFL.txt`, `THIRD_PARTY_NOTICES.txt`) LF-normalleştirilmiş olarak %100 eşleşti. `_headers` canlı HTTP başlıklarıyla doğrulandı (`nosniff`, `strict-origin-when-cross-origin`, `frame-ancestors 'none'`).
 
-| Dosya | Bayt | SHA-256 |
+| Dosya | Canlı Bayt | Canlı SHA-256 |
 |---|---:|---|
-| `assets/browser-C_pOKF9d.js` | 9393 | `cc0045d124115d5a184e8a6c362b640766bf60c77966f8fa2a0834cf09c40e6e` |
+| `assets/browser-BNKhCVn9.js` | 9393 | `5fcb1b10a6f1c92462eeecf5589a61dcace1afe78d9ad4ff27ec2876d997fdfa` |
 | `assets/html2canvas.esm-QH1iLAAe.js` | 202379 | `061c08e50c0dc57b8d5e6531f0b8237a52a68b233260d49ab2f2c2906ad112c4` |
-| `assets/index-CgKGgGEp.css` | 57977 | `bb6eca79772b85c584456de01237de91147524e517db79e674ed93577a5fd743` |
-| `assets/index-Diyqlp_9.js` | 1909185 | `6e488049353d2f48216c9557f8a391f0620b7bcce1b65281a35a89436c468580` |
-| `assets/index.es-BxbypAmG.js` | 159803 | `55c25969aab716e91d94608f988ce8a31165f30e256c69b30df587f001023777` |
-| `assets/pdfWriter-DNobulYt.js` | 385445 | `f0f8edb94d960eab4e31160083f42b08e12ec7a9b173e79f73253c998aa95fcd` |
+| `assets/index-B6dbtL1N.css` | 77586 | `851388561d71e53c561d5b956a81c9bd37ba604b1cce3a9efcf9d3b174b61e4f` |
+| `assets/index-CJoDrtKZ.js` | 2005309 | `3eef1d54a37be63a2f3de6295ccd78fddeea009e3f244ce35fb0097ae7a266be` |
+| `assets/index.es-DKj5XYfw.js` | 159803 | `b61435731679184950bbe08c462dffb5af37dda6c361e026b02f925db3031b7b` |
+| `assets/pdfWriter-DhSAGxat.js` | 385609 | `0af682e671796051b0eb9c31d46b72a8418efcd5060b9cbb46bc3ce4f600baca` |
 | `assets/purify.es-CAi2OJFm.js` | 30469 | `8e143ee7bcdf076d62676183aacc62568c9adb8042c57d4fef7d62e1ca7c345a` |
-| `assets/zipWriter-g1kT6Zw6.js` | 538 | `63db7aeeda7c77f41a5a96868a441d7bccebbcabea94ad89a835521ded0dbd69` |
+| `assets/zipWriter-BHGGJdKs.js` | 538 | `4ff6c2548b76989cfe5fe1ec92a20f411438424439a8bb5083a80f891376a62f` |
 | `fonts/NotoSans-Regular.ttf` | 569208 | `b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5` |
 | `fonts/OFL.txt` | 4377 | `0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb` |
-| `index.html` | 562 | `153d05e6d138a83c863054fa58e99e642217d906e6fcfc0e5da70616b1cb9506` |
+| `index.html` | 562 | `9650dff04c127b141a458042eea3430903ae0ee8d393b42c1d75400556bea06f` |
 | `THIRD_PARTY_NOTICES.txt` | 1231 | `3990b3526f7491d1d116831ab706212488681ce81e6b4f2110ded2457c5e71e1` |
 
 ## Kanonik veri
 
-`POST_D3_BASELINE_001` tabanıyla **12/12 SHA-256**, **338 fiziksel parça** ve asimetrik 25/4 modelinde **20/20 sıfır hacimli nominal panel birleşimi**. Parça kimlikleri ve kodlar, kesim ölçüleri, panel koordinatları ve malzeme/yüzey toplamları aynı. Düz, beşgen, kör ve asimetrik modeller sırasıyla **69/94/81/94** parça ve **25/41/35/41** teknik pafta üretti. Eski `PRE_D3_BASELINE_001` referansları sürüm geçmişinde korunur. [Kanonik regresyon](tests/manufacturing-download.test.ts) · [Mühendislik değişmezleri](ENGINEERING_INVARIANTS.md)
+`POST_D3_BASELINE_001` tabanıyla **12/12 SHA-256**, **338 fiziksel parça** ve asimetrik 25/4 modelinde **20/20 sıfır hacimli nominal panel birleşimi** korundu. Düz, beşgen, kör ve asimetrik modeller sırasıyla **69/94/81/94** parça ve **25/41/35/41** teknik pafta üretir; `WS-UX-001`, `WS-UX-002` ve `WS-UX-003` CSV/ZIP kilitleri etkindir. [Kanonik regresyon](tests/manufacturing-download.test.ts) · [Mühendislik değişmezleri](ENGINEERING_INVARIANTS.md)
 
 | Model | Veri | SHA-256 |
 |---|---|---|
